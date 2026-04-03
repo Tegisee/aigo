@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "531153481988",
+    "project_id": "aigo-a",
+    "storage_bucket": "aigo-a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:531153481988:android:c8755d32917fa072186051",
+        "android_client_info": {
+          "package_name": "com.aigo.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "531153481988-n3aqkhtnr9ajuldgroi7b51ntrhobc6k.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBqx5aHUTbknxQT1HT3Pr524gwC6wkEnVY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "531153481988-n3aqkhtnr9ajuldgroi7b51ntrhobc6k.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
