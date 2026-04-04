@@ -1,35 +1,44 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { getAuthState, linkGoogleAccount } from '../../services/firebase';
+import { signInWithGoogle } from '../../services/googleAuth';
 
 export default function LoginScreen() {
   const router = useRouter();
   const { isLinked, linkedProvider, setLinked } = useAppStore();
   const authState = getAuthState();
+  const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
-    // Google Sign-In 라이브러리 필요 (@react-native-google-signin/google-signin)
-    // 설치 전이므로 안내 메시지 표시
-    Alert.alert(
-      '구글 로그인',
-      'Google Sign-In 라이브러리 설치 후 사용 가능합니다.\n\n설치 명령어:\nnpx expo install @react-native-google-signin/google-signin',
-      [{ text: '확인' }],
-    );
-    // TODO: 실제 구현 시 아래 코드 활성화
-    // const { GoogleSignin } = require('@react-native-google-signin/google-signin');
-    // GoogleSignin.configure({ webClientId: 'YOUR_WEB_CLIENT_ID' });
-    // const { idToken } = await GoogleSignin.signIn();
-    // const result = await linkGoogleAccount(idToken);
-    // if (result.success) {
-    //   setLinked('google');
-    //   Alert.alert('연동 완료', '구글 계정이 연동되었습니다.');
-    // } else {
-    //   Alert.alert('연동 실패', result.error);
-    // }
+    setLoading(true);
+    try {
+      // 1. Google Sign-In으로 idToken 획득
+      const googleResult = await signInWithGoogle();
+      if ('error' in googleResult) {
+        if (googleResult.error !== '로그인이 취소되었습니다.') {
+          Alert.alert('로그인 실패', googleResult.error);
+        }
+        setLoading(false);
+        return;
+      }
+
+      // 2. Firebase에 연동 (익명 → 구글 merge)
+      const firebaseResult = await linkGoogleAccount(googleResult.idToken);
+      if (firebaseResult.success) {
+        setLinked('google');
+        Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.`);
+      } else {
+        Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
+      }
+    } catch (e: any) {
+      Alert.alert('오류', e.message || '구글 로그인 중 오류가 발생했습니다.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -77,12 +86,19 @@ export default function LoginScreen() {
             </View>
 
             <TouchableOpacity
-              style={styles.googleBtn}
+              style={[styles.googleBtn, loading && { opacity: 0.7 }]}
               onPress={handleGoogleLogin}
               activeOpacity={0.8}
+              disabled={loading}
             >
-              <Ionicons name="logo-google" size={20} color="#fff" />
-              <Text style={styles.googleBtnText}>구글 계정으로 연동</Text>
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Ionicons name="logo-google" size={20} color="#fff" />
+              )}
+              <Text style={styles.googleBtnText}>
+                {loading ? '연동 중...' : '구글 계정으로 연동'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity

@@ -198,17 +198,21 @@ const styles = StyleSheet.create({
 
   // ── 아이별 필터 ──
   childFilter: {
-    gap: 8,
     paddingHorizontal: 16,
     paddingBottom: 8,
+    flexDirection: 'row',
   },
   childFilterChip: {
-    paddingHorizontal: 14,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: theme.card,
     borderWidth: 1,
     borderColor: theme.border,
+    marginRight: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   childFilterChipActive: {
     backgroundColor: '#FF9500',

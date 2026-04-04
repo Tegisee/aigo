@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
@@ -10,14 +10,16 @@ import {
   Image,
   ScrollView,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
-import { getCategoriesByMonth } from '../../types';
+import { getCategoriesByMonth, type BabyCategory } from '../../types';
 import { useRouter } from 'expo-router';
 import { fetchGoldbox, searchProducts, hasCoupangApiKeys, generateDeepLink, type GoldboxProduct, type CoupangProduct } from '../../services/coupangApi';
+import { fetchPopularByCategory, type SharedProduct } from '../../services/firebase';
 import { getAppShareMessage } from '../../services/config';
 import { getActiveEvents, type EventBanner } from '../../services/events';
 
@@ -28,6 +30,8 @@ export default function HomeScreen() {
   const [goldbox, setGoldbox] = useState<GoldboxProduct[]>([]);
   const [categoryProducts, setCategoryProducts] = useState<Record<string, CoupangProduct[]>>({});
   const [loadingCategory, setLoadingCategory] = useState<string | null>(null);
+  const [eventProducts, setEventProducts] = useState<Record<number, CoupangProduct[]>>({});
+  const [loadingEvent, setLoadingEvent] = useState<number | null>(null);
 
   const displayName = babyName || '우리 아이';
   const babyMonths = babyBirthDate ? (() => {
@@ -53,29 +57,8 @@ export default function HomeScreen() {
       appStateRef.current = nextState;
     });
 
-    // 골드박스 로드 → 육아 키워드 필터링 + 월령별 제외
-    const BABY_KEYWORDS = /기저귀|분유|물티슈|유아|아기|키즈|어린이|젖병|수유|이유식|유모차|카시트|장난감|완구|아동|베이비|신생아|돌잔치|임산부|산모/;
-
-    const getExcludePattern = (months: number | null): RegExp | null => {
-      if (months === null) return null;
-      const exclude: string[] = [];
-      if (months >= 25) exclude.push('신생아', '배냇저고리', '속싸개', '젖병', '유축기', '수유쿠션');
-      if (months >= 49) exclude.push('기저귀', '분유', '이유식', '보행기', '점퍼루');
-      if (months >= 85) exclude.push('유모차', '카시트', '치발기', '턱받이', '바운서');
-      return exclude.length > 0 ? new RegExp(exclude.join('|')) : null;
-    };
-
-    const excludePattern = getExcludePattern(babyMonths);
-
-    const filterBabyProducts = (items: GoldboxProduct[]) => {
-      let baby = items.filter((p) => BABY_KEYWORDS.test(p.productName) || BABY_KEYWORDS.test(p.categoryName));
-      if (excludePattern) {
-        baby = baby.filter((p) => !excludePattern.test(p.productName));
-      }
-      return baby.length > 0 ? baby : items.slice(0, 5);
-    };
-
-    AsyncStorage.getItem('goldbox-baby-cache').then((cached) => {
+    // 골드박스 로드 (필터링 없이 그대로 노출)
+    AsyncStorage.getItem('goldbox-cache').then((cached) => {
       if (cached) {
         try { setGoldbox(JSON.parse(cached)); } catch {}
       }
@@ -83,9 +66,8 @@ export default function HomeScreen() {
     if (hasCoupangApiKeys()) {
       fetchGoldbox('goldbox').then((data) => {
         if (data.length > 0) {
-          const filtered = filterBabyProducts(data);
-          setGoldbox(filtered);
-          AsyncStorage.setItem('goldbox-baby-cache', JSON.stringify(filtered)).catch(() => {});
+          setGoldbox(data);
+          AsyncStorage.setItem('goldbox-cache', JSON.stringify(data)).catch(() => {});
         }
       }).catch(() => {});
     }
@@ -115,20 +97,54 @@ export default function HomeScreen() {
     if (categorySearchTimer.current) clearTimeout(categorySearchTimer.current);
     setLoadingCategory(cat);
     categorySearchTimer.current = setTimeout(async () => {
-      if (!hasCoupangApiKeys()) {
-        setLoadingCategory(null);
-        return;
-      }
-      // 월령 키워드 조합 검색
-      const ageKeyword = babyInfo ? `${babyInfo.ageText} ` : '';
-      const keyword = `${ageKeyword}${cat}`;
       try {
-        const products = await searchProducts(keyword, 10);
-        setCategoryProducts((prev) => ({ ...prev, [cat]: products }));
+        // 1순위: shared_products 인기 상품
+        const popular = await fetchPopularByCategory(cat as BabyCategory, 5);
+        if (popular.length > 0) {
+          const mapped: CoupangProduct[] = popular.map((p) => ({
+            productId: parseInt(p.productId) || 0,
+            productName: p.productName,
+            productPrice: p.currentPrice,
+            productImage: p.thumbnail,
+            productUrl: '', // shared_products는 URL 없음 → 상세로 이동
+            categoryName: p.category,
+            isRocket: false,
+          }));
+          setCategoryProducts((prev) => ({ ...prev, [cat]: mapped }));
+          setLoadingCategory(null);
+          return;
+        }
       } catch {}
+
+      // 2순위: 쿠팡 파트너스 API 검색
+      if (hasCoupangApiKeys()) {
+        const ageKeyword = babyInfo ? `${babyInfo.ageText} ` : '';
+        const keyword = `${ageKeyword}${cat}`;
+        try {
+          const products = await searchProducts(keyword, 10);
+          setCategoryProducts((prev) => ({ ...prev, [cat]: products }));
+        } catch {}
+      }
       setLoadingCategory(null);
     }, 300);
   };
+
+  const handleEventPress = useCallback(async (event: EventBanner, index: number) => {
+    if (!event.keywords || event.keywords.length === 0) return;
+    // 토글
+    if (eventProducts[index]) {
+      setEventProducts((prev) => { const n = { ...prev }; delete n[index]; return n; });
+      return;
+    }
+    if (!hasCoupangApiKeys()) return;
+    setLoadingEvent(index);
+    try {
+      const keyword = event.keywords[0];
+      const products = await searchProducts(keyword, 5);
+      setEventProducts((prev) => ({ ...prev, [index]: products }));
+    } catch {}
+    setLoadingEvent(null);
+  }, [eventProducts]);
 
   const handleOpenCoupang = async () => {
     if (hasCoupangApiKeys()) {
@@ -212,10 +228,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 key={child.id}
                 style={[styles.childChip, selectedChildId === child.id && styles.childChipActive]}
-                onPress={() => {
-                  selectChild(child.id);
-                  router.push('/(tabs)/wishlist');
-                }}
+                onPress={() => selectChild(child.id)}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.childChipText, selectedChildId === child.id && styles.childChipTextActive]}>
@@ -230,23 +243,57 @@ export default function HomeScreen() {
         {activeEvents.length > 0 && (
           <View style={styles.eventSection}>
             {activeEvents.map((event, i) => (
-              <View
-                key={`${event.type}-${i}`}
-                style={[
-                  styles.eventBanner,
-                  event.type === 'anniversary' && styles.eventBannerAnniversary,
-                  event.type === 'season' && styles.eventBannerSeason,
-                  event.type === 'parent' && styles.eventBannerParent,
-                ]}
-              >
-                <Text style={styles.eventEmoji}>{event.emoji}</Text>
-                <View style={styles.eventTextCol}>
-                  <Text style={styles.eventTitle}>{event.title}</Text>
-                  <Text style={styles.eventSubtitle}>{event.subtitle}</Text>
-                </View>
-                {event.daysLeft === 0 && (
-                  <View style={styles.eventTodayBadge}>
-                    <Text style={styles.eventTodayText}>TODAY</Text>
+              <View key={`${event.type}-${i}`}>
+                <TouchableOpacity
+                  style={[
+                    styles.eventBanner,
+                    event.type === 'anniversary' && styles.eventBannerAnniversary,
+                    event.type === 'season' && styles.eventBannerSeason,
+                    event.type === 'parent' && styles.eventBannerParent,
+                  ]}
+                  onPress={() => handleEventPress(event, i)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.eventEmoji}>{event.emoji}</Text>
+                  <View style={styles.eventTextCol}>
+                    <Text style={styles.eventTitle}>{event.title}</Text>
+                    <Text style={styles.eventSubtitle}>
+                      {event.keywords ? '탭하여 추천 상품 보기' : event.subtitle}
+                    </Text>
+                  </View>
+                  {event.daysLeft === 0 && (
+                    <View style={styles.eventTodayBadge}>
+                      <Text style={styles.eventTodayText}>TODAY</Text>
+                    </View>
+                  )}
+                  {loadingEvent === i && (
+                    <ActivityIndicator size="small" color={theme.primary} />
+                  )}
+                </TouchableOpacity>
+
+                {/* 이벤트 추천 상품 */}
+                {eventProducts[i] && eventProducts[i].length > 0 && (
+                  <View style={styles.eventProductList}>
+                    {eventProducts[i].map((p, pi) => (
+                      <TouchableOpacity
+                        key={`ev-${i}-${p.productId}-${pi}`}
+                        style={styles.catProductCard}
+                        onPress={() => Linking.openURL(p.productUrl)}
+                        activeOpacity={0.8}
+                      >
+                        {p.productImage ? (
+                          <Image source={{ uri: p.productImage }} style={styles.catProductImg} />
+                        ) : (
+                          <View style={[styles.catProductImg, styles.goldboxImagePlaceholder]}>
+                            <Ionicons name="bag-outline" size={16} color={theme.subtext} />
+                          </View>
+                        )}
+                        <View style={styles.catProductInfo}>
+                          <Text style={styles.catProductName} numberOfLines={2}>{p.productName}</Text>
+                          <Text style={styles.catProductPrice}>{p.productPrice.toLocaleString()}원</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
                   </View>
                 )}
               </View>
@@ -505,6 +552,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#fff',
+  },
+  eventProductList: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
 
   // ── 관심상품 요약 ──

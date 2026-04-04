@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Switch, TouchableOpacity, Alert, Modal, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, Switch, TouchableOpacity, Alert, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
@@ -405,7 +405,17 @@ export default function SettingsScreen() {
                         text: '초기화 + 재시작',
                         style: 'destructive',
                         onPress: async () => {
-                          await AsyncStorage.clear();
+                          // 모든 키를 명시적으로 삭제
+                          try {
+                            const allKeys = await AsyncStorage.getAllKeys();
+                            if (allKeys.length > 0) {
+                              await AsyncStorage.multiRemove(allKeys);
+                            }
+                          } catch {
+                            await AsyncStorage.clear();
+                          }
+                          // zustand 메모리 상태도 초기화
+                          useAppStore.persist.clearStorage();
                           try {
                             const Updates = require('expo-updates');
                             if (!__DEV__ && typeof Updates.reloadAsync === 'function') {
@@ -415,7 +425,7 @@ export default function SettingsScreen() {
                           } catch {}
                           Alert.alert(
                             '초기화 완료',
-                            'AsyncStorage가 클리어되었습니다.\n앱을 종료 후 다시 시작하면 온보딩부터 진행됩니다.',
+                            '모든 데이터가 삭제되었습니다.\n앱을 종료 후 다시 시작하면 온보딩부터 진행됩니다.',
                           );
                         },
                       },
@@ -444,7 +454,7 @@ export default function SettingsScreen() {
 
       {/* 아이 추가/수정 모달 */}
       <Modal visible={showChildModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               {editingChildId ? '아이 정보 수정' : '아이 추가'}
@@ -531,12 +541,12 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 부모 정보 수정 모달 */}
       <Modal visible={showParentModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               {parentField === 'mom' ? '엄마 생일' : parentField === 'dad' ? '아빠 생일' : '결혼기념일'}
@@ -591,7 +601,7 @@ export default function SettingsScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );

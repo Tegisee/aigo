@@ -12,6 +12,8 @@ import {
   Modal,
   ActivityIndicator,
   Share,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,6 +23,7 @@ import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { generateDeepLink, hasCoupangApiKeys } from '../../services/coupangApi';
 import CoupangScraper, { ScrapedProduct } from '../../components/CoupangScraper';
+import DatePickerButton from '../../components/DatePickerButton';
 import { estimateRepurchaseDays, isConsumableCategory } from '../../services/repurchase';
 
 export default function DetailScreen() {
@@ -537,7 +540,10 @@ export default function DetailScreen() {
 
       {/* Target Price Edit Modal */}
       <Modal visible={showPriceModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>목표가 수정</Text>
             <TextInput
@@ -567,37 +573,26 @@ export default function DetailScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Purchase Add Modal */}
       <Modal visible={showPurchaseModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>구매 기록 추가</Text>
 
-            <Text style={styles.inputLabel}>구매 날짜</Text>
-            <View style={styles.dateInputRow}>
-              <TextInput
-                style={[styles.modalInput, { flex: 1 }]}
-                value={purchaseDate}
-                onChangeText={(t) => {
-                  const cleaned = t.replace(/[^0-9-]/g, '');
-                  setPurchaseDate(cleaned);
-                }}
-                placeholder="2026-04-04"
-                placeholderTextColor={theme.subtext}
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
-              />
-              <TouchableOpacity
-                style={styles.todayBtn}
-                onPress={() => setPurchaseDate(new Date().toISOString().slice(0, 10))}
-              >
-                <Text style={styles.todayBtnText}>오늘</Text>
-              </TouchableOpacity>
-            </View>
+            <DatePickerButton
+              label="구매 날짜"
+              value={purchaseDate}
+              onChange={setPurchaseDate}
+              placeholder="날짜를 선택하세요"
+            />
 
+            <View style={{ height: 12 }} />
             <Text style={styles.inputLabel}>구매 가격</Text>
             <TextInput
               style={styles.modalInput}
@@ -626,8 +621,8 @@ export default function DetailScreen() {
                     Alert.alert('오류', '올바른 가격을 입력해주세요');
                     return;
                   }
-                  if (!/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate)) {
-                    Alert.alert('오류', '날짜를 YYYY-MM-DD 형식으로 입력해주세요');
+                  if (!purchaseDate) {
+                    Alert.alert('오류', '구매 날짜를 선택해주세요');
                     return;
                   }
                   addPurchase(item.id, purchaseDate, price);
@@ -639,7 +634,7 @@ export default function DetailScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Share Ment Sheet */}

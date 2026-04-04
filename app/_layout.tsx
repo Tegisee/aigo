@@ -132,15 +132,6 @@ export default function RootLayout() {
     };
   }, []);
 
-  if (!hasSeenOnboarding) {
-    return (
-      <>
-        <StatusBar style="dark" />
-        <OnboardingScreen onComplete={completeOnboarding} />
-      </>
-    );
-  }
-
   return (
     <ShareIntentProvider
       options={{
@@ -150,27 +141,40 @@ export default function RootLayout() {
       }}
     >
       <StatusBar style="dark" />
-      <ShareIntentHandler />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: theme.background },
-        }}
-      >
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="shareintent" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="detail/[id]"
-          options={{ animation: 'slide_from_right' }}
-        />
-        <Stack.Screen
-          name="modal/add-item"
-          options={{
-            presentation: 'modal',
-            animation: 'slide_from_bottom',
-          }}
-        />
-      </Stack>
+      {!hasSeenOnboarding ? (
+        <OnboardingScreen onComplete={completeOnboarding} />
+      ) : (
+        <>
+          <ShareIntentHandler />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.background },
+            }}
+          >
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="shareintent" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="detail/[id]"
+              options={{ animation: 'slide_from_right' }}
+            />
+            <Stack.Screen
+              name="modal/add-item"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+              }}
+            />
+            <Stack.Screen
+              name="modal/login"
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+              }}
+            />
+          </Stack>
+        </>
+      )}
     </ShareIntentProvider>
   );
 }

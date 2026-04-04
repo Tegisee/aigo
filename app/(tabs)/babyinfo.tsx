@@ -1,157 +1,91 @@
 import { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, ActivityIndicator, Modal, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
+import DatePickerButton from '../../components/DatePickerButton';
 import {
   getHealthCheckupSchedule,
   fetchVaccineCenters,
-  fetchWelfareServices,
-  fetchChildcareCenters,
   hasPublicApiKey,
   REGIONS,
   type VaccineCenter,
-  type WelfareService,
-  type ChildcareCenter,
 } from '../../services/publicApi';
 
-// ─── 예방접종 스케줄 (월령별) ───
-const VACCINATION_SCHEDULE: { month: string; vaccines: string[]; note?: string }[] = [
-  { month: '출생', vaccines: ['B형간염 1차', 'BCG(결핵)'] },
-  { month: '1개월', vaccines: ['B형간염 2차'] },
-  { month: '2개월', vaccines: ['DTaP 1차', 'IPV 1차', 'Hib 1차', 'PCV 1차', '로타바이러스 1차'] },
-  { month: '4개월', vaccines: ['DTaP 2차', 'IPV 2차', 'Hib 2차', 'PCV 2차', '로타바이러스 2차'] },
-  { month: '6개월', vaccines: ['DTaP 3차', 'IPV 3차', 'Hib 3차', 'PCV 3차', 'B형간염 3차', '인플루엔자(매년)'] },
-  { month: '12개월', vaccines: ['MMR 1차', '수두 1차', 'Hib 4차', 'PCV 4차', 'A형간염 1차'] },
-  { month: '15개월', vaccines: ['DTaP 4차'] },
-  { month: '18개월', vaccines: ['A형간염 2차'] },
-  { month: '만 4~6세', vaccines: ['DTaP 5차', 'IPV 4차', 'MMR 2차'], note: '취학 전 접종' },
-  { month: '만 6세', vaccines: ['일본뇌염(사백신 4차 또는 생백신 2차)'] },
-  { month: '만 11~12세', vaccines: ['Tdap/Td', 'HPV(자궁경부암) 1~2차', '일본뇌염 5차'] },
+// ─── 예방접종 스케줄 (정적 상세 데이터) ───
+const VACCINATION_SCHEDULE = [
+  { month: '출생', minMonth: 0, maxMonth: 0, vaccines: ['B형간염 1차', 'BCG(결핵)'] },
+  { month: '1개월', minMonth: 1, maxMonth: 1, vaccines: ['B형간염 2차'] },
+  { month: '2개월', minMonth: 2, maxMonth: 3, vaccines: ['DTaP 1차', 'IPV 1차', 'Hib 1차', 'PCV 1차', '로타바이러스 1차'] },
+  { month: '4개월', minMonth: 4, maxMonth: 5, vaccines: ['DTaP 2차', 'IPV 2차', 'Hib 2차', 'PCV 2차', '로타바이러스 2차'] },
+  { month: '6개월', minMonth: 6, maxMonth: 11, vaccines: ['DTaP 3차', 'IPV 3차', 'Hib 3차', 'PCV 3차', 'B형간염 3차', '인플루엔자(매년)'] },
+  { month: '12개월', minMonth: 12, maxMonth: 14, vaccines: ['MMR 1차', '수두 1차', 'Hib 4차', 'PCV 4차', 'A형간염 1차'] },
+  { month: '15개월', minMonth: 15, maxMonth: 17, vaccines: ['DTaP 4차'] },
+  { month: '18개월', minMonth: 18, maxMonth: 47, vaccines: ['A형간염 2차'] },
+  { month: '만 4~6세', minMonth: 48, maxMonth: 71, vaccines: ['DTaP 5차', 'IPV 4차', 'MMR 2차'], note: '취학 전 필수 접종' },
+  { month: '만 6세', minMonth: 72, maxMonth: 83, vaccines: ['일본뇌염(사백신 4차 또는 생백신 2차)'] },
+  { month: '만 11~12세', minMonth: 132, maxMonth: 155, vaccines: ['Tdap/Td', 'HPV(자궁경부암) 1~2차', '일본뇌염 5차'] },
 ];
 
-// ─── 정부 지원금 정보 ───
-const SUPPORT_INFO: { title: string; desc: string; url: string; emoji: string }[] = [
+// ─── 정부 지원금 상세 정보 (앱 내 표시) ───
+const SUPPORT_DETAIL = [
   {
-    title: '부모급여 (0~1세)',
-    desc: '0세 월 100만원, 1세 월 50만원 지급',
-    url: 'https://www.bokjiro.go.kr',
-    emoji: '💰',
+    emoji: '💰', title: '부모급여',
+    target: '만 0~1세 아동의 부모',
+    amount: '0세: 월 100만원 / 1세: 월 50만원',
+    how: '주민등록 주소지 읍면동 행정복지센터 또는 복지로(bokjiro.go.kr) 온라인 신청',
+    note: '어린이집 이용 시 보육료 차액 지급',
   },
   {
-    title: '아동수당 (0~8세)',
-    desc: '만 8세 미만 아동 월 10만원',
-    url: 'https://www.bokjiro.go.kr',
-    emoji: '👶',
+    emoji: '👶', title: '아동수당',
+    target: '만 8세 미만 모든 아동 (소득 무관)',
+    amount: '월 10만원',
+    how: '출생신고 시 행복출산 원스톱 서비스로 자동 신청, 또는 읍면동 주민센터/복지로 신청',
+    note: '매월 25일 지급',
   },
   {
-    title: '영아수당 (0~1세)',
-    desc: '바우처 월 30만원 (어린이집 미이용 시)',
-    url: 'https://www.childcare.go.kr',
-    emoji: '🍼',
+    emoji: '🍼', title: '영아수당',
+    target: '만 0~1세 어린이집 미이용 아동',
+    amount: '바우처 월 30만원 (국민행복카드)',
+    how: '읍면동 주민센터 또는 복지로 신청',
+    note: '어린이집 이용 시 보육료로 전환',
   },
   {
-    title: '양육수당 (어린이집 미이용)',
-    desc: '가정 양육 시 월 10~20만원',
-    url: 'https://www.childcare.go.kr',
-    emoji: '🏠',
+    emoji: '🏠', title: '양육수당',
+    target: '어린이집/유치원 미이용 만 2~5세',
+    amount: '월 10만원',
+    how: '읍면동 주민센터 또는 복지로 신청',
+    note: '영아수당과 중복 불가',
   },
   {
-    title: '첫만남이용권',
-    desc: '출생 시 바우처 200만원 (첫째 기준)',
-    url: 'https://www.bokjiro.go.kr',
-    emoji: '🎁',
+    emoji: '🎁', title: '첫만남이용권',
+    target: '출생아 (출생신고 후)',
+    amount: '첫째 200만원 / 둘째 이상 300만원 (바우처)',
+    how: '출생신고 시 자동 신청 (행복출산 원스톱)',
+    note: '출생일로부터 1년 내 사용',
   },
   {
-    title: '출산급여/육아휴직급여',
-    desc: '고용보험 가입자 대상, 소득의 80%',
-    url: 'https://www.ei.go.kr',
-    emoji: '📋',
-  },
-];
-
-// ─── 어린이집/유치원 ───
-const CHILDCARE_INFO: { title: string; desc: string; url: string; emoji: string }[] = [
-  {
-    title: '아이사랑포털',
-    desc: '어린이집 검색, 대기 신청, 보육료 안내',
-    url: 'https://www.childcare.go.kr',
-    emoji: '🏫',
-  },
-  {
-    title: '처음학교로',
-    desc: '유치원 입학 신청 (매년 11월)',
-    url: 'https://www.go-firstschool.com',
-    emoji: '🎒',
-  },
-  {
-    title: '정부24 어린이집 입소 대기',
-    desc: '온라인 대기 신청 및 현황 조회',
-    url: 'https://www.gov.kr',
-    emoji: '📝',
+    emoji: '📋', title: '육아휴직급여',
+    target: '고용보험 가입 근로자 (만 8세 이하 자녀)',
+    amount: '통상임금 80% (상한 월 150만원)',
+    how: '사업주에게 육아휴직 신청 → 고용센터에 급여 신청',
+    note: '부부 동시 사용 가능 (6+6 부모육아휴직제)',
   },
 ];
 
 export default function BabyInfoScreen() {
-  const { babyBirthDate, babyName } = useAppStore();
+  const { babyBirthDate, babyName, vaccinationRecords, setVaccinationDate, checkupRecords, setCheckupDate } = useAppStore();
+
+  // 접종기관 검색
   const [showRegionPicker, setShowRegionPicker] = useState(false);
   const [selectedRegion, setSelectedRegion] = useState('');
   const [vaccineCenters, setVaccineCenters] = useState<VaccineCenter[]>([]);
   const [loadingCenters, setLoadingCenters] = useState(false);
   const [centersError, setCentersError] = useState('');
 
-  // 복지 서비스
-  const [welfareResults, setWelfareResults] = useState<WelfareService[]>([]);
-  const [loadingWelfare, setLoadingWelfare] = useState(false);
-  const [welfareLoaded, setWelfareLoaded] = useState(false);
-
-  // 어린이집
-  const [showChildcareRegion, setShowChildcareRegion] = useState(false);
-  const [childcareRegion, setChildcareRegion] = useState('');
-  const [childcareResults, setChildcareResults] = useState<ChildcareCenter[]>([]);
-  const [loadingChildcare, setLoadingChildcare] = useState(false);
-  const [childcareError, setChildcareError] = useState('');
-
-  const handleSearchWelfare = useCallback(async () => {
-    setLoadingWelfare(true);
-    try {
-      const results = await fetchWelfareServices(babyMonths ?? 12);
-      setWelfareResults(results);
-    } catch {}
-    setLoadingWelfare(false);
-    setWelfareLoaded(true);
-  }, [babyMonths]);
-
-  const handleSearchChildcare = useCallback(async (region: string) => {
-    setChildcareRegion(region);
-    setShowChildcareRegion(false);
-    setLoadingChildcare(true);
-    setChildcareError('');
-    try {
-      const results = await fetchChildcareCenters(region);
-      setChildcareResults(results);
-      if (results.length === 0) setChildcareError('검색 결과가 없습니다');
-    } catch {
-      setChildcareError('조회에 실패했습니다');
-    }
-    setLoadingChildcare(false);
-  }, []);
-
-  const handleSearchCenters = useCallback(async (region: string) => {
-    setSelectedRegion(region);
-    setShowRegionPicker(false);
-    setLoadingCenters(true);
-    setCentersError('');
-    try {
-      const results = await fetchVaccineCenters(region);
-      setVaccineCenters(results);
-      if (results.length === 0) setCentersError('검색 결과가 없습니다');
-    } catch {
-      setCentersError('조회에 실패했습니다');
-    }
-    setLoadingCenters(false);
-  }, []);
+  // 지원금 상세 펼침
+  const [expandedSupport, setExpandedSupport] = useState<number | null>(null);
 
   const displayName = babyName || '우리 아이';
   const babyMonths = babyBirthDate ? (() => {
@@ -160,23 +94,33 @@ export default function BabyInfoScreen() {
     return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
   })() : null;
 
-  // 현재 월령에 해당하는 접종 하이라이트
-  const getCurrentVaccineIndex = (): number => {
-    if (babyMonths === null) return -1;
-    if (babyMonths < 1) return 0;
-    if (babyMonths < 2) return 1;
-    if (babyMonths < 4) return 2;
-    if (babyMonths < 6) return 3;
-    if (babyMonths < 12) return 4;
-    if (babyMonths < 15) return 5;
-    if (babyMonths < 18) return 6;
-    if (babyMonths < 48) return 7;
-    if (babyMonths < 72) return 8;
-    if (babyMonths < 84) return 9;
-    return 10;
+  const handleRegionSelect = useCallback(async (region: string) => {
+    setShowRegionPicker(false);
+    setSelectedRegion(region);
+    setLoadingCenters(true);
+    setCentersError('');
+    try {
+      const results = await fetchVaccineCenters(region);
+      setVaccineCenters(results);
+      if (results.length === 0) setCentersError('검색 결과가 없습니다');
+    } catch { setCentersError('조회에 실패했습니다'); }
+    setLoadingCenters(false);
+  }, []);
+
+  // 접종 상태 분류 (날짜 기록 기반)
+  const isVaccineGroupDone = (item: typeof VACCINATION_SCHEDULE[0]) => {
+    return item.vaccines.every((v) => !!vaccinationRecords[v]);
   };
 
-  const currentVaccineIdx = getCurrentVaccineIndex();
+  const getVaccineStatus = (item: typeof VACCINATION_SCHEDULE[0]) => {
+    if (isVaccineGroupDone(item)) return 'done';
+    if (babyMonths !== null && babyMonths >= item.minMonth && babyMonths <= item.maxMonth) return 'current';
+    if (babyMonths !== null && babyMonths > item.maxMonth) return 'overdue'; // 시기 지남 + 미완료
+    return 'pending';
+  };
+
+  const doneCount = VACCINATION_SCHEDULE.filter((v) => isVaccineGroupDone(v)).length;
+  const currentItem = VACCINATION_SCHEDULE.find((v) => getVaccineStatus(v) === 'current' || getVaccineStatus(v) === 'overdue');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -186,38 +130,96 @@ export default function BabyInfoScreen() {
           <Text style={styles.subtitle}>{displayName} {babyMonths < 1 ? '신생아' : `${babyMonths}개월`} 맞춤 정보</Text>
         )}
 
-        {/* 예방접종 스케줄 */}
+        {/* ── 예방접종 ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>💉</Text>
-            <Text style={styles.sectionTitle}>예방접종 스케줄</Text>
+            <Text style={styles.sectionTitle}>예방접종</Text>
+            {babyMonths !== null && (
+              <View style={styles.progressBadge}>
+                <Text style={styles.progressBadgeText}>{doneCount}/{VACCINATION_SCHEDULE.length} 완료</Text>
+              </View>
+            )}
           </View>
+
+          {/* 현재 접종 하이라이트 */}
+          {currentItem && (
+            <View style={styles.currentHighlight}>
+              <Ionicons name="alert-circle" size={18} color={theme.primary} />
+              <Text style={styles.currentHighlightText}>
+                {currentItem.month} 접종 시기예요: {currentItem.vaccines.join(', ')}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.card}>
             {VACCINATION_SCHEDULE.map((item, i) => {
-              const isPast = i < currentVaccineIdx;
-              const isCurrent = i === currentVaccineIdx;
+              const status = getVaccineStatus(item);
               return (
                 <View key={i}>
                   {i > 0 && <View style={styles.divider} />}
-                  <View style={[styles.vaccineRow, isCurrent && styles.vaccineRowCurrent]}>
+                  <View style={[styles.vaccineRow, (status === 'current' || status === 'overdue') && styles.vaccineRowCurrent]}>
                     <View style={styles.vaccineLeft}>
                       <View style={[
                         styles.vaccineDot,
-                        isPast && styles.vaccineDotDone,
-                        isCurrent && styles.vaccineDotCurrent,
+                        status === 'done' && styles.vaccineDotDone,
+                        status === 'current' && styles.vaccineDotCurrent,
+                        status === 'overdue' && styles.vaccineDotOverdue,
                       ]}>
-                        {isPast && <Ionicons name="checkmark" size={10} color="#fff" />}
+                        {status === 'done' && <Ionicons name="checkmark" size={10} color="#fff" />}
+                        {status === 'current' && <Ionicons name="time" size={10} color="#fff" />}
+                        {status === 'overdue' && <Ionicons name="alert" size={10} color="#fff" />}
                       </View>
-                      <Text style={[styles.vaccineMonth, isCurrent && styles.vaccineMonthCurrent]}>
-                        {item.month}
-                      </Text>
+                      <View>
+                        <Text style={[
+                          styles.vaccineMonth,
+                          status === 'current' && styles.vaccineMonthCurrent,
+                          status === 'overdue' && { color: '#FF3B30' },
+                          status === 'done' && { color: theme.subtext },
+                        ]}>
+                          {item.month}
+                        </Text>
+                        <Text style={[styles.vaccineStatus, status === 'overdue' && { color: '#FF3B30' }]}>
+                          {status === 'done' ? '완료' : status === 'current' ? '접종 시기' : status === 'overdue' ? '미접종' : '예정'}
+                        </Text>
+                      </View>
                     </View>
                     <View style={styles.vaccineRight}>
-                      {item.vaccines.map((v, j) => (
-                        <Text key={j} style={[styles.vaccineName, isPast && styles.vaccineNameDone]}>
-                          {v}
-                        </Text>
-                      ))}
+                      {item.vaccines.map((v, j) => {
+                        const recordDate = vaccinationRecords[v];
+                        return (
+                          <TouchableOpacity
+                            key={j}
+                            style={styles.vaccineItem}
+                            onPress={() => {
+                              // 이미 기록 있으면 삭제 확인, 없으면 오늘 날짜로 기록
+                              if (recordDate) {
+                                Alert.alert(v, `접종일: ${recordDate}`, [
+                                  { text: '닫기' },
+                                  { text: '기록 삭제', style: 'destructive', onPress: () => setVaccinationDate(v, null) },
+                                ]);
+                              } else {
+                                const today = new Date().toISOString().slice(0, 10);
+                                Alert.alert(v, '접종 완료로 기록할까요?', [
+                                  { text: '취소' },
+                                  { text: `오늘(${today}) 기록`, onPress: () => setVaccinationDate(v, today) },
+                                ]);
+                              }
+                            }}
+                            activeOpacity={0.6}
+                          >
+                            <Ionicons
+                              name={recordDate ? 'checkmark-circle' : 'ellipse-outline'}
+                              size={16}
+                              color={recordDate ? theme.success : theme.border}
+                            />
+                            <Text style={[styles.vaccineName, recordDate && styles.vaccineNameDone]}>
+                              {v}
+                            </Text>
+                            {recordDate && <Text style={styles.vaccineDate}>{recordDate}</Text>}
+                          </TouchableOpacity>
+                        );
+                      })}
                       {item.note && <Text style={styles.vaccineNote}>{item.note}</Text>}
                     </View>
                   </View>
@@ -225,728 +227,306 @@ export default function BabyInfoScreen() {
               );
             })}
           </View>
+
           {/* 접종기관 검색 */}
-          {hasPublicApiKey() ? (
-            <View style={styles.searchSection}>
+          {hasPublicApiKey() && (
+            <View style={styles.apiSection}>
               <TouchableOpacity
                 style={styles.searchBtn}
-                onPress={() => setShowRegionPicker(true)}
+                onPress={() => { setRegionPickerTarget('vaccine'); setShowRegionPicker(true); }}
                 activeOpacity={0.7}
               >
-                <Ionicons name="search" size={16} color="#fff" />
+                <Ionicons name="location" size={16} color="#fff" />
                 <Text style={styles.searchBtnText}>
                   {selectedRegion ? `${selectedRegion} 접종기관` : '가까운 접종기관 검색'}
                 </Text>
               </TouchableOpacity>
-
-              {loadingCenters && (
-                <ActivityIndicator style={{ marginTop: 12 }} color={theme.primary} />
-              )}
-
-              {centersError ? (
-                <Text style={styles.centersError}>{centersError}</Text>
-              ) : null}
-
+              {loadingCenters && <ActivityIndicator style={{ marginTop: 12 }} color={theme.primary} />}
+              {centersError ? <Text style={styles.apiError}>{centersError}</Text> : null}
               {vaccineCenters.length > 0 && (
-                <View style={styles.centersList}>
+                <View style={styles.resultList}>
                   {vaccineCenters.slice(0, 10).map((c, i) => (
-                    <View key={`${c.orgCode}-${i}`} style={styles.centerCard}>
-                      <Text style={styles.centerName}>{c.name}</Text>
-                      <Text style={styles.centerAddr}>{c.address}</Text>
+                    <View key={`vc-${i}`} style={styles.resultCard}>
+                      <Text style={styles.resultName}>{c.name}</Text>
+                      <Text style={styles.resultAddr}>{c.address}</Text>
                       {c.tel ? (
-                        <TouchableOpacity
-                          onPress={() => Linking.openURL(`tel:${c.tel.replace(/[^0-9-]/g, '')}`)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.centerTel}>{c.tel}</Text>
+                        <TouchableOpacity onPress={() => Linking.openURL(`tel:${c.tel.replace(/[^0-9-]/g, '')}`)}>
+                          <Text style={styles.resultTel}>{c.tel}</Text>
                         </TouchableOpacity>
                       ) : null}
                     </View>
                   ))}
-                  {vaccineCenters.length > 10 && (
-                    <Text style={styles.centersMore}>외 {vaccineCenters.length - 10}곳</Text>
-                  )}
                 </View>
               )}
             </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.linkBtn}
-              onPress={() => Linking.openURL('https://nip.kdca.go.kr')}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.linkBtnText}>질병관리청 예방접종 도우미 바로가기</Text>
-              <Ionicons name="open-outline" size={14} color={theme.primary} />
-            </TouchableOpacity>
           )}
         </View>
 
-        {/* 영유아 건강검진 */}
+        {/* ── 영유아 건강검진 ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>🩺</Text>
             <Text style={styles.sectionTitle}>영유아 건강검진</Text>
           </View>
           <View style={styles.card}>
-            {getHealthCheckupSchedule(babyMonths).map((item, i) => (
-              <View key={i}>
-                {i > 0 && <View style={styles.divider} />}
-                <View style={[styles.vaccineRow, item.isCurrent && styles.vaccineRowCurrent]}>
-                  <View style={styles.vaccineLeft}>
-                    <View style={[
-                      styles.vaccineDot,
-                      item.isPast && styles.vaccineDotDone,
-                      item.isCurrent && styles.vaccineDotCurrent,
-                    ]}>
-                      {item.isPast && <Ionicons name="checkmark" size={10} color="#fff" />}
+            {getHealthCheckupSchedule(babyMonths).map((item, i) => {
+              const roundKey = String(item.round);
+              const recordDate = checkupRecords[roundKey];
+              const isDone = !!recordDate;
+              const isOverdue = !isDone && item.isPast;
+              return (
+                <View key={i}>
+                  {i > 0 && <View style={styles.divider} />}
+                  <TouchableOpacity
+                    style={[styles.vaccineRow, (item.isCurrent || isOverdue) && styles.vaccineRowCurrent]}
+                    onPress={() => {
+                      if (recordDate) {
+                        Alert.alert(`${item.round}차 검진`, `검진일: ${recordDate}`, [
+                          { text: '닫기' },
+                          { text: '기록 삭제', style: 'destructive', onPress: () => setCheckupDate(roundKey, null) },
+                        ]);
+                      } else {
+                        const today = new Date().toISOString().slice(0, 10);
+                        Alert.alert(`${item.round}차 검진 (${item.ageRange})`, '검진 완료로 기록할까요?', [
+                          { text: '취소' },
+                          { text: `오늘(${today}) 기록`, onPress: () => setCheckupDate(roundKey, today) },
+                        ]);
+                      }
+                    }}
+                    activeOpacity={0.6}
+                  >
+                    <View style={styles.vaccineLeft}>
+                      <View style={[
+                        styles.vaccineDot,
+                        isDone && styles.vaccineDotDone,
+                        isOverdue && styles.vaccineDotOverdue,
+                        item.isCurrent && !isDone && !isOverdue && styles.vaccineDotCurrent,
+                      ]}>
+                        {isDone && <Ionicons name="checkmark" size={10} color="#fff" />}
+                        {isOverdue && <Ionicons name="alert" size={10} color="#fff" />}
+                        {item.isCurrent && !isDone && <Ionicons name="time" size={10} color="#fff" />}
+                      </View>
+                      <Text style={[
+                        styles.vaccineMonth,
+                        item.isCurrent && !isDone && styles.vaccineMonthCurrent,
+                        isOverdue && { color: '#FF3B30' },
+                      ]}>
+                        {item.round}차
+                      </Text>
                     </View>
-                    <Text style={[styles.vaccineMonth, item.isCurrent && styles.vaccineMonthCurrent]}>
-                      {item.round}차
-                    </Text>
-                  </View>
-                  <View style={styles.vaccineRight}>
-                    <Text style={[styles.vaccineName, item.isPast && styles.vaccineNameDone]}>
-                      {item.ageRange}
-                    </Text>
-                    <Text style={styles.vaccineNote}>{item.items.join(', ')}</Text>
-                  </View>
+                    <View style={styles.vaccineRight}>
+                      <Text style={[styles.vaccineName, isDone && styles.vaccineNameDone]}>{item.ageRange}</Text>
+                      <Text style={styles.vaccineNote}>{item.items.join(', ')}</Text>
+                      {recordDate && <Text style={styles.vaccineDate}>{recordDate}</Text>}
+                    </View>
+                  </TouchableOpacity>
                 </View>
-              </View>
+              );
+            }
             ))}
           </View>
-          <TouchableOpacity
-            style={styles.linkBtn}
-            onPress={() => Linking.openURL('https://www.nhis.or.kr')}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.linkBtnText}>건강보험공단 검진 일정 확인</Text>
-            <Ionicons name="open-outline" size={14} color={theme.primary} />
-          </TouchableOpacity>
         </View>
 
-        {/* 정부 지원금 */}
+        {/* ── 정부 지원금 (앱 내 상세) ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>💰</Text>
             <Text style={styles.sectionTitle}>정부 지원금</Text>
           </View>
-
-          {/* 정적 기본 카드 (항상 표시) */}
-          {SUPPORT_INFO.map((item, i) => (
+          {SUPPORT_DETAIL.map((item, i) => (
             <TouchableOpacity
               key={i}
-              style={styles.infoCard}
-              onPress={() => Linking.openURL(item.url)}
+              style={[styles.supportCard, expandedSupport === i && styles.supportCardExpanded]}
+              onPress={() => setExpandedSupport(expandedSupport === i ? null : i)}
               activeOpacity={0.7}
             >
-              <Text style={styles.infoEmoji}>{item.emoji}</Text>
-              <View style={styles.infoText}>
-                <Text style={styles.infoTitle}>{item.title}</Text>
-                <Text style={styles.infoDesc}>{item.desc}</Text>
+              <View style={styles.supportHeader}>
+                <Text style={styles.supportEmoji}>{item.emoji}</Text>
+                <Text style={styles.supportTitle}>{item.title}</Text>
+                <Ionicons
+                  name={expandedSupport === i ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={theme.subtext}
+                />
               </View>
-              <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
+              {expandedSupport === i && (
+                <View style={styles.supportBody}>
+                  <View style={styles.supportRow}>
+                    <Text style={styles.supportLabel}>지원대상</Text>
+                    <Text style={styles.supportValue}>{item.target}</Text>
+                  </View>
+                  <View style={styles.supportRow}>
+                    <Text style={styles.supportLabel}>지원금액</Text>
+                    <Text style={[styles.supportValue, { color: theme.primary, fontWeight: '600' }]}>{item.amount}</Text>
+                  </View>
+                  <View style={styles.supportRow}>
+                    <Text style={styles.supportLabel}>신청방법</Text>
+                    <Text style={styles.supportValue}>{item.how}</Text>
+                  </View>
+                  {item.note && (
+                    <View style={styles.supportNoteRow}>
+                      <Ionicons name="information-circle-outline" size={14} color={theme.subtext} />
+                      <Text style={styles.supportNote}>{item.note}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
             </TouchableOpacity>
           ))}
 
-          {/* API 연동: 추가 복지 서비스 */}
-          {hasPublicApiKey() && (
-            <View style={styles.apiSection}>
-              {!welfareLoaded ? (
-                <TouchableOpacity
-                  style={styles.searchBtn}
-                  onPress={handleSearchWelfare}
-                  activeOpacity={0.7}
-                >
-                  {loadingWelfare ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <Ionicons name="search" size={16} color="#fff" />
-                  )}
-                  <Text style={styles.searchBtnText}>
-                    {babyMonths !== null ? `${babyMonths}개월 맞춤 복지 서비스 더보기` : '맞춤 복지 서비스 검색'}
-                  </Text>
-                </TouchableOpacity>
-              ) : welfareResults.length > 0 ? (
-                <>
-                  <Text style={styles.apiResultTitle}>복지로 검색 결과</Text>
-                  {welfareResults.slice(0, 10).map((w, i) => (
-                    <TouchableOpacity
-                      key={`${w.id}-${i}`}
-                      style={styles.welfareCard}
-                      onPress={() => w.detailUrl && Linking.openURL(w.detailUrl)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.welfareName}>{w.name}</Text>
-                      {w.summary ? <Text style={styles.welfareSummary} numberOfLines={2}>{w.summary}</Text> : null}
-                      <View style={styles.welfareMeta}>
-                        {w.amount ? <Text style={styles.welfareAmount}>{w.amount}</Text> : null}
-                        {w.howToApply ? <Text style={styles.welfareApply}>{w.howToApply}</Text> : null}
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </>
-              ) : (
-                <Text style={styles.centersError}>추가 복지 서비스를 찾지 못했습니다</Text>
-              )}
-            </View>
-          )}
         </View>
 
-        {/* 어린이집/유치원 */}
+        {/* ── 어린이집 / 유치원 ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>🏫</Text>
             <Text style={styles.sectionTitle}>어린이집 / 유치원</Text>
           </View>
 
-          {/* 정적 외부 링크 (항상 표시) */}
-          {CHILDCARE_INFO.map((item, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.infoCard}
-              onPress={() => Linking.openURL(item.url)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.infoEmoji}>{item.emoji}</Text>
-              <View style={styles.infoText}>
-                <Text style={styles.infoTitle}>{item.title}</Text>
-                <Text style={styles.infoDesc}>{item.desc}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={theme.subtext} />
-            </TouchableOpacity>
-          ))}
-
-          {/* API 연동: 주변 어린이집 검색 */}
-          {hasPublicApiKey() && (
-            <View style={styles.apiSection}>
-              <TouchableOpacity
-                style={styles.searchBtn}
-                onPress={() => setShowChildcareRegion(true)}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="search" size={16} color="#fff" />
-                <Text style={styles.searchBtnText}>
-                  {childcareRegion ? `${childcareRegion} 어린이집` : '주변 어린이집 검색'}
-                </Text>
-              </TouchableOpacity>
-
-              {loadingChildcare && (
-                <ActivityIndicator style={{ marginTop: 12 }} color={theme.primary} />
-              )}
-
-              {childcareError ? (
-                <Text style={styles.centersError}>{childcareError}</Text>
-              ) : null}
-
-              {childcareResults.length > 0 && (
-                <View style={styles.centersList}>
-                  {childcareResults.slice(0, 10).map((c, i) => (
-                    <View key={`cc-${i}`} style={styles.centerCard}>
-                      <View style={styles.ccHeader}>
-                        <Text style={styles.centerName}>{c.name}</Text>
-                        <View style={styles.ccBadgeRow}>
-                          <View style={styles.ccTypeBadge}>
-                            <Text style={styles.ccTypeBadgeText}>{c.type}</Text>
-                          </View>
-                          {c.rating && c.rating !== '-' && (
-                            <View style={[styles.ccTypeBadge, styles.ccRatingBadge]}>
-                              <Text style={styles.ccRatingText}>{c.rating}</Text>
-                            </View>
-                          )}
-                        </View>
-                      </View>
-                      <Text style={styles.centerAddr}>{c.address}</Text>
-                      <View style={styles.ccMeta}>
-                        <Text style={styles.ccMetaText}>정원 {c.capacity}명 / 현원 {c.currentCount}명</Text>
-                        {c.tel ? (
-                          <TouchableOpacity
-                            onPress={() => Linking.openURL(`tel:${c.tel.replace(/[^0-9-]/g, '')}`)}
-                          >
-                            <Text style={styles.centerTel}>{c.tel}</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    </View>
-                  ))}
-                  {childcareResults.length > 10 && (
-                    <Text style={styles.centersMore}>외 {childcareResults.length - 10}곳</Text>
-                  )}
-                </View>
-              )}
-            </View>
-          )}
+          {/* 외부 사이트 */}
+          <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL('https://www.childcare.go.kr')} activeOpacity={0.7}>
+            <Ionicons name="open-outline" size={14} color={theme.primary} />
+            <Text style={styles.linkRowText}>아이사랑포털 (어린이집 검색/대기 신청)</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* 유용한 사이트 */}
+        {/* ── 유용한 사이트 ── */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionEmoji}>🔗</Text>
             <Text style={styles.sectionTitle}>유용한 사이트</Text>
           </View>
           {[
-            { name: '복지로', url: 'https://www.bokjiro.go.kr', desc: '맞춤형 복지 서비스 검색' },
-            { name: '정부24', url: 'https://www.gov.kr', desc: '출생신고, 각종 민원' },
-            { name: '건강보험공단', url: 'https://www.nhis.or.kr', desc: '영유아 건강검진 일정' },
-            { name: '육아종합지원센터', url: 'https://central.childcare.go.kr', desc: '양육 상담, 장난감 도서관' },
+            { name: '복지로', desc: '맞춤형 복지 서비스 검색', url: 'https://www.bokjiro.go.kr' },
+            { name: '정부24', desc: '출생신고, 각종 민원', url: 'https://www.gov.kr' },
           ].map((item, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.linkCard}
-              onPress={() => Linking.openURL(item.url)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.linkCardText}>
-                <Text style={styles.linkCardTitle}>{item.name}</Text>
-                <Text style={styles.linkCardDesc}>{item.desc}</Text>
+            <TouchableOpacity key={i} style={styles.linkRow} onPress={() => Linking.openURL(item.url)} activeOpacity={0.7}>
+              <Ionicons name="open-outline" size={14} color={theme.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.linkRowText}>{item.name}</Text>
+                <Text style={styles.linkRowDesc}>{item.desc}</Text>
               </View>
-              <Ionicons name="open-outline" size={14} color={theme.subtext} />
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* 어린이집 지역 선택 모달 */}
-        <Modal visible={showChildcareRegion} transparent animationType="slide">
-          <TouchableOpacity
-            style={styles.regionOverlay}
-            activeOpacity={1}
-            onPress={() => setShowChildcareRegion(false)}
-          >
-            <View style={styles.regionSheet}>
-              <View style={styles.regionHandle} />
-              <Text style={styles.regionTitle}>어린이집 검색 지역</Text>
-              <ScrollView style={styles.regionList}>
-                {REGIONS.map((r) => (
-                  <TouchableOpacity
-                    key={r}
-                    style={[styles.regionItem, childcareRegion === r && styles.regionItemActive]}
-                    onPress={() => handleSearchChildcare(r)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.regionItemText, childcareRegion === r && styles.regionItemTextActive]}>
-                      {r}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
-        {/* 접종기관 지역 선택 모달 */}
-        <Modal visible={showRegionPicker} transparent animationType="slide">
-          <TouchableOpacity
-            style={styles.regionOverlay}
-            activeOpacity={1}
-            onPress={() => setShowRegionPicker(false)}
-          >
-            <View style={styles.regionSheet}>
-              <View style={styles.regionHandle} />
-              <Text style={styles.regionTitle}>지역 선택</Text>
-              <ScrollView style={styles.regionList}>
-                {REGIONS.map((r) => (
-                  <TouchableOpacity
-                    key={r}
-                    style={[styles.regionItem, selectedRegion === r && styles.regionItemActive]}
-                    onPress={() => handleSearchCenters(r)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.regionItemText, selectedRegion === r && styles.regionItemTextActive]}>
-                      {r}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
-            </View>
-          </TouchableOpacity>
-        </Modal>
-
         <Text style={styles.disclaimer}>
-          위 정보는 참고용이며, 정확한 내용은 해당 기관 공식 사이트를 확인하세요.
+          위 정보는 2026년 기준 참고용이며, 정확한 내용은 해당 기관에 확인하세요.
         </Text>
       </ScrollView>
+
+      {/* 지역 선택 모달 (접종기관/어린이집 공용) */}
+      <Modal visible={showRegionPicker} transparent animationType="slide">
+        <TouchableOpacity style={styles.regionOverlay} activeOpacity={1} onPress={() => setShowRegionPicker(false)}>
+          <View style={styles.regionSheet}>
+            <View style={styles.regionHandle} />
+            <Text style={styles.regionTitle}>
+              접종기관 검색 지역
+            </Text>
+            <ScrollView style={styles.regionList}>
+              {REGIONS.map((r) => (
+                <TouchableOpacity
+                  key={r}
+                  style={styles.regionItem}
+                  onPress={() => handleRegionSelect(r)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.regionItemText}>{r}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.background,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: theme.text,
-    paddingTop: 16,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: theme.primary,
-    fontWeight: '600',
-    marginTop: 4,
-    marginBottom: 20,
-  },
+  container: { flex: 1, backgroundColor: theme.background },
+  scrollContent: { padding: 20, paddingBottom: 40 },
+  title: { fontSize: 24, fontWeight: 'bold', color: theme.text, paddingTop: 16 },
+  subtitle: { fontSize: 14, color: theme.primary, fontWeight: '600', marginTop: 4, marginBottom: 20 },
 
   // ── 섹션 ──
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 12,
-  },
-  sectionEmoji: {
-    fontSize: 18,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: theme.text,
-  },
+  section: { marginBottom: 24 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
+  sectionEmoji: { fontSize: 18 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: theme.text },
+  progressBadge: { marginLeft: 'auto', backgroundColor: 'rgba(78,205,196,0.12)', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  progressBadgeText: { fontSize: 12, fontWeight: '600', color: '#4ECDC4' },
 
-  // ── 예방접종 ──
-  card: {
-    backgroundColor: theme.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.border,
-    overflow: 'hidden',
-  },
-  vaccineRow: {
-    flexDirection: 'row',
-    padding: 14,
-    gap: 12,
-  },
-  vaccineRowCurrent: {
-    backgroundColor: 'rgba(255, 126, 103, 0.06)',
-  },
-  vaccineLeft: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    width: 90,
-  },
-  vaccineDot: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    borderColor: theme.border,
-    backgroundColor: theme.card,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 1,
-  },
-  vaccineDotDone: {
-    backgroundColor: theme.success,
-    borderColor: theme.success,
-  },
-  vaccineDotCurrent: {
-    borderColor: theme.primary,
-    backgroundColor: theme.primary,
-  },
-  vaccineMonth: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.subtext,
-    flex: 1,
-  },
-  vaccineMonthCurrent: {
-    color: theme.primary,
-    fontWeight: '700',
-  },
-  vaccineRight: {
-    flex: 1,
-    gap: 2,
-  },
-  vaccineName: {
-    fontSize: 13,
-    color: theme.text,
-    lineHeight: 20,
-  },
-  vaccineNameDone: {
-    color: theme.subtext,
-    textDecorationLine: 'line-through',
-  },
-  vaccineNote: {
-    fontSize: 11,
-    color: theme.subtext,
-    marginTop: 2,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: theme.border,
-  },
-  linkBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 10,
-    paddingVertical: 10,
-  },
-  linkBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: theme.primary,
-  },
+  // ── 현재 접종 하이라이트 ──
+  currentHighlight: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: 'rgba(255,126,103,0.08)', borderRadius: 12, padding: 12, marginBottom: 10 },
+  currentHighlightText: { flex: 1, fontSize: 13, color: theme.text, lineHeight: 20 },
 
-  // ── 정보 카드 ──
-  infoCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: theme.card,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.border,
-    padding: 14,
-    marginBottom: 8,
-  },
-  infoEmoji: {
-    fontSize: 22,
-  },
-  infoText: {
-    flex: 1,
-  },
-  infoTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  infoDesc: {
-    fontSize: 12,
-    color: theme.subtext,
-    marginTop: 2,
-  },
+  // ── 예방접종/건강검진 카드 ──
+  card: { backgroundColor: theme.card, borderRadius: 16, borderWidth: 1, borderColor: theme.border, overflow: 'hidden' },
+  vaccineRow: { flexDirection: 'row', padding: 14, gap: 12 },
+  vaccineRowCurrent: { backgroundColor: 'rgba(255,126,103,0.06)' },
+  vaccineLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, width: 100 },
+  vaccineDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: theme.border, backgroundColor: theme.card, justifyContent: 'center', alignItems: 'center', marginTop: 1 },
+  vaccineDotDone: { backgroundColor: theme.success, borderColor: theme.success },
+  vaccineDotCurrent: { borderColor: theme.primary, backgroundColor: theme.primary },
+  vaccineDotOverdue: { borderColor: '#FF3B30', backgroundColor: '#FF3B30' },
+  vaccineMonth: { fontSize: 13, fontWeight: '600', color: theme.subtext },
+  vaccineMonthCurrent: { color: theme.primary, fontWeight: '700' },
+  vaccineStatus: { fontSize: 10, color: theme.subtext, marginTop: 1 },
+  vaccineRight: { flex: 1, gap: 2 },
+  vaccineName: { fontSize: 13, color: theme.text, lineHeight: 20 },
+  vaccineNameDone: { color: theme.subtext, textDecorationLine: 'line-through' },
+  vaccineItem: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+  vaccineDate: { fontSize: 11, color: theme.success, marginLeft: 'auto' },
+  vaccineNote: { fontSize: 11, color: theme.subtext, marginTop: 2 },
+  divider: { height: 1, backgroundColor: theme.border },
 
-  // ── 링크 카드 ──
-  linkCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.border,
-    padding: 14,
-    marginBottom: 8,
-  },
-  linkCardText: {
-    flex: 1,
-  },
-  linkCardTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  linkCardDesc: {
-    fontSize: 12,
-    color: theme.subtext,
-    marginTop: 1,
-  },
+  // ── 정부 지원금 (아코디언) ──
+  supportCard: { backgroundColor: theme.card, borderRadius: 14, borderWidth: 1, borderColor: theme.border, marginBottom: 8, overflow: 'hidden' },
+  supportCardExpanded: { borderColor: theme.primary },
+  supportHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14 },
+  supportEmoji: { fontSize: 20 },
+  supportTitle: { flex: 1, fontSize: 15, fontWeight: '600', color: theme.text },
+  supportBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
+  supportRow: { gap: 2 },
+  supportLabel: { fontSize: 11, fontWeight: '600', color: theme.subtext },
+  supportValue: { fontSize: 14, color: theme.text, lineHeight: 20 },
+  supportNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, backgroundColor: 'rgba(0,0,0,0.03)', borderRadius: 8, padding: 10 },
+  supportNote: { flex: 1, fontSize: 12, color: theme.subtext, lineHeight: 18 },
 
-  // ── 접종기관 검색 ──
-  searchSection: {
-    marginTop: 12,
-  },
-  searchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: theme.primary,
-    borderRadius: 12,
-    paddingVertical: 12,
-  },
-  searchBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  centersError: {
-    fontSize: 13,
-    color: theme.subtext,
-    textAlign: 'center',
-    marginTop: 12,
-  },
-  centersList: {
-    marginTop: 12,
-    gap: 8,
-  },
-  centerCard: {
-    backgroundColor: theme.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.border,
-    padding: 12,
-    gap: 4,
-  },
-  centerName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  centerAddr: {
-    fontSize: 12,
-    color: theme.subtext,
-  },
-  centerTel: {
-    fontSize: 13,
-    color: theme.primary,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  centersMore: {
-    fontSize: 12,
-    color: theme.subtext,
-    textAlign: 'center',
-  },
+  // ── API 공통 ──
+  apiSection: { marginTop: 12 },
+  searchBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 12 },
+  searchBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
+  apiError: { fontSize: 13, color: theme.subtext, textAlign: 'center', marginTop: 12 },
+  apiResultTitle: { fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 8 },
+  resultList: { marginTop: 12, gap: 8 },
+  resultCard: { backgroundColor: theme.card, borderRadius: 12, borderWidth: 1, borderColor: theme.border, padding: 12, gap: 4 },
+  resultName: { fontSize: 14, fontWeight: '600', color: theme.text },
+  resultAddr: { fontSize: 12, color: theme.subtext },
+  resultTel: { fontSize: 13, color: theme.primary, fontWeight: '500', marginTop: 2 },
 
-  // ── API 결과 공통 ──
-  apiSection: {
-    marginTop: 12,
-  },
-  apiResultTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-    marginBottom: 8,
-  },
+  // ── 어린이집 ──
+  ccRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  ccBadges: { flexDirection: 'row', gap: 4 },
+  ccBadge: { backgroundColor: 'rgba(255,126,103,0.12)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  ccBadgeText: { fontSize: 10, fontWeight: '600', color: theme.primary },
+  ccRatingBadge: { backgroundColor: 'rgba(78,205,196,0.12)' },
+  ccRatingText: { fontSize: 10, fontWeight: '600', color: '#4ECDC4' },
+  ccCapacity: { fontSize: 12, color: theme.subtext },
 
-  // ── 복지 서비스 카드 ──
-  welfareCard: {
-    backgroundColor: theme.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.border,
-    padding: 12,
-    marginBottom: 8,
-    gap: 4,
-  },
-  welfareName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.text,
-  },
-  welfareSummary: {
-    fontSize: 12,
-    color: theme.subtext,
-    lineHeight: 18,
-  },
-  welfareMeta: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 4,
-  },
-  welfareAmount: {
-    fontSize: 11,
-    color: theme.primary,
-    fontWeight: '600',
-  },
-  welfareApply: {
-    fontSize: 11,
-    color: theme.subtext,
-  },
-
-  // ── 어린이집 카드 ──
-  ccHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  ccBadgeRow: {
-    flexDirection: 'row',
-    gap: 4,
-  },
-  ccTypeBadge: {
-    backgroundColor: 'rgba(255, 126, 103, 0.12)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  ccTypeBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: theme.primary,
-  },
-  ccRatingBadge: {
-    backgroundColor: 'rgba(78, 205, 196, 0.12)',
-  },
-  ccRatingText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#4ECDC4',
-  },
-  ccMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  ccMetaText: {
-    fontSize: 12,
-    color: theme.subtext,
-  },
+  // ── 링크 ──
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
+  linkRowText: { fontSize: 14, color: theme.primary, fontWeight: '500' },
+  linkRowDesc: { fontSize: 12, color: theme.subtext },
 
   // ── 지역 선택 모달 ──
-  regionOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-  },
-  regionSheet: {
-    backgroundColor: theme.card,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '60%',
-  },
-  regionHandle: {
-    width: 36,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: theme.border,
-    alignSelf: 'center',
-    marginBottom: 12,
-  },
-  regionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.text,
-    marginBottom: 12,
-  },
-  regionList: {
-    paddingBottom: 20,
-  },
-  regionItem: {
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
-  },
-  regionItemActive: {
-    backgroundColor: 'rgba(255, 126, 103, 0.08)',
-  },
-  regionItemText: {
-    fontSize: 15,
-    color: theme.text,
-  },
-  regionItemTextActive: {
-    color: theme.primary,
-    fontWeight: '600',
-  },
+  regionOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  regionSheet: { backgroundColor: theme.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, maxHeight: '60%' },
+  regionHandle: { width: 36, height: 5, borderRadius: 2.5, backgroundColor: theme.border, alignSelf: 'center', marginBottom: 12 },
+  regionTitle: { fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 12 },
+  regionList: { paddingBottom: 20 },
+  regionItem: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: theme.border },
+  regionItemText: { fontSize: 15, color: theme.text },
 
-  disclaimer: {
-    fontSize: 11,
-    color: theme.subtext,
-    textAlign: 'center',
-    opacity: 0.6,
-    lineHeight: 16,
-  },
+  disclaimer: { fontSize: 11, color: theme.subtext, textAlign: 'center', opacity: 0.6, lineHeight: 16 },
 });

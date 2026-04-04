@@ -12,6 +12,7 @@ import {
   fetchItemsFromFirestore,
   upsertSharedProduct,
   decrementTrackerCount,
+  incrementPurchaseCount,
 } from '../services/firebase';
 
 export type BabyGender = 'male' | 'female' | 'unknown';
@@ -47,6 +48,8 @@ interface AppState {
   children: Child[];
   selectedChildId: string | null;
   parentInfo: ParentInfo;
+  vaccinationRecords: Record<string, string>; // { 'B형간염 1차': '2026-01-15', ... }
+  checkupRecords: Record<string, string>;     // { '1': '2026-05-01', ... } (차수 → 날짜)
   trackedItems: TrackedItem[];
   addItem: (item: TrackedItem) => void;
   removeItem: (id: string) => void;
@@ -68,6 +71,8 @@ interface AppState {
   removeChild: (id: string) => void;
   selectChild: (id: string | null) => void;
   setParentInfo: (info: Partial<ParentInfo>) => void;
+  setVaccinationDate: (vaccineKey: string, date: string | null) => void;
+  setCheckupDate: (round: string, date: string | null) => void;
   resetAllData: () => Promise<void>;
 }
 
@@ -86,6 +91,8 @@ export const useAppStore = create<AppState>()(
       children: [],
       selectedChildId: null,
       parentInfo: {},
+      vaccinationRecords: {},
+      checkupRecords: {},
       trackedItems: [],
       addItem: (item) => {
         // 소모품이면 자동 재구매 주기 계산
@@ -197,9 +204,12 @@ export const useAppStore = create<AppState>()(
           updateItemInFirestore(id, {
             purchaseHistory: updated.purchaseHistory,
             lastPurchasedAt: updated.lastPurchasedAt,
-            repurchaseEnabled: updated.repurchaseEnabled,
+            repurchaseEnabled: updated.repurchaseEnabled ?? false,
             repurchaseDays: updated.repurchaseDays,
           });
+          // shared_products purchaseCount 증가
+          const productId = updated.productId || id;
+          incrementPurchaseCount(productId);
         }
       },
       updateItemRepurchase: (id, data) => {
@@ -303,6 +313,24 @@ export const useAppStore = create<AppState>()(
           return { parentInfo: merged };
         });
       },
+      setVaccinationDate: (vaccineKey, date) => {
+        set((state) => {
+          const records = { ...state.vaccinationRecords };
+          if (date) records[vaccineKey] = date;
+          else delete records[vaccineKey];
+          updateUserSettings({ vaccinationRecords: records });
+          return { vaccinationRecords: records };
+        });
+      },
+      setCheckupDate: (round, date) => {
+        set((state) => {
+          const records = { ...state.checkupRecords };
+          if (date) records[round] = date;
+          else delete records[round];
+          updateUserSettings({ checkupRecords: records });
+          return { checkupRecords: records };
+        });
+      },
       toggleNotification: () =>
         set((state) => {
           const next = !state.notificationEnabled;
@@ -333,8 +361,15 @@ export const useAppStore = create<AppState>()(
           children: [],
           selectedChildId: null,
           parentInfo: {},
+          vaccinationRecords: {},
+          checkupRecords: {},
         });
-        await AsyncStorage.removeItem('aigo-storage');
+        try {
+          const allKeys = await AsyncStorage.getAllKeys();
+          if (allKeys.length > 0) await AsyncStorage.multiRemove(allKeys);
+        } catch {
+          await AsyncStorage.removeItem('aigo-storage');
+        }
       },
     }),
     {

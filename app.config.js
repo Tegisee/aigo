@@ -31,7 +31,7 @@ export default {
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       adaptiveIcon: {
         backgroundColor: "#FFF8F0",
-        foregroundImage: "./assets/icon_android_512.png",
+        foregroundImage: "./assets/icon.png",
       },
       predictiveBackGestureEnabled: false,
     },
@@ -56,6 +56,7 @@ export default {
           },
         },
       ],
+      "@react-native-google-signin/google-signin",
     ],
     extra: {
       router: {},

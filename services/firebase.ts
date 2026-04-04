@@ -187,13 +187,22 @@ function userItemsCol(uid: string) {
   return collection(db!, 'users', uid, 'items');
 }
 
+/** undefined 필드 제거 (Firestore는 undefined 저장 불가) */
+function sanitize<T extends Record<string, any>>(obj: T): T {
+  const clean = { ...obj };
+  for (const key of Object.keys(clean)) {
+    if (clean[key] === undefined) delete clean[key];
+  }
+  return clean;
+}
+
 /** Firestore에 상품 저장 */
 export async function saveItemToFirestore(item: TrackedItem): Promise<void> {
   const uid = getCurrentUid();
   if (!uid || !db) return;
 
   try {
-    await setDoc(doc(db!,'users', uid, 'items', item.id), item);
+    await setDoc(doc(db!,'users', uid, 'items', item.id), sanitize(item));
   } catch (e) {
     console.warn('[Firebase] 상품 저장 실패:', e);
   }
@@ -235,7 +244,7 @@ export async function updateItemInFirestore(
   if (!uid || !db) return;
 
   try {
-    await updateDoc(doc(db!,'users', uid, 'items', itemId), data);
+    await updateDoc(doc(db!,'users', uid, 'items', itemId), sanitize(data as any));
   } catch (e) {
     console.warn('[Firebase] 상품 업데이트 실패:', e);
   }
@@ -276,6 +285,18 @@ export async function upsertSharedProduct(item: TrackedItem): Promise<void> {
     }
   } catch (e) {
     console.warn('[Firebase] shared_products upsert 실패:', e);
+  }
+}
+
+/** 구매 시 purchaseCount 증가 */
+export async function incrementPurchaseCount(productId: string): Promise<void> {
+  if (!db) return;
+
+  try {
+    const ref = doc(db!, 'shared_products', productId);
+    await updateDoc(ref, { purchaseCount: increment(1) });
+  } catch (e) {
+    console.warn('[Firebase] purchaseCount 증가 실패:', e);
   }
 }
 

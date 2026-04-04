@@ -1,5 +1,6 @@
 import { setCoupangApiKeys, hasCoupangApiKeys } from './coupangApi';
 import { initPublicApi } from './publicApi';
+import { configureGoogleSignIn } from './googleAuth';
 
 /** 앱 시작 시 호출 — EAS Secrets에서 쿠팡 파트너스 API 키 초기화 */
 export function initCoupangApi() {
@@ -15,6 +16,9 @@ export function initCoupangApi() {
 
   // 공공데이터 API 초기화
   initPublicApi();
+
+  // Google Sign-In 초기화
+  configureGoogleSignIn();
 }
 
 export { hasCoupangApiKeys };
