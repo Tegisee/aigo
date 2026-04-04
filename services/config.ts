@@ -1,4 +1,5 @@
 import { setCoupangApiKeys, hasCoupangApiKeys } from './coupangApi';
+import { initPublicApi } from './publicApi';
 
 /** 앱 시작 시 호출 — EAS Secrets에서 쿠팡 파트너스 API 키 초기화 */
 export function initCoupangApi() {
@@ -11,6 +12,9 @@ export function initCoupangApi() {
   } else {
     console.log('[Config] 쿠팡 파트너스 API 키 없음 (EAS Secrets 미설정)');
   }
+
+  // 공공데이터 API 초기화
+  initPublicApi();
 }
 
 export { hasCoupangApiKeys };
