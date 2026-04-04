@@ -1,29 +1,93 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Switch, TouchableOpacity, Alert, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Switch, TouchableOpacity, Alert, Modal, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
-import { useAppStore } from '../../store/useAppStore';
+import { useAppStore, type BabyGender, type Child } from '../../store/useAppStore';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
+function generateId() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
 export default function SettingsScreen() {
   const router = useRouter();
-  const { isWowMember, toggleWowMember, notificationEnabled, toggleNotification, repurchaseNotificationEnabled, toggleRepurchaseNotification, babyBirthDate, setBabyBirthDate, resetAllData } = useAppStore();
-  const [showBirthModal, setShowBirthModal] = useState(false);
-  const [birthYear, setBirthYear] = useState('');
-  const [birthMonth, setBirthMonth] = useState('');
+  const {
+    isWowMember, toggleWowMember,
+    notificationEnabled, toggleNotification,
+    repurchaseNotificationEnabled, toggleRepurchaseNotification,
+    isLinked, linkedProvider,
+    children, addChild, updateChild, removeChild, selectedChildId, selectChild,
+    babyBirthDate, setBabyBirthDate, babyName,
+    resetAllData,
+  } = useAppStore();
 
-  const babyAgeText = babyBirthDate ? (() => {
-    const birth = new Date(babyBirthDate);
-    const now = new Date();
-    const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-    if (months < 1) return '신생아';
-    if (months < 24) return `${months}개월`;
-    return `${Math.floor(months / 12)}세 ${months % 12}개월`;
-  })() : null;
+  // 아이 추가/수정 모달
+  const [showChildModal, setShowChildModal] = useState(false);
+  const [editingChildId, setEditingChildId] = useState<string | null>(null);
+  const [childName, setChildName] = useState('');
+  const [childGender, setChildGender] = useState<BabyGender>('unknown');
+  const [childYear, setChildYear] = useState('');
+  const [childMonth, setChildMonth] = useState('');
+  const [childDay, setChildDay] = useState('');
+
+  const openAddChild = () => {
+    setEditingChildId(null);
+    setChildName('');
+    setChildGender('unknown');
+    setChildYear('');
+    setChildMonth('');
+    setChildDay('');
+    setShowChildModal(true);
+  };
+
+  const openEditChild = (child: Child) => {
+    setEditingChildId(child.id);
+    setChildName(child.name);
+    setChildGender(child.gender);
+    const [y, m, d] = child.birthDate.split('-');
+    setChildYear(y);
+    setChildMonth(String(parseInt(m)));
+    setChildDay(String(parseInt(d)));
+    setShowChildModal(true);
+  };
+
+  const handleSaveChild = () => {
+    if (!childName.trim()) {
+      Alert.alert('알림', '이름을 입력해주세요.');
+      return;
+    }
+    if (childYear.length < 4 || !childMonth) {
+      Alert.alert('알림', '생년월을 입력해주세요.');
+      return;
+    }
+    const birthDate = `${childYear}-${childMonth.padStart(2, '0')}-${(childDay || '1').padStart(2, '0')}`;
+
+    if (editingChildId) {
+      updateChild(editingChildId, { name: childName.trim(), gender: childGender, birthDate });
+    } else {
+      addChild({ id: generateId(), name: childName.trim(), gender: childGender, birthDate });
+    }
+    setShowChildModal(false);
+  };
+
+  const handleDeleteChild = (child: Child) => {
+    Alert.alert(
+      '아이 삭제',
+      `${child.name} 정보를 삭제하시겠어요?`,
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => removeChild(child.id),
+        },
+      ],
+    );
+  };
 
   const handleReset = () => {
     Alert.alert(
@@ -45,151 +109,233 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>설정</Text>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <Text style={styles.title}>설정</Text>
 
-      <Text style={styles.sectionTitle}>알림</Text>
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="notifications-outline" size={20} color={theme.primary} />
-            <View style={styles.rowText}>
-              <Text style={styles.label}>가격 알림</Text>
-              <Text style={styles.desc}>가격 하락 시 푸시 알림 받기</Text>
+        {/* 계정 */}
+        <Text style={styles.sectionTitle}>계정</Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => router.push('/modal/login')}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons
+                name={isLinked ? 'shield-checkmark' : 'shield-outline'}
+                size={20}
+                color={isLinked ? theme.success : '#FF9500'}
+              />
+              <View style={styles.rowText}>
+                <Text style={styles.label}>{isLinked ? '계정 연동됨' : '계정 연동하기'}</Text>
+                <Text style={styles.desc}>
+                  {isLinked
+                    ? `${linkedProvider === 'google' ? '구글' : '소셜'} 계정 연동`
+                    : '데이터 백업을 위해 연동하세요'
+                  }
+                </Text>
+              </View>
             </View>
-          </View>
-          <Switch
-            value={notificationEnabled}
-            onValueChange={toggleNotification}
-            trackColor={{ false: theme.border, true: theme.primary }}
-            thumbColor="#FFFFFF"
-          />
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.divider} />
-
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="repeat-outline" size={20} color={theme.primary} />
-            <View style={styles.rowText}>
-              <Text style={styles.label}>재구매 알림</Text>
-              <Text style={styles.desc}>소모품 재구매 주기 알림 받기</Text>
+        {/* 알림 */}
+        <Text style={styles.sectionTitle}>알림</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="notifications-outline" size={20} color={theme.primary} />
+              <View style={styles.rowText}>
+                <Text style={styles.label}>가격 알림</Text>
+                <Text style={styles.desc}>가격 하락 시 푸시 알림 받기</Text>
+              </View>
             </View>
+            <Switch
+              value={notificationEnabled}
+              onValueChange={toggleNotification}
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-          <Switch
-            value={repurchaseNotificationEnabled}
-            onValueChange={toggleRepurchaseNotification}
-            trackColor={{ false: theme.border, true: theme.primary }}
-            thumbColor="#FFFFFF"
-          />
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="repeat-outline" size={20} color={theme.primary} />
+              <View style={styles.rowText}>
+                <Text style={styles.label}>재구매 알림</Text>
+                <Text style={styles.desc}>소모품 재구매 주기 알림 받기</Text>
+              </View>
+            </View>
+            <Switch
+              value={repurchaseNotificationEnabled}
+              onValueChange={toggleRepurchaseNotification}
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
         </View>
-      </View>
 
-      <Text style={styles.sectionTitle}>아이 정보</Text>
-      <View style={styles.card}>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => {
-            if (babyBirthDate) {
-              const [y, m] = babyBirthDate.split('-');
-              setBirthYear(y);
-              setBirthMonth(String(parseInt(m)));
-            } else {
-              setBirthYear('');
-              setBirthMonth('');
-            }
-            setShowBirthModal(true);
-          }}
-          activeOpacity={0.6}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="happy-outline" size={20} color={theme.primary} />
-            <View style={styles.rowText}>
-              <Text style={styles.label}>아이 생년월</Text>
-              <Text style={styles.desc}>{babyAgeText || '설정하면 나이별 추천을 받을 수 있어요'}</Text>
+        {/* 아이 정보 */}
+        <Text style={styles.sectionTitle}>아이 정보</Text>
+        <View style={styles.card}>
+          {children.map((child, i) => (
+            <View key={child.id}>
+              {i > 0 && <View style={styles.divider} />}
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => openEditChild(child)}
+                activeOpacity={0.6}
+              >
+                <View style={styles.rowLeft}>
+                  <Ionicons
+                    name={child.gender === 'male' ? 'male' : child.gender === 'female' ? 'female' : 'happy-outline'}
+                    size={20}
+                    color={selectedChildId === child.id ? theme.primary : theme.subtext}
+                  />
+                  <View style={styles.rowText}>
+                    <Text style={[styles.label, selectedChildId === child.id && { color: theme.primary }]}>
+                      {child.name}
+                    </Text>
+                    <Text style={styles.desc}>{child.birthDate}</Text>
+                  </View>
+                </View>
+                <View style={styles.childActions}>
+                  {selectedChildId !== child.id && (
+                    <TouchableOpacity
+                      onPress={() => selectChild(child.id)}
+                      style={styles.selectBtn}
+                    >
+                      <Text style={styles.selectBtnText}>선택</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={() => handleDeleteChild(child)}>
+                    <Ionicons name="trash-outline" size={18} color="#FF4444" />
+                  </TouchableOpacity>
+                </View>
+              </TouchableOpacity>
             </View>
-          </View>
-          <Text style={styles.versionText}>{babyBirthDate ? `${babyBirthDate.slice(0, 7)}` : '미설정'}</Text>
-        </TouchableOpacity>
-      </View>
+          ))}
 
-      <Text style={styles.sectionTitle}>일반</Text>
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="star-outline" size={20} color={theme.primary} />
-            <View style={styles.rowText}>
-              <Text style={styles.label}>와우 회원</Text>
-              <Text style={styles.desc}>와우 회원가로 목표가 비교</Text>
+          {children.length > 0 && <View style={styles.divider} />}
+
+          <TouchableOpacity style={styles.row} onPress={openAddChild} activeOpacity={0.6}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="add-circle-outline" size={20} color={theme.primary} />
+              <Text style={[styles.label, { color: theme.primary }]}>아이 추가</Text>
             </View>
-          </View>
-          <Switch
-            value={isWowMember}
-            onValueChange={toggleWowMember}
-            trackColor={{ false: theme.border, true: theme.primary }}
-            thumbColor="#FFFFFF"
-          />
+          </TouchableOpacity>
         </View>
-      </View>
 
-      <Text style={styles.sectionTitle}>정보</Text>
-      <View style={styles.card}>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={() => router.push('/modal/privacy')}
-          activeOpacity={0.6}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="document-text-outline" size={20} color={theme.subtext} />
-            <Text style={styles.label}>개인정보처리방침</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        <View style={styles.row}>
-          <View style={styles.rowLeft}>
-            <Ionicons name="information-circle-outline" size={20} color={theme.subtext} />
-            <Text style={styles.label}>버전</Text>
-          </View>
-          <Text style={styles.versionText}>{appVersion}</Text>
-        </View>
-      </View>
-
-      <Text style={styles.sectionTitle}>데이터</Text>
-      <View style={styles.card}>
-        <TouchableOpacity
-          style={styles.row}
-          onPress={handleReset}
-          activeOpacity={0.6}
-        >
-          <View style={styles.rowLeft}>
-            <Ionicons name="trash-outline" size={20} color="#FF4444" />
-            <View style={styles.rowText}>
-              <Text style={[styles.label, { color: '#FF4444' }]}>전체 데이터 초기화</Text>
-              <Text style={styles.desc}>모든 상품 및 설정 삭제</Text>
+        {/* 일반 */}
+        <Text style={styles.sectionTitle}>일반</Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="star-outline" size={20} color={theme.primary} />
+              <View style={styles.rowText}>
+                <Text style={styles.label}>와우 회원</Text>
+                <Text style={styles.desc}>와우 회원가로 목표가 비교</Text>
+              </View>
             </View>
+            <Switch
+              value={isWowMember}
+              onValueChange={toggleWowMember}
+              trackColor={{ false: theme.border, true: theme.primary }}
+              thumbColor="#FFFFFF"
+            />
           </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
-        </TouchableOpacity>
-      </View>
+        </View>
 
-      <Text style={styles.affiliate}>
-        이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
-      </Text>
+        {/* 정보 */}
+        <Text style={styles.sectionTitle}>정보</Text>
+        <View style={styles.card}>
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => router.push('/modal/privacy')}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="document-text-outline" size={20} color={theme.subtext} />
+              <Text style={styles.label}>개인정보처리방침</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <View style={styles.row}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="information-circle-outline" size={20} color={theme.subtext} />
+              <Text style={styles.label}>버전</Text>
+            </View>
+            <Text style={styles.versionText}>{appVersion}</Text>
+          </View>
+        </View>
 
-      {/* 생년월일 수정 모달 */}
-      <Modal visible={showBirthModal} transparent animationType="fade">
+        {/* 데이터 */}
+        <Text style={styles.sectionTitle}>데이터</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.row} onPress={handleReset} activeOpacity={0.6}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="trash-outline" size={20} color="#FF4444" />
+              <View style={styles.rowText}>
+                <Text style={[styles.label, { color: '#FF4444' }]}>전체 데이터 초기화</Text>
+                <Text style={styles.desc}>모든 상품 및 설정 삭제</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.affiliate}>
+          이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
+        </Text>
+      </ScrollView>
+
+      {/* 아이 추가/수정 모달 */}
+      <Modal visible={showChildModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>아이 생년월 설정</Text>
+            <Text style={styles.modalTitle}>
+              {editingChildId ? '아이 정보 수정' : '아이 추가'}
+            </Text>
+
+            <TextInput
+              style={styles.nameInput}
+              placeholder="이름 또는 애칭 (예: 쪼꼬미)"
+              placeholderTextColor={theme.subtext}
+              value={childName}
+              onChangeText={setChildName}
+              maxLength={20}
+              autoFocus
+            />
+
+            <View style={styles.genderRow}>
+              {([
+                { key: 'male' as const, label: '남아', emoji: '👦' },
+                { key: 'female' as const, label: '여아', emoji: '👧' },
+                { key: 'unknown' as const, label: '비공개', emoji: '🤍' },
+              ]).map((opt) => (
+                <TouchableOpacity
+                  key={opt.key}
+                  style={[styles.genderBtn, childGender === opt.key && styles.genderBtnActive]}
+                  onPress={() => setChildGender(opt.key)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.genderEmoji}>{opt.emoji}</Text>
+                  <Text style={[styles.genderLabel, childGender === opt.key && styles.genderLabelActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
             <View style={styles.birthRow}>
               <TextInput
                 style={styles.birthInput}
                 placeholder="2024"
                 placeholderTextColor={theme.subtext}
-                value={birthYear}
-                onChangeText={(t) => setBirthYear(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                value={childYear}
+                onChangeText={(t) => setChildYear(t.replace(/[^0-9]/g, '').slice(0, 4))}
                 keyboardType="number-pad"
                 maxLength={4}
               />
@@ -198,41 +344,39 @@ export default function SettingsScreen() {
                 style={[styles.birthInput, { width: 60 }]}
                 placeholder="1"
                 placeholderTextColor={theme.subtext}
-                value={birthMonth}
+                value={childMonth}
                 onChangeText={(t) => {
                   const num = t.replace(/[^0-9]/g, '');
-                  if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 12)) setBirthMonth(num);
+                  if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 12)) setChildMonth(num);
                 }}
                 keyboardType="number-pad"
                 maxLength={2}
               />
               <Text style={styles.birthLabel}>월</Text>
+              <TextInput
+                style={[styles.birthInput, { width: 60 }]}
+                placeholder="1"
+                placeholderTextColor={theme.subtext}
+                value={childDay}
+                onChangeText={(t) => {
+                  const num = t.replace(/[^0-9]/g, '');
+                  if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 31)) setChildDay(num);
+                }}
+                keyboardType="number-pad"
+                maxLength={2}
+              />
+              <Text style={styles.birthLabel}>일</Text>
             </View>
+
             <View style={styles.modalButtons}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
-                onPress={() => setShowBirthModal(false)}
+                onPress={() => setShowChildModal(false)}
               >
                 <Text style={styles.modalCancelText}>취소</Text>
               </TouchableOpacity>
-              {babyBirthDate && (
-                <TouchableOpacity
-                  style={styles.modalCancelBtn}
-                  onPress={() => { setBabyBirthDate(null); setShowBirthModal(false); }}
-                >
-                  <Text style={[styles.modalCancelText, { color: theme.danger }]}>삭제</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.modalConfirmBtn}
-                onPress={() => {
-                  if (birthYear.length === 4 && birthMonth) {
-                    setBabyBirthDate(`${birthYear}-${birthMonth.padStart(2, '0')}-01`);
-                  }
-                  setShowBirthModal(false);
-                }}
-              >
-                <Text style={styles.modalConfirmText}>확인</Text>
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSaveChild}>
+                <Text style={styles.modalConfirmText}>{editingChildId ? '수정' : '추가'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -280,9 +424,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   rowText: {
     gap: 2,
+    flex: 1,
   },
   label: {
     fontSize: 16,
@@ -302,13 +448,32 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: theme.subtext,
   },
+  childActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  selectBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 126, 103, 0.12)',
+  },
+  selectBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.primary,
+  },
   affiliate: {
     fontSize: 11,
     color: theme.subtext,
     textAlign: 'center',
     lineHeight: 16,
     opacity: 0.6,
+    marginBottom: 20,
   },
+
+  // ── 모달 ──
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',
@@ -319,7 +484,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.card,
     borderRadius: 16,
     padding: 24,
-    width: '80%',
+    width: '85%',
   },
   modalTitle: {
     fontSize: 18,
@@ -327,10 +492,53 @@ const styles = StyleSheet.create({
     color: theme.text,
     marginBottom: 16,
   },
+  nameInput: {
+    backgroundColor: theme.background,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: theme.text,
+    marginBottom: 12,
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  genderBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.background,
+  },
+  genderBtnActive: {
+    borderColor: theme.primary,
+    backgroundColor: 'rgba(255, 126, 103, 0.1)',
+  },
+  genderEmoji: {
+    fontSize: 14,
+  },
+  genderLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.subtext,
+  },
+  genderLabelActive: {
+    color: theme.primary,
+  },
   birthRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     justifyContent: 'center',
     marginBottom: 20,
   },
@@ -340,15 +548,15 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     borderRadius: 12,
     paddingVertical: 10,
-    paddingHorizontal: 14,
-    fontSize: 17,
+    paddingHorizontal: 12,
+    fontSize: 16,
     fontWeight: '600',
     color: theme.text,
-    width: 90,
+    width: 80,
     textAlign: 'center',
   },
   birthLabel: {
-    fontSize: 15,
+    fontSize: 14,
     color: theme.text,
   },
   modalButtons: {

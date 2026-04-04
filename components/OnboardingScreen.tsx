@@ -40,7 +40,7 @@ function Step1({ onNext }: { onNext: () => void }) {
       <Animated.View style={{ opacity: fadeAnim }}>
         <Text style={styles.stepTitle}>아이고</Text>
         <Text style={styles.stepDesc}>
-          육아용품 최저가를 추적해서{'\n'}원하는 가격에 알려줘요
+          육아용품 최저가를 알려드려요{'\n'}원하는 가격에 딱 맞게
         </Text>
         <View style={styles.featureList}>
           <FeatureRow icon="notifications-outline" text="목표가 도달 시 푸시 알림" />
@@ -64,19 +64,28 @@ function FeatureRow({ icon, text }: { icon: string; text: string }) {
   );
 }
 
-// ─── Step 2: 아이 생년월일 입력 ───
-function StepBirthDate({ onNext }: { onNext: () => void }) {
+// ─── Step 2: 아이 정보 입력 (이름 + 성별 + 생년월일) ───
+function StepBabyInfo({ onNext }: { onNext: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { setBabyBirthDate } = useAppStore();
+  const { setBabyName, setBabyGender, setBabyBirthDate } = useAppStore();
+  const [name, setName] = useState('');
+  const [gender, setGender] = useState<'male' | 'female' | 'unknown'>('unknown');
   const [year, setYear] = useState('');
   const [month, setMonth] = useState('');
+  const [day, setDay] = useState('');
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
 
   const handleSave = () => {
-    if (year.length === 4 && month.length >= 1) {
+    if (name.trim()) setBabyName(name.trim());
+    setBabyGender(gender);
+    if (year.length === 4 && month.length >= 1 && day.length >= 1) {
+      const m = month.padStart(2, '0');
+      const d = day.padStart(2, '0');
+      setBabyBirthDate(`${year}-${m}-${d}`);
+    } else if (year.length === 4 && month.length >= 1) {
       const m = month.padStart(2, '0');
       setBabyBirthDate(`${year}-${m}-01`);
     }
@@ -91,9 +100,41 @@ function StepBirthDate({ onNext }: { onNext: () => void }) {
         </View>
         <Text style={styles.stepTitle}>아이 정보</Text>
         <Text style={styles.stepDesc}>
-          아이의 생년월을 입력하면{'\n'}나이에 맞는 상품을 추천해드려요
+          아이 정보를 입력하면{'\n'}맞춤 상품을 추천해드려요
         </Text>
 
+        {/* 이름 입력 */}
+        <TextInput
+          style={styles.nameInput}
+          placeholder="이름 또는 애칭 (예: 쪼꼬미, 콩이)"
+          placeholderTextColor={theme.subtext}
+          value={name}
+          onChangeText={setName}
+          maxLength={20}
+        />
+
+        {/* 성별 선택 */}
+        <View style={styles.genderRow}>
+          {([
+            { key: 'male', label: '남아', emoji: '👦' },
+            { key: 'female', label: '여아', emoji: '👧' },
+            { key: 'unknown', label: '비공개', emoji: '🤍' },
+          ] as const).map((opt) => (
+            <TouchableOpacity
+              key={opt.key}
+              style={[styles.genderBtn, gender === opt.key && styles.genderBtnActive]}
+              onPress={() => setGender(opt.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.genderEmoji}>{opt.emoji}</Text>
+              <Text style={[styles.genderLabel, gender === opt.key && styles.genderLabelActive]}>
+                {opt.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* 생년월일 입력 */}
         <View style={styles.birthInputRow}>
           <TextInput
             style={styles.birthInput}
@@ -118,6 +159,19 @@ function StepBirthDate({ onNext }: { onNext: () => void }) {
             maxLength={2}
           />
           <Text style={styles.birthLabel}>월</Text>
+          <TextInput
+            style={[styles.birthInput, { width: 60 }]}
+            placeholder="1"
+            placeholderTextColor={theme.subtext}
+            value={day}
+            onChangeText={(t) => {
+              const num = t.replace(/[^0-9]/g, '');
+              if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 31)) setDay(num);
+            }}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.birthLabel}>일</Text>
         </View>
       </Animated.View>
 
@@ -129,7 +183,6 @@ function StepBirthDate({ onNext }: { onNext: () => void }) {
           style={[styles.primaryBtn, { flex: 1 }]}
           onPress={handleSave}
           activeOpacity={0.8}
-          disabled={year.length < 4}
         >
           <Text style={styles.primaryBtnText}>다음</Text>
         </TouchableOpacity>
@@ -169,8 +222,8 @@ function Step3Share({ onNext }: { onNext: () => void }) {
           <View style={styles.mockImagePlaceholder}>
             <Ionicons name="image-outline" size={32} color="#555" />
           </View>
-          <Text style={styles.mockProductName}>Apple 에어팟 프로 2세대</Text>
-          <Text style={styles.mockProductPrice}>329,000원</Text>
+          <Text style={styles.mockProductName}>하기스 네이처메이드 기저귀 4단계</Text>
+          <Text style={styles.mockProductPrice}>43,900원</Text>
         </View>
         {/* 공유 버튼 영역 */}
         <View style={styles.mockActionBar}>
@@ -312,7 +365,7 @@ function Step4({ onComplete }: { onComplete: () => void }) {
           </View>
           <View style={styles.mockNotifContent}>
             <Text style={styles.mockNotifTitle}>아이고, 지금이 기회!</Text>
-            <Text style={styles.mockNotifBody}>에어팟 프로 279,000원 — 목표가 도달!</Text>
+            <Text style={styles.mockNotifBody}>하기스 기저귀 4단계 38,900원 — 목표가 도달!</Text>
           </View>
         </View>
       </Animated.View>
@@ -360,7 +413,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
       <Animated.View style={[styles.stepContainer, { opacity: transitionAnim }]}>
         {step === 0 && <Step1 onNext={goNext} />}
-        {step === 1 && <StepBirthDate onNext={goNext} />}
+        {step === 1 && <StepBabyInfo onNext={goNext} />}
         {step === 2 && <Step3Share onNext={goNext} />}
         {step === 3 && <Step3 onNext={goNext} />}
         {step === 4 && <Step4 onComplete={onComplete} />}
@@ -457,7 +510,51 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // ── Step 2: Birth Date ──
+  // ── Step 2: Baby Info ──
+  nameInput: {
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    color: theme.text,
+    width: '100%',
+    marginTop: 20,
+  },
+  genderRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 16,
+  },
+  genderBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    backgroundColor: theme.card,
+  },
+  genderBtnActive: {
+    borderColor: theme.primary,
+    backgroundColor: 'rgba(255, 126, 103, 0.1)',
+  },
+  genderEmoji: {
+    fontSize: 16,
+  },
+  genderLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.subtext,
+  },
+  genderLabelActive: {
+    color: theme.primary,
+  },
   birthInputRow: {
     flexDirection: 'row',
     alignItems: 'center',

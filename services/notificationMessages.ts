@@ -13,12 +13,12 @@ export function priceDrop(productName: string, category?: BabyCategory): { title
   const short = shorten(productName);
   const titles = [
     '아이고~ 가격 떨어졌다!',
-    '찜해둔 상품, 가격 내려갔어요!',
+    '관심상품, 가격 내려갔어요!',
     '지금 확인해보세요!',
   ];
   const bodies: string[] = [];
   if (category === '기저귀') {
-    bodies.push(`찜해둔 기저귀, 가격 내려갔어요! 지금 확인해보세요`);
+    bodies.push(`관심 기저귀, 가격 내려갔어요! 지금 확인해보세요`);
   } else if (category === '분유') {
     bodies.push(`우리 아이 분유 가격이 떨어졌어요! 얼른 확인해보세요`);
   } else {

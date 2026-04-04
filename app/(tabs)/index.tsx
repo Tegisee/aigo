@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   AppState,
@@ -13,46 +12,40 @@ import {
   Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
-import { ProductCard } from '../../components/ProductCard';
-import { BabyCategory, BABY_CATEGORIES } from '../../types';
-import PriceChecker from '../../components/PriceChecker';
-import { fetchGoldbox, hasCoupangApiKeys, generateDeepLink, type GoldboxProduct } from '../../services/coupangApi';
-import { getAppShareMessage, STORE_LINKS } from '../../services/config';
+import { getCategoriesByMonth } from '../../types';
+import { useRouter } from 'expo-router';
+import { fetchGoldbox, searchProducts, hasCoupangApiKeys, generateDeepLink, type GoldboxProduct, type CoupangProduct } from '../../services/coupangApi';
+import { getAppShareMessage } from '../../services/config';
+import { getActiveEvents, type EventBanner } from '../../services/events';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { trackedItems, syncFromFirestore, babyBirthDate } = useAppStore();
-  const items = trackedItems;
+  const { trackedItems, syncFromFirestore, babyBirthDate, babyName, isLinked, children, selectedChildId, selectChild } = useAppStore();
   const appStateRef = useRef(AppState.currentState);
-  const [checkActive, setCheckActive] = useState(false);
-  const lastCheckRef = useRef(0);
   const [goldbox, setGoldbox] = useState<GoldboxProduct[]>([]);
+  const [categoryProducts, setCategoryProducts] = useState<Record<string, CoupangProduct[]>>({});
+  const [loadingCategory, setLoadingCategory] = useState<string | null>(null);
 
-  const babyAge = babyBirthDate ? (() => {
+  const displayName = babyName || '우리 아이';
+  const babyMonths = babyBirthDate ? (() => {
     const birth = new Date(babyBirthDate);
     const now = new Date();
-    const months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
-    if (months < 1) return '신생아';
-    if (months < 24) return `${months}개월`;
-    return `${Math.floor(months / 12)}세`;
+    return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
   })() : null;
-  const [selectedCategory, setSelectedCategory] = useState<BabyCategory | null>(null);
-
-  const filteredItems = selectedCategory
-    ? items.filter((item) => (item.category || '기타') === selectedCategory)
-    : items;
+  const babyInfo = babyBirthDate ? (() => {
+    const birth = new Date(babyBirthDate);
+    const now = new Date();
+    const days = Math.floor((now.getTime() - birth.getTime()) / (1000 * 60 * 60 * 24));
+    const ageText = babyMonths! < 1 ? '신생아' : `${babyMonths}개월`;
+    return { ageText, days };
+  })() : null;
+  const categories = getCategoriesByMonth(babyMonths);
+  const activeEvents = getActiveEvents(babyBirthDate, displayName);
 
   useEffect(() => {
-    if (lastCheckRef.current === 0) {
-      lastCheckRef.current = Date.now();
-      setCheckActive(true);
-      setTimeout(() => setCheckActive(false), 120000);
-    }
-
     const sub = AppState.addEventListener('change', (nextState) => {
       if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
         syncFromFirestore();
@@ -60,8 +53,14 @@ export default function HomeScreen() {
       appStateRef.current = nextState;
     });
 
-    // 골드박스 로드 (캐시 우선 → API 갱신)
-    AsyncStorage.getItem('goldbox-cache').then((cached) => {
+    // 골드박스 로드 → 육아 키워드 필터링
+    const BABY_KEYWORDS = /기저귀|분유|물티슈|유아|아기|키즈|어린이|젖병|수유|이유식|유모차|카시트|장난감|완구|아동|베이비|신생아|돌잔치|임산부|산모/;
+    const filterBabyProducts = (items: GoldboxProduct[]) => {
+      const baby = items.filter((p) => BABY_KEYWORDS.test(p.productName) || BABY_KEYWORDS.test(p.categoryName));
+      return baby.length > 0 ? baby : items.slice(0, 5); // 육아 상품 없으면 전체 특가 5개
+    };
+
+    AsyncStorage.getItem('goldbox-baby-cache').then((cached) => {
       if (cached) {
         try { setGoldbox(JSON.parse(cached)); } catch {}
       }
@@ -69,8 +68,9 @@ export default function HomeScreen() {
     if (hasCoupangApiKeys()) {
       fetchGoldbox('goldbox').then((data) => {
         if (data.length > 0) {
-          setGoldbox(data);
-          AsyncStorage.setItem('goldbox-cache', JSON.stringify(data)).catch(() => {});
+          const filtered = filterBabyProducts(data);
+          setGoldbox(filtered);
+          AsyncStorage.setItem('goldbox-baby-cache', JSON.stringify(filtered)).catch(() => {});
         }
       }).catch(() => {});
     }
@@ -82,6 +82,54 @@ export default function HomeScreen() {
     try {
       await Share.share({ message: getAppShareMessage() });
     } catch {}
+  };
+
+  const categorySearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCategoryPress = (cat: string) => {
+    // 이미 로드된 경우 토글
+    if (categoryProducts[cat]) {
+      setCategoryProducts((prev) => {
+        const next = { ...prev };
+        delete next[cat];
+        return next;
+      });
+      return;
+    }
+    // 디바운싱 300ms
+    if (categorySearchTimer.current) clearTimeout(categorySearchTimer.current);
+    setLoadingCategory(cat);
+    categorySearchTimer.current = setTimeout(async () => {
+      if (!hasCoupangApiKeys()) {
+        setLoadingCategory(null);
+        return;
+      }
+      // 월령 키워드 조합 검색
+      const ageKeyword = babyInfo ? `${babyInfo.ageText} ` : '';
+      const keyword = `${ageKeyword}${cat}`;
+      try {
+        const products = await searchProducts(keyword, 10);
+        setCategoryProducts((prev) => ({ ...prev, [cat]: products }));
+      } catch {}
+      setLoadingCategory(null);
+    }, 300);
+  };
+
+  const handleOpenCoupang = async () => {
+    if (hasCoupangApiKeys()) {
+      try {
+        const deepLink = await generateDeepLink('https://www.coupang.com', 'home');
+        if (deepLink?.shortenUrl) {
+          Linking.openURL(deepLink.shortenUrl);
+          return;
+        }
+      } catch {}
+    }
+    try {
+      const canOpen = await Linking.canOpenURL('coupang://home');
+      if (canOpen) { await Linking.openURL('coupang://home'); return; }
+    } catch {}
+    Linking.openURL('https://www.coupang.com');
   };
 
   const renderGoldboxItem = (product: GoldboxProduct) => (
@@ -107,127 +155,187 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.headerRow}>
-        <View style={styles.titleRow}>
-          <Text style={styles.title}>아이고</Text>
-          {babyAge && <View style={styles.ageBadge}><Text style={styles.ageBadgeText}>{babyAge}</Text></View>}
-        </View>
-        {(STORE_LINKS.ios || STORE_LINKS.android) && (
-          <TouchableOpacity onPress={handleShareApp} style={styles.shareBtn}>
-            <Ionicons name="share-outline" size={22} color={theme.text} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* 골드박스 상단 고정 */}
-      {goldbox.length > 0 && (
-        <View style={styles.goldboxSection}>
-          <View style={styles.goldboxHeader}>
-            <Ionicons name="flash" size={14} color="#FFD700" />
-            <Text style={styles.goldboxTitle}>오늘의 특가</Text>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        {/* 헤더 */}
+        <View style={styles.headerRow}>
+          <View style={styles.titleCol}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>{displayName}</Text>
+              {babyInfo && <View style={styles.ageBadge}><Text style={styles.ageBadgeText}>{babyInfo.ageText}</Text></View>}
+            </View>
+            {babyInfo && (
+              <Text style={styles.dayCount}>태어난 지 {babyInfo.days.toLocaleString()}일째</Text>
+            )}
           </View>
+          <View style={styles.headerRight}>
+            <TouchableOpacity onPress={handleShareApp} style={styles.headerIconBtn}>
+              <Ionicons name="share-outline" size={22} color={theme.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.profileBtn, !isLinked && styles.profileBtnWarn]}
+              onPress={() => router.push('/modal/login')}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={isLinked ? 'person-circle' : 'person-circle-outline'}
+                size={28}
+                color={isLinked ? theme.primary : theme.subtext}
+              />
+              {!isLinked && <View style={styles.warnDot} />}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* 복수 아이 선택 */}
+        {children.length > 1 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.goldboxScroll}
+            contentContainerStyle={styles.childSelector}
           >
-            {goldbox.map(renderGoldboxItem)}
+            {children.map((child) => (
+              <TouchableOpacity
+                key={child.id}
+                style={[styles.childChip, selectedChildId === child.id && styles.childChipActive]}
+                onPress={() => selectChild(child.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.childChipText, selectedChildId === child.id && styles.childChipTextActive]}>
+                  {child.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </ScrollView>
-        </View>
-      )}
+        )}
 
-      {/* 추적상품 가져오기 */}
-      <TouchableOpacity
-        style={styles.fetchBtn}
-        onPress={async () => {
-          // 제휴 딥링크로 쿠팡 이동 (수수료 발생)
-          if (hasCoupangApiKeys()) {
-            try {
-              const deepLink = await generateDeepLink('https://www.coupang.com', 'home');
-              if (deepLink?.shortenUrl) {
-                Linking.openURL(deepLink.shortenUrl);
-                return;
-              }
-            } catch {}
-          }
-          // fallback: 쿠팡 앱 또는 웹
-          try {
-            const canOpen = await Linking.canOpenURL('coupang://home');
-            if (canOpen) { await Linking.openURL('coupang://home'); return; }
-          } catch {}
-          Linking.openURL('https://www.coupang.com');
-        }}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="cart-outline" size={22} color={theme.primary} />
-        <View style={styles.fetchBtnText}>
-          <Text style={styles.fetchBtnTitle}>추적상품 가져오기</Text>
-          <Text style={styles.fetchBtnSub}>쿠팡에서 마음에 드는 상품을 찾아오세요</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
-      </TouchableOpacity>
-
-      {/* 카테고리 필터 칩 */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.categoryChips}
-      >
-        <TouchableOpacity
-          style={[styles.chip, !selectedCategory && styles.chipActive]}
-          onPress={() => setSelectedCategory(null)}
-          activeOpacity={0.7}
-        >
-          <Text style={[styles.chipText, !selectedCategory && styles.chipTextActive]}>전체</Text>
-        </TouchableOpacity>
-        {BABY_CATEGORIES.filter((c) => c !== '기타').map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[styles.chip, selectedCategory === cat && styles.chipActive]}
-            onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.chipText, selectedCategory === cat && styles.chipTextActive]}>{cat}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* 카테고리 제목 고정 */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>가격 추적 중</Text>
-        <Text style={styles.sectionCount}>{filteredItems.length}개</Text>
-      </View>
-
-      <FlatList
-        data={filteredItems}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => <ProductCard item={item} />}
-        contentContainerStyle={styles.list}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Text style={styles.emptyText}>
-              쿠팡에서 상품 공유하기를 눌러보세요
-            </Text>
+        {/* 이벤트 배너 (기념일 / 시즌 / 부모) */}
+        {activeEvents.length > 0 && (
+          <View style={styles.eventSection}>
+            {activeEvents.map((event, i) => (
+              <View
+                key={`${event.type}-${i}`}
+                style={[
+                  styles.eventBanner,
+                  event.type === 'anniversary' && styles.eventBannerAnniversary,
+                  event.type === 'season' && styles.eventBannerSeason,
+                  event.type === 'parent' && styles.eventBannerParent,
+                ]}
+              >
+                <Text style={styles.eventEmoji}>{event.emoji}</Text>
+                <View style={styles.eventTextCol}>
+                  <Text style={styles.eventTitle}>{event.title}</Text>
+                  <Text style={styles.eventSubtitle}>{event.subtitle}</Text>
+                </View>
+                {event.daysLeft === 0 && (
+                  <View style={styles.eventTodayBadge}>
+                    <Text style={styles.eventTodayText}>TODAY</Text>
+                  </View>
+                )}
+              </View>
+            ))}
           </View>
-        }
-        ListFooterComponent={
-          filteredItems.length > 0 ? (
-            <Text style={styles.affiliateText}>
-              이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
-            </Text>
-          ) : null
-        }
-      />
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => router.push('/modal/add-item')}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </TouchableOpacity>
+        )}
 
-      {/* PriceChecker 비활성화 — 파트너스 API 승인 후 재활성화 예정 */}
-      {/* <PriceChecker active={checkActive} /> */}
+        {/* 관심상품 요약 */}
+        {trackedItems.length > 0 && (
+          <View style={styles.summaryCard}>
+            <Ionicons name="heart" size={20} color={theme.primary} />
+            <Text style={styles.summaryText}>관심상품 {trackedItems.length}개 알림 중</Text>
+          </View>
+        )}
+
+        {/* 관심상품 가져오기 */}
+        <TouchableOpacity style={styles.fetchBtn} onPress={handleOpenCoupang} activeOpacity={0.8}>
+          <Ionicons name="cart-outline" size={22} color={theme.primary} />
+          <View style={styles.fetchBtnText}>
+            <Text style={styles.fetchBtnTitle}>관심상품 가져오기</Text>
+            <Text style={styles.fetchBtnSub}>{displayName}에게 필요한 상품을 찾아보세요</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+        </TouchableOpacity>
+
+        {/* 카테고리 추천 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            {babyInfo ? `${babyInfo.ageText} 추천 카테고리` : '추천 카테고리'}
+          </Text>
+          <View style={styles.categoryGrid}>
+            {categories.filter((c) => c !== '기타').map((cat) => (
+              <TouchableOpacity
+                key={cat}
+                style={[styles.categoryCard, categoryProducts[cat] && styles.categoryCardActive]}
+                onPress={() => handleCategoryPress(cat)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.categoryCardText, categoryProducts[cat] && styles.categoryCardTextActive]}>
+                  {cat}
+                </Text>
+                {loadingCategory === cat && (
+                  <Text style={styles.categoryLoading}>...</Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* 카테고리별 추천 상품 리스트 */}
+          {Object.entries(categoryProducts).map(([cat, products]) => (
+            <View key={cat} style={styles.catProductSection}>
+              <Text style={styles.catProductTitle}>{cat} 추천</Text>
+              {products.length === 0 ? (
+                <Text style={styles.catProductEmpty}>추천 상품을 불러올 수 없습니다</Text>
+              ) : (
+                products.slice(0, 5).map((p) => (
+                  <TouchableOpacity
+                    key={p.productId}
+                    style={styles.catProductCard}
+                    onPress={() => Linking.openURL(p.productUrl)}
+                    activeOpacity={0.8}
+                  >
+                    {p.productImage ? (
+                      <Image source={{ uri: p.productImage }} style={styles.catProductImg} />
+                    ) : (
+                      <View style={[styles.catProductImg, styles.goldboxImagePlaceholder]}>
+                        <Ionicons name="bag-outline" size={16} color={theme.subtext} />
+                      </View>
+                    )}
+                    <View style={styles.catProductInfo}>
+                      <Text style={styles.catProductName} numberOfLines={2}>{p.productName}</Text>
+                      <Text style={styles.catProductPrice}>{p.productPrice.toLocaleString()}원</Text>
+                    </View>
+                    {p.isRocket && (
+                      <View style={styles.rocketBadge}>
+                        <Text style={styles.rocketText}>로켓</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          ))}
+        </View>
+
+        {/* 골드박스 */}
+        {goldbox.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.goldboxHeader}>
+              <Ionicons name="flash" size={14} color="#FFD700" />
+              <Text style={styles.sectionTitle}>오늘의 특가</Text>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.goldboxScroll}
+            >
+              {goldbox.map(renderGoldboxItem)}
+            </ScrollView>
+          </View>
+        )}
+
+        {/* 파트너스 안내 */}
+        <Text style={styles.affiliateText}>
+          이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
+        </Text>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -237,6 +345,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.background,
   },
+  scrollContent: {
+    paddingBottom: 40,
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -245,15 +356,23 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 12,
   },
+  titleCol: {
+    flex: 1,
+  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: theme.text,
+  },
+  dayCount: {
+    fontSize: 12,
+    color: theme.subtext,
+    marginTop: 2,
   },
   ageBadge: {
     backgroundColor: 'rgba(255, 126, 103, 0.12)',
@@ -266,60 +385,130 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: theme.primary,
   },
-  shareBtn: {
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerIconBtn: {
     padding: 6,
   },
-  list: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
+  profileBtn: {
+    padding: 2,
   },
-  empty: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 200,
+  profileBtnWarn: {
+    position: 'relative',
   },
-  emptyText: {
-    color: theme.subtext,
-    fontSize: 16,
+  warnDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF3B30',
   },
-  affiliateText: {
-    color: '#888888',
-    fontSize: 11,
-    textAlign: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-  },
-
-  // ── 카테고리 필터 칩 ──
-  categoryChips: {
+  childSelector: {
     gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
-  chip: {
+  childChip: {
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: theme.card,
     borderWidth: 1,
     borderColor: theme.border,
   },
-  chipActive: {
+  childChipActive: {
     backgroundColor: theme.primary,
     borderColor: theme.primary,
   },
-  chipText: {
+  childChipText: {
     fontSize: 13,
     fontWeight: '500',
     color: theme.subtext,
   },
-  chipTextActive: {
-    color: '#FFFFFF',
+  childChipTextActive: {
+    color: '#fff',
     fontWeight: '600',
   },
 
-  // ── 추적상품 가져오기 ──
+  // ── 이벤트 배너 ──
+  eventSection: {
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 4,
+  },
+  eventBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  eventBannerAnniversary: {
+    backgroundColor: 'rgba(255, 126, 103, 0.08)',
+    borderColor: 'rgba(255, 126, 103, 0.2)',
+  },
+  eventBannerSeason: {
+    backgroundColor: 'rgba(255, 215, 0, 0.08)',
+    borderColor: 'rgba(255, 215, 0, 0.25)',
+  },
+  eventBannerParent: {
+    backgroundColor: 'rgba(147, 112, 219, 0.08)',
+    borderColor: 'rgba(147, 112, 219, 0.25)',
+  },
+  eventEmoji: {
+    fontSize: 24,
+  },
+  eventTextCol: {
+    flex: 1,
+  },
+  eventTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  eventSubtitle: {
+    fontSize: 12,
+    color: theme.subtext,
+    marginTop: 2,
+  },
+  eventTodayBadge: {
+    backgroundColor: theme.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  eventTodayText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  // ── 관심상품 요약 ──
+  summaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  summaryText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+  },
+
+  // ── 관심상품 가져오기 ──
   fetchBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -346,45 +535,117 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  // ── 섹션 헤더 ──
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  // ── 섹션 ──
+  section: {
+    marginTop: 16,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
     color: theme.text,
-  },
-  sectionCount: {
-    fontSize: 13,
-    color: theme.subtext,
+    marginBottom: 12,
   },
 
-  // ── 골드박스 (상단 고정, 컴팩트) ──
-  goldboxSection: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.border,
+  // ── 카테고리 그리드 ──
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
+  categoryCard: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  categoryCardActive: {
+    backgroundColor: theme.primary,
+    borderColor: theme.primary,
+  },
+  categoryCardText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.text,
+  },
+  categoryCardTextActive: {
+    color: '#fff',
+  },
+  categoryLoading: {
+    fontSize: 12,
+    color: theme.subtext,
+    marginLeft: 4,
+  },
+
+  // ── 카테고리 추천 상품 ──
+  catProductSection: {
+    marginTop: 16,
+  },
+  catProductTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+    marginBottom: 8,
+  },
+  catProductEmpty: {
+    fontSize: 13,
+    color: theme.subtext,
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  catProductCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.card,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: 10,
+    gap: 10,
+    marginBottom: 8,
+  },
+  catProductImg: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+  },
+  catProductInfo: {
+    flex: 1,
+  },
+  catProductName: {
+    fontSize: 13,
+    color: theme.text,
+    lineHeight: 18,
+  },
+  catProductPrice: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: theme.primary,
+    marginTop: 2,
+  },
+  rocketBadge: {
+    backgroundColor: 'rgba(78, 205, 196, 0.12)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  rocketText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#4ECDC4',
+  },
+
+  // ── 골드박스 ──
   goldboxHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 20,
-    marginBottom: 8,
-  },
-  goldboxTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.text,
+    marginBottom: 12,
   },
   goldboxScroll: {
     gap: 8,
-    paddingHorizontal: 20,
   },
   goldboxCard: {
     flexDirection: 'row',
@@ -421,25 +682,12 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
 
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 30,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: theme.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 6,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  fabText: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    lineHeight: 30,
+  affiliateText: {
+    color: '#888888',
+    fontSize: 11,
+    textAlign: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginTop: 16,
   },
 });

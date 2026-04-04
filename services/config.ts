@@ -24,5 +24,5 @@ export const STORE_LINKS = {
 export function getAppShareMessage(): string {
   const links = [STORE_LINKS.ios, STORE_LINKS.android].filter(Boolean);
   const linkText = links.length > 0 ? `\n\n${links.join('\n')}` : '';
-  return `육아용품 최저가 추적 앱 '아이고'를 써보세요!\n내 아이 것은 내가 고른다 🍼${linkText}`;
+  return `육아용품 최저가 알림 앱 '아이고'를 써보세요!\n내 아이 것은 내가 고른다 🍼${linkText}`;
 }

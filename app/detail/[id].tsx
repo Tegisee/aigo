@@ -21,16 +21,20 @@ import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { generateDeepLink, hasCoupangApiKeys } from '../../services/coupangApi';
 import CoupangScraper, { ScrapedProduct } from '../../components/CoupangScraper';
+import { estimateRepurchaseDays, isConsumableCategory } from '../../services/repurchase';
 
 export default function DetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { trackedItems, removeItem, updateTargetPrice, updateItemPrice } = useAppStore();
+  const { trackedItems, removeItem, updateTargetPrice, updateItemPrice, addPurchase } = useAppStore();
 
   const item = trackedItems.find((i) => i.id === id);
 
   const [showPriceModal, setShowPriceModal] = useState(false);
   const [newPrice, setNewPrice] = useState('');
+  const [showPurchaseModal, setShowPurchaseModal] = useState(false);
+  const [purchasePrice, setPurchasePrice] = useState('');
+  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10));
   const [refreshing, setRefreshing] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState<string | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -158,9 +162,19 @@ export default function DetailScreen() {
     }
   }
 
-  const handleShare = async () => {
+  const [showShareSheet, setShowShareSheet] = useState(false);
+
+  const shareMentTemplates = [
+    '{name}가 이거 갖고 싶대요!',
+    '할머니~ {name} 선물로 이거 어때요?',
+    '{name} 생일선물로 점찍어뒀어요',
+    '{name}에게 딱 맞는 상품 발견!',
+    '이거 {name}한테 사주면 좋겠다~',
+  ];
+
+  const handleShareWithMent = async (ment: string) => {
+    setShowShareSheet(false);
     let shareUrl = item.url;
-    // 제휴 링크가 아니면 실시간 생성
     if (!shareUrl.includes('link.coupang.com') && !shareUrl.includes('coupa.ng') && hasCoupangApiKeys()) {
       try {
         const target = item.resolvedUrl || item.url;
@@ -171,14 +185,16 @@ export default function DetailScreen() {
     const drop = hasPriceDrop
       ? `${item.priceHistory[item.priceHistory.length - 2].price.toLocaleString()}원 → ${item.currentPrice.toLocaleString()}원으로 하락!`
       : `현재 ${item.currentPrice.toLocaleString()}원`;
-    const message = `${item.productName}\n${drop}\n\n${shareUrl}\n\n이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.`;
+    const babyName = useAppStore.getState().babyName || '우리 아이';
+    const mentText = ment.replace(/\{name\}/g, babyName);
+    const message = `${mentText}\n\n${item.productName}\n${drop}\n\n${shareUrl}\n\n이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.`;
     try {
       await Share.share({ message });
     } catch {}
   };
 
   const handleDelete = () => {
-    Alert.alert('상품 삭제', '이 상품을 삭제하시겠습니까?', [
+    Alert.alert('관심상품 삭제', '관심상품에서 삭제하시겠어요?\n해당 상품의 알림도 자동 중단됩니다.', [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
@@ -385,7 +401,7 @@ export default function DetailScreen() {
               <View style={styles.emptyInfoList}>
                 <View style={styles.emptyInfoRow}>
                   <Ionicons name="calendar-outline" size={14} color={theme.subtext} />
-                  <Text style={styles.emptyInfoText}>추적 시작: {dateStr}</Text>
+                  <Text style={styles.emptyInfoText}>알림 시작: {dateStr}</Text>
                 </View>
                 <View style={styles.emptyInfoRow}>
                   <Ionicons name="time-outline" size={14} color={theme.subtext} />
@@ -411,6 +427,67 @@ export default function DetailScreen() {
             ))}
           </View>
         )}
+
+        {/* 구매 이력 */}
+        <View style={styles.purchaseSection}>
+          <View style={styles.purchaseHeader}>
+            <Text style={styles.sectionTitle}>구매 이력</Text>
+            <TouchableOpacity
+              style={styles.addPurchaseBtn}
+              onPress={() => {
+                setPurchasePrice(String(item.currentPrice));
+                setPurchaseDate(new Date().toISOString().slice(0, 10));
+                setShowPurchaseModal(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add-circle-outline" size={18} color={theme.primary} />
+              <Text style={styles.addPurchaseText}>구매 추가</Text>
+            </TouchableOpacity>
+          </View>
+          {/* 소모품 자동 소진 예상 */}
+          {isConsumableCategory(item.category) && item.repurchaseEnabled && item.repurchaseDays && (
+            <View style={styles.estimateCard}>
+              <View style={styles.estimateRow}>
+                <Ionicons name="timer-outline" size={16} color={theme.primary} />
+                <Text style={styles.estimateText}>
+                  예상 소진 주기: 약 {item.repurchaseDays}일
+                </Text>
+              </View>
+              {(() => {
+                const babyMonths = useAppStore.getState().babyBirthDate ? (() => {
+                  const birth = new Date(useAppStore.getState().babyBirthDate!);
+                  const now = new Date();
+                  return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+                })() : null;
+                const est = estimateRepurchaseDays(item.productName, item.category, babyMonths);
+                if (est) {
+                  return <Text style={styles.estimateDesc}>{est.description}</Text>;
+                }
+                return null;
+              })()}
+            </View>
+          )}
+
+          {item.purchaseHistory && item.purchaseHistory.length > 0 ? (
+            <View style={styles.purchaseList}>
+              {[...item.purchaseHistory].reverse().map((p, i) => (
+                <View key={i} style={styles.purchaseRow}>
+                  <View style={styles.purchaseDot} />
+                  <Text style={styles.purchaseDate}>{p.date}</Text>
+                  <Text style={styles.purchasePrice}>{p.price.toLocaleString()}원</Text>
+                </View>
+              ))}
+              <Text style={styles.purchaseSummary}>
+                총 {item.purchaseHistory.length}회 구매
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.purchaseEmpty}>
+              <Text style={styles.purchaseEmptyText}>아직 구매 이력이 없어요</Text>
+            </View>
+          )}
+        </View>
 
         <Text style={styles.affiliateText}>
           이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
@@ -447,7 +524,7 @@ export default function DetailScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.shareButton}
-            onPress={handleShare}
+            onPress={() => setShowShareSheet(true)}
             activeOpacity={0.8}
           >
             <Ionicons name="share-outline" size={22} color={theme.text} />
@@ -488,6 +565,114 @@ export default function DetailScreen() {
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Purchase Add Modal */}
+      <Modal visible={showPurchaseModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>구매 기록 추가</Text>
+
+            <Text style={styles.inputLabel}>구매 날짜</Text>
+            <View style={styles.dateInputRow}>
+              <TextInput
+                style={[styles.modalInput, { flex: 1 }]}
+                value={purchaseDate}
+                onChangeText={(t) => {
+                  const cleaned = t.replace(/[^0-9-]/g, '');
+                  setPurchaseDate(cleaned);
+                }}
+                placeholder="2026-04-04"
+                placeholderTextColor={theme.subtext}
+                keyboardType="numbers-and-punctuation"
+                maxLength={10}
+              />
+              <TouchableOpacity
+                style={styles.todayBtn}
+                onPress={() => setPurchaseDate(new Date().toISOString().slice(0, 10))}
+              >
+                <Text style={styles.todayBtnText}>오늘</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.inputLabel}>구매 가격</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={purchasePrice}
+              onChangeText={setPurchasePrice}
+              keyboardType="number-pad"
+              placeholder="구매 가격 입력"
+              placeholderTextColor={theme.subtext}
+            />
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => {
+                  setShowPurchaseModal(false);
+                  setPurchasePrice('');
+                }}
+              >
+                <Text style={styles.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirmBtn}
+                onPress={() => {
+                  const price = parseInt(purchasePrice, 10);
+                  if (!price || price <= 0) {
+                    Alert.alert('오류', '올바른 가격을 입력해주세요');
+                    return;
+                  }
+                  if (!/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate)) {
+                    Alert.alert('오류', '날짜를 YYYY-MM-DD 형식으로 입력해주세요');
+                    return;
+                  }
+                  addPurchase(item.id, purchaseDate, price);
+                  setShowPurchaseModal(false);
+                  setPurchasePrice('');
+                }}
+              >
+                <Text style={styles.modalConfirmText}>추가</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Ment Sheet */}
+      <Modal visible={showShareSheet} transparent animationType="slide">
+        <TouchableOpacity
+          style={styles.sheetOverlay}
+          activeOpacity={1}
+          onPress={() => setShowShareSheet(false)}
+        >
+          <View style={styles.sheetContent}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>사주세요 멘트 선택</Text>
+            {shareMentTemplates.map((ment, i) => {
+              const babyName = useAppStore.getState().babyName || '우리 아이';
+              return (
+                <TouchableOpacity
+                  key={i}
+                  style={styles.sheetItem}
+                  onPress={() => handleShareWithMent(ment)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.sheetItemText}>
+                    {ment.replace(/\{name\}/g, babyName)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={[styles.sheetItem, styles.sheetItemPlain]}
+              onPress={() => handleShareWithMent('{name}에게 필요한 상품이에요')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sheetItemText, { color: theme.subtext }]}>멘트 없이 공유</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
       </Modal>
 
       {/* Hidden WebView — 수동 가격 새로고침 */}
@@ -770,6 +955,160 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     marginTop: 20,
+  },
+  // ── 구매 이력 ──
+  purchaseSection: {
+    marginTop: 24,
+  },
+  purchaseHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  addPurchaseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  addPurchaseText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.primary,
+  },
+  estimateCard: {
+    backgroundColor: 'rgba(255, 126, 103, 0.08)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    gap: 4,
+  },
+  estimateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  estimateText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  estimateDesc: {
+    fontSize: 12,
+    color: theme.subtext,
+    marginLeft: 22,
+  },
+  purchaseList: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: theme.border,
+    gap: 12,
+  },
+  purchaseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  purchaseDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: theme.primary,
+  },
+  purchaseDate: {
+    fontSize: 13,
+    color: theme.subtext,
+    flex: 1,
+  },
+  purchasePrice: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: theme.text,
+  },
+  purchaseSummary: {
+    fontSize: 12,
+    color: theme.subtext,
+    textAlign: 'center',
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  purchaseEmpty: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: theme.border,
+    alignItems: 'center',
+  },
+  purchaseEmptyText: {
+    fontSize: 14,
+    color: theme.subtext,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.text,
+    marginBottom: 6,
+  },
+  dateInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  todayBtn: {
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 126, 103, 0.12)',
+  },
+  todayBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.primary,
+  },
+  // ── 공유 멘트 시트 ──
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  sheetContent: {
+    backgroundColor: theme.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: theme.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  sheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 12,
+  },
+  sheetItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  sheetItemPlain: {
+    borderBottomWidth: 0,
+    marginTop: 4,
+  },
+  sheetItemText: {
+    fontSize: 15,
+    color: theme.text,
   },
   modalOverlay: {
     flex: 1,

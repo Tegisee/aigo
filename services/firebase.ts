@@ -4,6 +4,9 @@ import {
   getAuth,
   signInAnonymously as firebaseSignInAnonymously,
   onAuthStateChanged,
+  linkWithCredential,
+  GoogleAuthProvider,
+  signInWithCredential,
   type User,
 } from 'firebase/auth';
 // @ts-ignore — RN-specific export in @firebase/auth/dist/rn
@@ -12,17 +15,21 @@ import {
   getFirestore,
   collection,
   doc,
+  getDoc,
   setDoc,
   deleteDoc,
   updateDoc,
   getDocs,
+  increment,
   query,
+  where,
   orderBy,
+  limit as firestoreLimit,
   writeBatch,
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import type { TrackedItem } from '../types';
+import type { TrackedItem, SharedProduct, BabyCategory } from '../types';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA0QT1Fg7vT1C-qDemN-g1zMCy6rlNZC4Q',
@@ -80,6 +87,48 @@ export async function signInAnonymously(): Promise<string | null> {
 /** 현재 로그인된 uid 반환 */
 export function getCurrentUid(): string | null {
   return auth?.currentUser?.uid ?? null;
+}
+
+/** 구글 로그인 → 익명 계정에 연동 (merge) */
+export async function linkGoogleAccount(idToken: string): Promise<{ success: boolean; error?: string }> {
+  if (!auth) return { success: false, error: 'Firebase 미초기화' };
+
+  try {
+    const credential = GoogleAuthProvider.credential(idToken);
+    const currentUser = auth.currentUser;
+
+    if (currentUser?.isAnonymous) {
+      // 익명 → 구글 연동 (데이터 유지)
+      await linkWithCredential(currentUser, credential);
+      return { success: true };
+    } else if (currentUser) {
+      // 이미 로그인된 상태
+      return { success: true };
+    } else {
+      // 로그인 안 된 상태 → 구글로 직접 로그인
+      await signInWithCredential(auth, credential);
+      return { success: true };
+    }
+  } catch (e: any) {
+    if (e.code === 'auth/credential-already-in-use') {
+      return { success: false, error: '이미 다른 계정에 연동된 구글 계정입니다.' };
+    }
+    console.warn('[Firebase] 구글 연동 실패:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+/** 현재 로그인 상태 확인 */
+export function getAuthState(): { isAnonymous: boolean; provider: string | null; email: string | null } {
+  const user = auth?.currentUser;
+  if (!user) return { isAnonymous: true, provider: null, email: null };
+
+  const googleProvider = user.providerData.find((p) => p.providerId === 'google.com');
+  return {
+    isAnonymous: user.isAnonymous,
+    provider: googleProvider ? 'google' : null,
+    email: googleProvider?.email ?? null,
+  };
 }
 
 // ─── Push Token / 알림 설정 ───
@@ -189,6 +238,92 @@ export async function updateItemInFirestore(
     await updateDoc(doc(db!,'users', uid, 'items', itemId), data);
   } catch (e) {
     console.warn('[Firebase] 상품 업데이트 실패:', e);
+  }
+}
+
+// ─── Shared Products (공유 가격 데이터) ───
+
+/** 상품 등록/관심 추가 시 shared_products 생성 또는 trackerCount 증가 */
+export async function upsertSharedProduct(item: TrackedItem): Promise<void> {
+  if (!db) return;
+
+  const productId = item.productId || item.id;
+  const ref = doc(db!, 'shared_products', productId);
+
+  try {
+    const snap = await getDoc(ref);
+
+    if (snap.exists()) {
+      await updateDoc(ref, { trackerCount: increment(1) });
+    } else {
+      const now = new Date().toISOString();
+      const shared: SharedProduct = {
+        productId,
+        productName: item.productName,
+        category: item.category || '기타',
+        ageGroup: '',
+        currentPrice: item.currentPrice,
+        previousPrice: item.currentPrice,
+        thumbnail: item.thumbnail,
+        priceHistory: item.priceHistory.length > 0
+          ? item.priceHistory
+          : [{ date: now.slice(0, 10), price: item.currentPrice }],
+        trackerCount: 1,
+        purchaseCount: 0,
+        lastCheckedAt: now,
+      };
+      await setDoc(ref, shared);
+    }
+  } catch (e) {
+    console.warn('[Firebase] shared_products upsert 실패:', e);
+  }
+}
+
+/** 상품 삭제 시 trackerCount 감소 */
+export async function decrementTrackerCount(itemId: string): Promise<void> {
+  if (!db) return;
+
+  const ref = doc(db!, 'shared_products', itemId);
+
+  try {
+    await updateDoc(ref, { trackerCount: increment(-1) });
+  } catch (e) {
+    console.warn('[Firebase] trackerCount 감소 실패:', e);
+  }
+}
+
+/** 단일 shared_product 조회 */
+export async function fetchSharedProduct(productId: string): Promise<SharedProduct | null> {
+  if (!db) return null;
+
+  try {
+    const snap = await getDoc(doc(db!, 'shared_products', productId));
+    return snap.exists() ? (snap.data() as SharedProduct) : null;
+  } catch (e) {
+    console.warn('[Firebase] shared_product 조회 실패:', e);
+    return null;
+  }
+}
+
+/** 카테고리별 인기 상품 조회 (trackerCount 내림차순) */
+export async function fetchPopularByCategory(
+  category: BabyCategory,
+  count: number = 10,
+): Promise<SharedProduct[]> {
+  if (!db) return [];
+
+  try {
+    const q = query(
+      collection(db!, 'shared_products'),
+      where('category', '==', category),
+      orderBy('trackerCount', 'desc'),
+      firestoreLimit(count),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((d) => d.data() as SharedProduct);
+  } catch (e) {
+    console.warn('[Firebase] 카테고리별 인기 상품 조회 실패:', e);
+    return [];
   }
 }
 
