@@ -23,7 +23,7 @@ import { getActiveEvents, type EventBanner } from '../../services/events';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { trackedItems, syncFromFirestore, babyBirthDate, babyName, isLinked, children, selectedChildId, selectChild } = useAppStore();
+  const { trackedItems, syncFromFirestore, babyBirthDate, babyName, isLinked, children, selectedChildId, selectChild, parentInfo } = useAppStore();
   const appStateRef = useRef(AppState.currentState);
   const [goldbox, setGoldbox] = useState<GoldboxProduct[]>([]);
   const [categoryProducts, setCategoryProducts] = useState<Record<string, CoupangProduct[]>>({});
@@ -43,7 +43,7 @@ export default function HomeScreen() {
     return { ageText, days };
   })() : null;
   const categories = getCategoriesByMonth(babyMonths);
-  const activeEvents = getActiveEvents(babyBirthDate, displayName);
+  const activeEvents = getActiveEvents(babyBirthDate, displayName, parentInfo);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
@@ -53,11 +53,26 @@ export default function HomeScreen() {
       appStateRef.current = nextState;
     });
 
-    // 골드박스 로드 → 육아 키워드 필터링
+    // 골드박스 로드 → 육아 키워드 필터링 + 월령별 제외
     const BABY_KEYWORDS = /기저귀|분유|물티슈|유아|아기|키즈|어린이|젖병|수유|이유식|유모차|카시트|장난감|완구|아동|베이비|신생아|돌잔치|임산부|산모/;
+
+    const getExcludePattern = (months: number | null): RegExp | null => {
+      if (months === null) return null;
+      const exclude: string[] = [];
+      if (months >= 25) exclude.push('신생아', '배냇저고리', '속싸개', '젖병', '유축기', '수유쿠션');
+      if (months >= 49) exclude.push('기저귀', '분유', '이유식', '보행기', '점퍼루');
+      if (months >= 85) exclude.push('유모차', '카시트', '치발기', '턱받이', '바운서');
+      return exclude.length > 0 ? new RegExp(exclude.join('|')) : null;
+    };
+
+    const excludePattern = getExcludePattern(babyMonths);
+
     const filterBabyProducts = (items: GoldboxProduct[]) => {
-      const baby = items.filter((p) => BABY_KEYWORDS.test(p.productName) || BABY_KEYWORDS.test(p.categoryName));
-      return baby.length > 0 ? baby : items.slice(0, 5); // 육아 상품 없으면 전체 특가 5개
+      let baby = items.filter((p) => BABY_KEYWORDS.test(p.productName) || BABY_KEYWORDS.test(p.categoryName));
+      if (excludePattern) {
+        baby = baby.filter((p) => !excludePattern.test(p.productName));
+      }
+      return baby.length > 0 ? baby : items.slice(0, 5);
     };
 
     AsyncStorage.getItem('goldbox-baby-cache').then((cached) => {
@@ -197,7 +212,10 @@ export default function HomeScreen() {
               <TouchableOpacity
                 key={child.id}
                 style={[styles.childChip, selectedChildId === child.id && styles.childChipActive]}
-                onPress={() => selectChild(child.id)}
+                onPress={() => {
+                  selectChild(child.id);
+                  router.push('/(tabs)/wishlist');
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={[styles.childChipText, selectedChildId === child.id && styles.childChipTextActive]}>
@@ -284,9 +302,9 @@ export default function HomeScreen() {
               {products.length === 0 ? (
                 <Text style={styles.catProductEmpty}>추천 상품을 불러올 수 없습니다</Text>
               ) : (
-                products.slice(0, 5).map((p) => (
+                products.slice(0, 5).map((p, idx) => (
                   <TouchableOpacity
-                    key={p.productId}
+                    key={`${cat}-${p.productId}-${idx}`}
                     style={styles.catProductCard}
                     onPress={() => Linking.openURL(p.productUrl)}
                     activeOpacity={0.8}

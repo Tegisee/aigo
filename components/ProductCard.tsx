@@ -27,6 +27,8 @@ const DELETE_BTN_WIDTH = 80;
 export function ProductCard({ item }: Props) {
   const router = useRouter();
   const removeItem = useAppStore((s) => s.removeItem);
+  const children = useAppStore((s) => s.children);
+  const childName = item.childId ? children.find((c) => c.id === item.childId)?.name : null;
   const [showDeleteOverlay, setShowDeleteOverlay] = useState(false);
   const translateX = useRef(new Animated.Value(0)).current;
 
@@ -134,8 +136,13 @@ export function ProductCard({ item }: Props) {
             </View>
           )}
 
-          {/* 카테고리 태그 + 재구매 D-day */}
+          {/* 카테고리 태그 + 아이 이름 + 재구매 D-day */}
           <View style={styles.badgeRow}>
+            {childName && (
+              <View style={[styles.categoryBadge, styles.childBadge]}>
+                <Text style={styles.childBadgeText}>{childName}</Text>
+              </View>
+            )}
             <View style={styles.categoryBadge}>
               <Text style={styles.categoryText}>{category}</Text>
             </View>
@@ -284,6 +291,14 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#4ECDC4',
+  },
+  childBadge: {
+    backgroundColor: 'rgba(255, 149, 0, 0.12)',
+  },
+  childBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#FF9500',
   },
   purchaseBadge: {
     backgroundColor: 'rgba(90, 103, 216, 0.12)',

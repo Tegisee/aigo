@@ -19,7 +19,7 @@ import { hasCoupangApiKeys, generateDeepLink } from '../../services/coupangApi';
 
 export default function WishlistScreen() {
   const router = useRouter();
-  const { trackedItems, babyBirthDate, babyName } = useAppStore();
+  const { trackedItems, babyBirthDate, babyName, children, selectedChildId } = useAppStore();
 
   const displayName = babyName || '우리 아이';
   const babyMonths = babyBirthDate ? (() => {
@@ -29,10 +29,15 @@ export default function WishlistScreen() {
   })() : null;
   const categories = getCategoriesByMonth(babyMonths);
   const [selectedCategory, setSelectedCategory] = useState<BabyCategory | null>(null);
+  const [filterChildId, setFilterChildId] = useState<string | null>(null);
+
+  const childFilteredItems = filterChildId
+    ? trackedItems.filter((item) => item.childId === filterChildId)
+    : trackedItems;
 
   const filteredItems = selectedCategory
-    ? trackedItems.filter((item) => (item.category || '기타') === selectedCategory)
-    : trackedItems;
+    ? childFilteredItems.filter((item) => (item.category || '기타') === selectedCategory)
+    : childFilteredItems;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -41,6 +46,35 @@ export default function WishlistScreen() {
         <Text style={styles.title}>관심상품</Text>
         <Text style={styles.countText}>{trackedItems.length}개</Text>
       </View>
+
+      {/* 아이별 필터 */}
+      {children.length >= 2 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.childFilter}
+        >
+          <TouchableOpacity
+            style={[styles.childFilterChip, !filterChildId && styles.childFilterChipActive]}
+            onPress={() => setFilterChildId(null)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.childFilterText, !filterChildId && styles.childFilterTextActive]}>전체</Text>
+          </TouchableOpacity>
+          {children.map((child) => (
+            <TouchableOpacity
+              key={child.id}
+              style={[styles.childFilterChip, filterChildId === child.id && styles.childFilterChipActive]}
+              onPress={() => setFilterChildId(filterChildId === child.id ? null : child.id)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.childFilterText, filterChildId === child.id && styles.childFilterTextActive]}>
+                {child.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* 관심상품 가져오기 */}
       <TouchableOpacity
@@ -160,6 +194,34 @@ const styles = StyleSheet.create({
   countText: {
     fontSize: 14,
     color: theme.subtext,
+  },
+
+  // ── 아이별 필터 ──
+  childFilter: {
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  childFilterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: theme.card,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  childFilterChipActive: {
+    backgroundColor: '#FF9500',
+    borderColor: '#FF9500',
+  },
+  childFilterText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: theme.subtext,
+  },
+  childFilterTextActive: {
+    color: '#fff',
+    fontWeight: '600',
   },
 
   // ── 관심상품 가져오기 ──

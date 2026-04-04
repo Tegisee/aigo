@@ -23,6 +23,17 @@ export interface Child {
   birthDate: string; // YYYY-MM-DD
 }
 
+export interface ParentBirthday {
+  date: string; // YYYY-MM-DD
+  isLunar: boolean;
+}
+
+export interface ParentInfo {
+  momBirthday?: ParentBirthday;
+  dadBirthday?: ParentBirthday;
+  anniversary?: string; // YYYY-MM-DD (양력만)
+}
+
 interface AppState {
   isWowMember: boolean;
   notificationEnabled: boolean;
@@ -35,6 +46,7 @@ interface AppState {
   babyBirthDate: string | null;
   children: Child[];
   selectedChildId: string | null;
+  parentInfo: ParentInfo;
   trackedItems: TrackedItem[];
   addItem: (item: TrackedItem) => void;
   removeItem: (id: string) => void;
@@ -55,6 +67,7 @@ interface AppState {
   updateChild: (id: string, data: Partial<Omit<Child, 'id'>>) => void;
   removeChild: (id: string) => void;
   selectChild: (id: string | null) => void;
+  setParentInfo: (info: Partial<ParentInfo>) => void;
   resetAllData: () => Promise<void>;
 }
 
@@ -72,6 +85,7 @@ export const useAppStore = create<AppState>()(
       babyBirthDate: null,
       children: [],
       selectedChildId: null,
+      parentInfo: {},
       trackedItems: [],
       addItem: (item) => {
         // 소모품이면 자동 재구매 주기 계산
@@ -282,6 +296,13 @@ export const useAppStore = create<AppState>()(
           return { selectedChildId: id };
         });
       },
+      setParentInfo: (info) => {
+        set((state) => {
+          const merged = { ...state.parentInfo, ...info };
+          updateUserSettings({ parentInfo: merged });
+          return { parentInfo: merged };
+        });
+      },
       toggleNotification: () =>
         set((state) => {
           const next = !state.notificationEnabled;
@@ -311,6 +332,7 @@ export const useAppStore = create<AppState>()(
           babyBirthDate: null,
           children: [],
           selectedChildId: null,
+          parentInfo: {},
         });
         await AsyncStorage.removeItem('aigo-storage');
       },

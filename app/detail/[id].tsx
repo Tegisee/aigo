@@ -163,6 +163,7 @@ export default function DetailScreen() {
   }
 
   const [showShareSheet, setShowShareSheet] = useState(false);
+  const [customMent, setCustomMent] = useState('');
 
   const shareMentTemplates = [
     '{name}가 이거 갖고 싶대요!',
@@ -174,6 +175,7 @@ export default function DetailScreen() {
 
   const handleShareWithMent = async (ment: string) => {
     setShowShareSheet(false);
+    setCustomMent('');
     let shareUrl = item.url;
     if (!shareUrl.includes('link.coupang.com') && !shareUrl.includes('coupa.ng') && hasCoupangApiKeys()) {
       try {
@@ -186,8 +188,9 @@ export default function DetailScreen() {
       ? `${item.priceHistory[item.priceHistory.length - 2].price.toLocaleString()}원 → ${item.currentPrice.toLocaleString()}원으로 하락!`
       : `현재 ${item.currentPrice.toLocaleString()}원`;
     const babyName = useAppStore.getState().babyName || '우리 아이';
-    const mentText = ment.replace(/\{name\}/g, babyName);
-    const message = `${mentText}\n\n${item.productName}\n${drop}\n\n${shareUrl}\n\n이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.`;
+    const mentText = ment ? ment.replace(/\{name\}/g, babyName) : '';
+    const mentLine = mentText ? `${mentText}\n\n` : '';
+    const message = `${mentLine}${item.productName}\n${drop}\n\n${shareUrl}\n\n이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.`;
     try {
       await Share.share({ message });
     } catch {}
@@ -664,9 +667,30 @@ export default function DetailScreen() {
                 </TouchableOpacity>
               );
             })}
+            {/* 직접 입력 */}
+            <View style={styles.sheetCustomRow}>
+              <TextInput
+                style={styles.sheetCustomInput}
+                placeholder="직접 입력..."
+                placeholderTextColor={theme.subtext}
+                value={customMent}
+                onChangeText={setCustomMent}
+                maxLength={50}
+              />
+              <TouchableOpacity
+                style={[styles.sheetCustomBtn, !customMent.trim() && { opacity: 0.4 }]}
+                onPress={() => {
+                  if (customMent.trim()) handleShareWithMent(customMent.trim());
+                }}
+                disabled={!customMent.trim()}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="send" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity
               style={[styles.sheetItem, styles.sheetItemPlain]}
-              onPress={() => handleShareWithMent('{name}에게 필요한 상품이에요')}
+              onPress={() => handleShareWithMent('')}
               activeOpacity={0.7}
             >
               <Text style={[styles.sheetItemText, { color: theme.subtext }]}>멘트 없이 공유</Text>
@@ -1101,6 +1125,33 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: theme.border,
+  },
+  sheetCustomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  sheetCustomInput: {
+    flex: 1,
+    backgroundColor: theme.background,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: theme.text,
+    borderWidth: 1,
+    borderColor: theme.border,
+  },
+  sheetCustomBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sheetItemPlain: {
     borderBottomWidth: 0,

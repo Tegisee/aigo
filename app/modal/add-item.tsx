@@ -10,6 +10,7 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -68,7 +69,7 @@ export default function AddItemModal() {
     sharedUrl?: string;
     sharedText?: string;
   }>();
-  const { addItem, trackedItems } = useAppStore();
+  const { addItem, trackedItems, children, selectedChildId } = useAppStore();
 
   const [url, setUrl] = useState(sharedUrl ?? '');
   const [targetPrice, setTargetPrice] = useState('');
@@ -81,6 +82,8 @@ export default function AddItemModal() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [repurchaseEnabled, setRepurchaseEnabled] = useState(false);
   const [repurchaseDays, setRepurchaseDays] = useState(30);
+  const [showChildPicker, setShowChildPicker] = useState(false);
+  const [pendingItem, setPendingItem] = useState<any>(null);
   const isFromShare = !!sharedUrl;
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrapeKeyRef = useRef(0);
@@ -255,7 +258,7 @@ export default function AddItemModal() {
     // URL에서 productId/vendorItemId 추출 (가격 매칭 정확도용)
     const ids = extractIds(resolvedUrl);
 
-    addItem({
+    const newItem = {
       id: Date.now().toString(),
       url: affiliateUrl,
       resolvedUrl,
@@ -272,8 +275,23 @@ export default function AddItemModal() {
       createdAt: Date.now(),
       repurchaseEnabled: repurchaseEnabled || undefined,
       repurchaseDays: repurchaseEnabled ? repurchaseDays : undefined,
-    });
+      childId: undefined as string | undefined,
+    };
 
+    // 아이 2명 이상이면 선택 바텀시트
+    if (children.length >= 2) {
+      setPendingItem(newItem);
+      setShowChildPicker(true);
+      setSaving(false);
+      return;
+    }
+
+    // 아이 1명이면 자동 귀속
+    if (children.length === 1) {
+      newItem.childId = children[0].id;
+    }
+
+    addItem(newItem);
     setSaving(false);
     if (isFromShare) {
       router.replace('/');
@@ -527,6 +545,47 @@ export default function AddItemModal() {
         onResult={handleScrapeResult}
         onError={handleScrapeError}
       />
+
+      {/* 아이 선택 바텀시트 (2명 이상) */}
+      <Modal visible={showChildPicker} transparent animationType="slide">
+        <TouchableOpacity
+          style={styles.childSheetOverlay}
+          activeOpacity={1}
+          onPress={() => setShowChildPicker(false)}
+        >
+          <View style={styles.childSheetContent}>
+            <View style={styles.childSheetHandle} />
+            <Text style={styles.childSheetTitle}>어떤 아이의 관심상품인가요?</Text>
+            {children.map((child) => (
+              <TouchableOpacity
+                key={child.id}
+                style={styles.childSheetItem}
+                onPress={() => {
+                  if (pendingItem) {
+                    addItem({ ...pendingItem, childId: child.id });
+                    setPendingItem(null);
+                  }
+                  setShowChildPicker(false);
+                  if (isFromShare) {
+                    router.replace('/');
+                  } else {
+                    router.back();
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={child.gender === 'male' ? 'male' : child.gender === 'female' ? 'female' : 'happy-outline'}
+                  size={20}
+                  color={theme.primary}
+                />
+                <Text style={styles.childSheetName}>{child.name}</Text>
+                <Text style={styles.childSheetAge}>{child.birthDate}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -802,5 +861,50 @@ const styles = StyleSheet.create({
   suggestText: {
     color: theme.primary,
     fontSize: 13,
+  },
+  // ── 아이 선택 바텀시트 ──
+  childSheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  childSheetContent: {
+    backgroundColor: theme.card,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  childSheetHandle: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: theme.border,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  childSheetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.text,
+    marginBottom: 12,
+  },
+  childSheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+  },
+  childSheetName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: theme.text,
+    flex: 1,
+  },
+  childSheetAge: {
+    fontSize: 13,
+    color: theme.subtext,
   },
 });

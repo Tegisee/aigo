@@ -99,6 +99,8 @@ export interface TrackedItem {
   thumbnail: string;
   priceHistory: { date: string; price: number }[];
   createdAt: number;
+  // 아이 귀속
+  childId?: string;
   // 구매 이력
   purchaseHistory?: { date: string; price: number }[];
   // 재구매 알림

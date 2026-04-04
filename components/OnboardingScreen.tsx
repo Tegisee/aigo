@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Animated,
   Platform,
+  KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -93,15 +95,24 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
   };
 
   return (
-    <View style={styles.step}>
-      <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', width: '100%' }}>
-        <View style={styles.iconCircle}>
-          <Text style={styles.iconEmoji}>👶</Text>
-        </View>
-        <Text style={styles.stepTitle}>아이 정보</Text>
-        <Text style={styles.stepDesc}>
-          아이 정보를 입력하면{'\n'}맞춤 상품을 추천해드려요
-        </Text>
+    <KeyboardAvoidingView
+      style={styles.step}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
+    >
+      <ScrollView
+        contentContainerStyle={styles.stepScroll}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', width: '100%' }}>
+          <View style={styles.iconCircle}>
+            <Text style={styles.iconEmoji}>👶</Text>
+          </View>
+          <Text style={styles.stepTitle}>아이 정보</Text>
+          <Text style={styles.stepDesc}>
+            아이 정보를 입력하면{'\n'}맞춤 상품을 추천해드려요
+          </Text>
 
         {/* 이름 입력 */}
         <TextInput
@@ -175,19 +186,20 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
         </View>
       </Animated.View>
 
-      <View style={styles.birthButtons}>
-        <TouchableOpacity style={styles.skipBirthBtn} onPress={onNext} activeOpacity={0.7}>
-          <Text style={styles.skipBirthText}>건너뛰기</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.primaryBtn, { flex: 1 }]}
-          onPress={handleSave}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.primaryBtnText}>다음</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+        <View style={styles.birthButtons}>
+          <TouchableOpacity style={styles.skipBirthBtn} onPress={onNext} activeOpacity={0.7}>
+            <Text style={styles.skipBirthText}>건너뛰기</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.primaryBtn, { flex: 1 }]}
+            onPress={handleSave}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.primaryBtnText}>다음</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -463,6 +475,13 @@ const styles = StyleSheet.create({
   // ── 공통 ──
   step: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 30,
+    paddingBottom: 40,
+  },
+  stepScroll: {
+    flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 30,

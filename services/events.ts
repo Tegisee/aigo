@@ -209,7 +209,7 @@ function getParentEvents(): EventBanner[] {
 // ─── 통합 API ───
 
 /** 현재 표시할 모든 이벤트 배너 반환 (기념일 + 시즌 + 부모) */
-export function getActiveEvents(birthDate: string | null, babyName: string): EventBanner[] {
+export function getActiveEvents(birthDate: string | null, babyName: string, parentInfo?: { momBirthday?: { date: string; isLunar: boolean }; dadBirthday?: { date: string; isLunar: boolean }; anniversary?: string }): EventBanner[] {
   const name = babyName || '우리 아이';
   const events: EventBanner[] = [];
 
@@ -218,6 +218,33 @@ export function getActiveEvents(birthDate: string | null, babyName: string): Eve
   }
   events.push(...getSeasonEvents(name));
   events.push(...getParentEvents());
+
+  // 부모 생일 / 결혼기념일
+  if (parentInfo) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const pEntries: { label: string; emoji: string; date: string; kw: string[] }[] = [];
+    if (parentInfo.momBirthday) pEntries.push({ label: '엄마 생일', emoji: '👩', date: parentInfo.momBirthday.date, kw: ['여성 선물', '엄마 선물'] });
+    if (parentInfo.dadBirthday) pEntries.push({ label: '아빠 생일', emoji: '👨', date: parentInfo.dadBirthday.date, kw: ['남성 선물', '아빠 선물'] });
+    if (parentInfo.anniversary) pEntries.push({ label: '결혼기념일', emoji: '💍', date: parentInfo.anniversary, kw: ['결혼기념일 선물', '커플 선물'] });
+
+    for (const e of pEntries) {
+      const [, m, d] = e.date.split('-').map(Number);
+      const eventDate = new Date(now.getFullYear(), m - 1, d);
+      if (eventDate < today) eventDate.setFullYear(now.getFullYear() + 1);
+      const diff = Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
+      if (diff >= 0 && diff <= 14) {
+        events.push({
+          type: 'parent',
+          emoji: e.emoji,
+          title: diff === 0 ? `오늘은 ${e.label}이에요!` : `${e.label}까지 D-${diff}`,
+          subtitle: diff === 0 ? '축하해요!' : '선물 준비하셨나요?',
+          daysLeft: diff,
+          keywords: e.kw,
+        });
+      }
+    }
+  }
 
   // daysLeft 오름차순 (당일 > D-1 > D-2 ...)
   events.sort((a, b) => a.daysLeft - b.daysLeft);

@@ -4,8 +4,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../../constants/theme';
-import { useAppStore, type BabyGender, type Child } from '../../store/useAppStore';
+import { useAppStore, type BabyGender, type Child, type ParentInfo } from '../../store/useAppStore';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -22,8 +23,55 @@ export default function SettingsScreen() {
     isLinked, linkedProvider,
     children, addChild, updateChild, removeChild, selectedChildId, selectChild,
     babyBirthDate, setBabyBirthDate, babyName,
+    parentInfo, setParentInfo,
     resetAllData,
   } = useAppStore();
+
+  // 부모 정보 모달
+  const [showParentModal, setShowParentModal] = useState(false);
+  const [parentField, setParentField] = useState<'mom' | 'dad' | 'anniversary'>('mom');
+  const [parentDate, setParentDate] = useState('');
+  const [parentIsLunar, setParentIsLunar] = useState(false);
+
+  const openParentEdit = (field: 'mom' | 'dad' | 'anniversary') => {
+    setParentField(field);
+    if (field === 'mom' && parentInfo.momBirthday) {
+      setParentDate(parentInfo.momBirthday.date);
+      setParentIsLunar(parentInfo.momBirthday.isLunar);
+    } else if (field === 'dad' && parentInfo.dadBirthday) {
+      setParentDate(parentInfo.dadBirthday.date);
+      setParentIsLunar(parentInfo.dadBirthday.isLunar);
+    } else if (field === 'anniversary' && parentInfo.anniversary) {
+      setParentDate(parentInfo.anniversary);
+      setParentIsLunar(false);
+    } else {
+      setParentDate('');
+      setParentIsLunar(false);
+    }
+    setShowParentModal(true);
+  };
+
+  const handleSaveParent = () => {
+    if (!parentDate || !/^\d{4}-\d{2}-\d{2}$/.test(parentDate)) {
+      Alert.alert('알림', 'YYYY-MM-DD 형식으로 입력해주세요.');
+      return;
+    }
+    if (parentField === 'mom') {
+      setParentInfo({ momBirthday: { date: parentDate, isLunar: parentIsLunar } });
+    } else if (parentField === 'dad') {
+      setParentInfo({ dadBirthday: { date: parentDate, isLunar: parentIsLunar } });
+    } else {
+      setParentInfo({ anniversary: parentDate });
+    }
+    setShowParentModal(false);
+  };
+
+  const handleDeleteParent = () => {
+    if (parentField === 'mom') setParentInfo({ momBirthday: undefined });
+    else if (parentField === 'dad') setParentInfo({ dadBirthday: undefined });
+    else setParentInfo({ anniversary: undefined });
+    setShowParentModal(false);
+  };
 
   // 아이 추가/수정 모달
   const [showChildModal, setShowChildModal] = useState(false);
@@ -209,6 +257,9 @@ export default function SettingsScreen() {
                       <Text style={styles.selectBtnText}>선택</Text>
                     </TouchableOpacity>
                   )}
+                  <TouchableOpacity onPress={() => openEditChild(child)}>
+                    <Ionicons name="create-outline" size={18} color={theme.primary} />
+                  </TouchableOpacity>
                   <TouchableOpacity onPress={() => handleDeleteChild(child)}>
                     <Ionicons name="trash-outline" size={18} color="#FF4444" />
                   </TouchableOpacity>
@@ -224,6 +275,57 @@ export default function SettingsScreen() {
               <Ionicons name="add-circle-outline" size={20} color={theme.primary} />
               <Text style={[styles.label, { color: theme.primary }]}>아이 추가</Text>
             </View>
+          </TouchableOpacity>
+        </View>
+
+        {/* 부모 정보 */}
+        <Text style={styles.sectionTitle}>부모 정보 (선택사항)</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.row} onPress={() => openParentEdit('mom')} activeOpacity={0.6}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="heart-outline" size={20} color={theme.primary} />
+              <View style={styles.rowText}>
+                <Text style={styles.label}>엄마 생일</Text>
+                <Text style={styles.desc}>
+                  {parentInfo.momBirthday
+                    ? `${parentInfo.momBirthday.date} (${parentInfo.momBirthday.isLunar ? '음력' : '양력'})`
+                    : '미설정'}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity style={styles.row} onPress={() => openParentEdit('dad')} activeOpacity={0.6}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="heart-outline" size={20} color={theme.primary} />
+              <View style={styles.rowText}>
+                <Text style={styles.label}>아빠 생일</Text>
+                <Text style={styles.desc}>
+                  {parentInfo.dadBirthday
+                    ? `${parentInfo.dadBirthday.date} (${parentInfo.dadBirthday.isLunar ? '음력' : '양력'})`
+                    : '미설정'}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
+          <TouchableOpacity style={styles.row} onPress={() => openParentEdit('anniversary')} activeOpacity={0.6}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="gift-outline" size={20} color={theme.primary} />
+              <View style={styles.rowText}>
+                <Text style={styles.label}>결혼기념일</Text>
+                <Text style={styles.desc}>
+                  {parentInfo.anniversary ? `${parentInfo.anniversary} (양력)` : '미설정'}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
           </TouchableOpacity>
         </View>
 
@@ -285,6 +387,55 @@ export default function SettingsScreen() {
             <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
           </TouchableOpacity>
         </View>
+
+        {/* 개발자용 */}
+        {__DEV__ && (
+          <>
+            <Text style={styles.sectionTitle}>개발자</Text>
+            <View style={styles.card}>
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() => {
+                  Alert.alert(
+                    '앱 데이터 초기화',
+                    'AsyncStorage 전체 삭제 후 온보딩부터 다시 시작합니다.',
+                    [
+                      { text: '취소', style: 'cancel' },
+                      {
+                        text: '초기화 + 재시작',
+                        style: 'destructive',
+                        onPress: async () => {
+                          await AsyncStorage.clear();
+                          try {
+                            const Updates = require('expo-updates');
+                            if (!__DEV__ && typeof Updates.reloadAsync === 'function') {
+                              await Updates.reloadAsync();
+                              return;
+                            }
+                          } catch {}
+                          Alert.alert(
+                            '초기화 완료',
+                            'AsyncStorage가 클리어되었습니다.\n앱을 종료 후 다시 시작하면 온보딩부터 진행됩니다.',
+                          );
+                        },
+                      },
+                    ],
+                  );
+                }}
+                activeOpacity={0.6}
+              >
+                <View style={styles.rowLeft}>
+                  <Ionicons name="refresh-circle-outline" size={20} color="#FF9500" />
+                  <View style={styles.rowText}>
+                    <Text style={[styles.label, { color: '#FF9500' }]}>앱 데이터 초기화 (DEV)</Text>
+                    <Text style={styles.desc}>AsyncStorage 전체 클리어 + 온보딩 재시작</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
 
         <Text style={styles.affiliate}>
           이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
@@ -377,6 +528,66 @@ export default function SettingsScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSaveChild}>
                 <Text style={styles.modalConfirmText}>{editingChildId ? '수정' : '추가'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 부모 정보 수정 모달 */}
+      <Modal visible={showParentModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              {parentField === 'mom' ? '엄마 생일' : parentField === 'dad' ? '아빠 생일' : '결혼기념일'}
+            </Text>
+
+            <TextInput
+              style={styles.nameInput}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={theme.subtext}
+              value={parentDate}
+              onChangeText={(t) => setParentDate(t.replace(/[^0-9-]/g, ''))}
+              keyboardType="numbers-and-punctuation"
+              maxLength={10}
+              autoFocus
+            />
+
+            {parentField !== 'anniversary' && (
+              <View style={styles.lunarRow}>
+                <TouchableOpacity
+                  style={[styles.lunarBtn, !parentIsLunar && styles.lunarBtnActive]}
+                  onPress={() => setParentIsLunar(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.lunarBtnText, !parentIsLunar && styles.lunarBtnTextActive]}>양력</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.lunarBtn, parentIsLunar && styles.lunarBtnActive]}
+                  onPress={() => setParentIsLunar(true)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.lunarBtnText, parentIsLunar && styles.lunarBtnTextActive]}>음력</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setShowParentModal(false)}
+              >
+                <Text style={styles.modalCancelText}>취소</Text>
+              </TouchableOpacity>
+              {((parentField === 'mom' && parentInfo.momBirthday) ||
+                (parentField === 'dad' && parentInfo.dadBirthday) ||
+                (parentField === 'anniversary' && parentInfo.anniversary)) && (
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={handleDeleteParent}>
+                  <Text style={[styles.modalCancelText, { color: '#FF4444' }]}>삭제</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={handleSaveParent}>
+                <Text style={styles.modalConfirmText}>저장</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -558,6 +769,32 @@ const styles = StyleSheet.create({
   birthLabel: {
     fontSize: 14,
     color: theme.text,
+  },
+  lunarRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+  },
+  lunarBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.border,
+    alignItems: 'center',
+    backgroundColor: theme.background,
+  },
+  lunarBtnActive: {
+    borderColor: theme.primary,
+    backgroundColor: 'rgba(255, 126, 103, 0.1)',
+  },
+  lunarBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.subtext,
+  },
+  lunarBtnTextActive: {
+    color: theme.primary,
   },
   modalButtons: {
     flexDirection: 'row',
