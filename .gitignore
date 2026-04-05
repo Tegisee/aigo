@@ -40,3 +40,4 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+scripts/price-checker/firebase-service-account.json
