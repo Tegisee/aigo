@@ -639,12 +639,16 @@ export default function DetailScreen() {
 
       {/* Share Ment Sheet */}
       <Modal visible={showShareSheet} transparent animationType="slide">
-        <TouchableOpacity
-          style={styles.sheetOverlay}
-          activeOpacity={1}
-          onPress={() => setShowShareSheet(false)}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <View style={styles.sheetContent}>
+          <TouchableOpacity
+            style={styles.sheetOverlay}
+            activeOpacity={1}
+            onPress={() => setShowShareSheet(false)}
+          >
+            <View style={styles.sheetContent}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>사주세요 멘트 선택</Text>
             {shareMentTemplates.map((ment, i) => {
@@ -690,8 +694,9 @@ export default function DetailScreen() {
             >
               <Text style={[styles.sheetItemText, { color: theme.subtext }]}>멘트 없이 공유</Text>
             </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Hidden WebView — 수동 가격 새로고침 */}

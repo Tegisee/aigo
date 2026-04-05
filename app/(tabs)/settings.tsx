@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../../constants/theme';
 import { useAppStore, type BabyGender, type Child, type ParentInfo } from '../../store/useAppStore';
+import DatePickerButton from '../../components/DatePickerButton';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -78,17 +79,13 @@ export default function SettingsScreen() {
   const [editingChildId, setEditingChildId] = useState<string | null>(null);
   const [childName, setChildName] = useState('');
   const [childGender, setChildGender] = useState<BabyGender>('unknown');
-  const [childYear, setChildYear] = useState('');
-  const [childMonth, setChildMonth] = useState('');
-  const [childDay, setChildDay] = useState('');
+  const [childBirthDate, setChildBirthDate] = useState<string | null>(null);
 
   const openAddChild = () => {
     setEditingChildId(null);
     setChildName('');
     setChildGender('unknown');
-    setChildYear('');
-    setChildMonth('');
-    setChildDay('');
+    setChildBirthDate(null);
     setShowChildModal(true);
   };
 
@@ -96,10 +93,7 @@ export default function SettingsScreen() {
     setEditingChildId(child.id);
     setChildName(child.name);
     setChildGender(child.gender);
-    const [y, m, d] = child.birthDate.split('-');
-    setChildYear(y);
-    setChildMonth(String(parseInt(m)));
-    setChildDay(String(parseInt(d)));
+    setChildBirthDate(child.birthDate);
     setShowChildModal(true);
   };
 
@@ -108,11 +102,11 @@ export default function SettingsScreen() {
       Alert.alert('알림', '이름을 입력해주세요.');
       return;
     }
-    if (childYear.length < 4 || !childMonth) {
-      Alert.alert('알림', '생년월을 입력해주세요.');
+    if (!childBirthDate) {
+      Alert.alert('알림', '생년월일을 선택해주세요.');
       return;
     }
-    const birthDate = `${childYear}-${childMonth.padStart(2, '0')}-${(childDay || '1').padStart(2, '0')}`;
+    const birthDate = childBirthDate;
 
     if (editingChildId) {
       updateChild(editingChildId, { name: childName.trim(), gender: childGender, birthDate });
@@ -490,44 +484,12 @@ export default function SettingsScreen() {
               ))}
             </View>
 
-            <View style={styles.birthRow}>
-              <TextInput
-                style={styles.birthInput}
-                placeholder="2024"
-                placeholderTextColor={theme.subtext}
-                value={childYear}
-                onChangeText={(t) => setChildYear(t.replace(/[^0-9]/g, '').slice(0, 4))}
-                keyboardType="number-pad"
-                maxLength={4}
-              />
-              <Text style={styles.birthLabel}>년</Text>
-              <TextInput
-                style={[styles.birthInput, { width: 60 }]}
-                placeholder="1"
-                placeholderTextColor={theme.subtext}
-                value={childMonth}
-                onChangeText={(t) => {
-                  const num = t.replace(/[^0-9]/g, '');
-                  if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 12)) setChildMonth(num);
-                }}
-                keyboardType="number-pad"
-                maxLength={2}
-              />
-              <Text style={styles.birthLabel}>월</Text>
-              <TextInput
-                style={[styles.birthInput, { width: 60 }]}
-                placeholder="1"
-                placeholderTextColor={theme.subtext}
-                value={childDay}
-                onChangeText={(t) => {
-                  const num = t.replace(/[^0-9]/g, '');
-                  if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 31)) setChildDay(num);
-                }}
-                keyboardType="number-pad"
-                maxLength={2}
-              />
-              <Text style={styles.birthLabel}>일</Text>
-            </View>
+            <DatePickerButton
+              label="생년월일"
+              value={childBirthDate}
+              onChange={setChildBirthDate}
+              placeholder="생년월일을 선택하세요"
+            />
 
             <View style={styles.modalButtons}>
               <TouchableOpacity

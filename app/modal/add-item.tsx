@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { generateDeepLink, hasCoupangApiKeys } from '../../services/coupangApi';
-import { BabyCategory, BABY_CATEGORIES, classifyCategory } from '../../types';
+import { BabyCategory, BABY_CATEGORIES, getCategoriesByMonth, classifyCategory } from '../../types';
 import { isConsumable, defaultRepurchaseDays } from '../../services/notificationMessages';
 import CoupangScraper, {
   ScrapedProduct,
@@ -69,7 +69,14 @@ export default function AddItemModal() {
     sharedUrl?: string;
     sharedText?: string;
   }>();
-  const { addItem, trackedItems, children, selectedChildId } = useAppStore();
+  const { addItem, trackedItems, children, selectedChildId, babyBirthDate } = useAppStore();
+
+  const babyMonths = babyBirthDate ? (() => {
+    const birth = new Date(babyBirthDate);
+    const now = new Date();
+    return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+  })() : null;
+  const dynamicCategories = getCategoriesByMonth(babyMonths);
 
   const [url, setUrl] = useState(sharedUrl ?? '');
   const [targetPrice, setTargetPrice] = useState('');
@@ -441,7 +448,7 @@ export default function AddItemModal() {
             </TouchableOpacity>
             {showCategoryPicker && (
               <View style={styles.categoryPicker}>
-                {BABY_CATEGORIES.map((cat) => (
+                {dynamicCategories.map((cat) => (
                   <TouchableOpacity
                     key={cat}
                     style={[styles.categoryOption, selectedCategory === cat && styles.categoryOptionActive]}

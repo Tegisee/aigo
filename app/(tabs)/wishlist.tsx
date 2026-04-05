@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,12 @@ export default function WishlistScreen() {
   const categories = getCategoriesByMonth(babyMonths);
   const [selectedCategory, setSelectedCategory] = useState<BabyCategory | null>(null);
   const [filterChildId, setFilterChildId] = useState<string | null>(null);
+
+  // 아이 전환 시 필터 초기화
+  useEffect(() => {
+    setSelectedCategory(null);
+    setFilterChildId(null);
+  }, [selectedChildId]);
 
   const childFilteredItems = filterChildId
     ? trackedItems.filter((item) => item.childId === filterChildId)
@@ -261,9 +267,9 @@ const styles = StyleSheet.create({
     borderBottomColor: theme.border,
   },
   categoryChips: {
-    gap: 8,
     paddingHorizontal: 20,
     paddingVertical: 8,
+    flexDirection: 'row',
   },
   chip: {
     paddingHorizontal: 14,
@@ -272,6 +278,10 @@ const styles = StyleSheet.create({
     backgroundColor: theme.card,
     borderWidth: 1,
     borderColor: theme.border,
+    marginRight: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   chipActive: {
     backgroundColor: theme.primary,

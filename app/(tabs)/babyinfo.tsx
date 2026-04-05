@@ -1,17 +1,11 @@
-import { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Linking, ActivityIndicator, Modal, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Linking, Alert, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import DatePickerButton from '../../components/DatePickerButton';
-import {
-  getHealthCheckupSchedule,
-  fetchVaccineCenters,
-  hasPublicApiKey,
-  REGIONS,
-  type VaccineCenter,
-} from '../../services/publicApi';
+import { getHealthCheckupSchedule } from '../../services/publicApi';
 
 // ─── 예방접종 스케줄 (정적 상세 데이터) ───
 const VACCINATION_SCHEDULE = [
@@ -77,12 +71,14 @@ const SUPPORT_DETAIL = [
 export default function BabyInfoScreen() {
   const { babyBirthDate, babyName, vaccinationRecords, setVaccinationDate, checkupRecords, setCheckupDate } = useAppStore();
 
-  // 접종기관 검색
-  const [showRegionPicker, setShowRegionPicker] = useState(false);
-  const [selectedRegion, setSelectedRegion] = useState('');
-  const [vaccineCenters, setVaccineCenters] = useState<VaccineCenter[]>([]);
-  const [loadingCenters, setLoadingCenters] = useState(false);
-  const [centersError, setCentersError] = useState('');
+  // 날짜 입력 모달
+  const [dateModalTarget, setDateModalTarget] = useState<{ type: 'vaccine' | 'checkup'; key: string; label: string } | null>(null);
+
+  // 추가 항목
+  const [customVaccines, setCustomVaccines] = useState<{ name: string; date?: string }[]>([]);
+  const [customCheckups, setCustomCheckups] = useState<{ name: string; date?: string }[]>([]);
+  const [showAddInput, setShowAddInput] = useState<'vaccine' | 'checkup' | null>(null);
+  const [addInputText, setAddInputText] = useState('');
 
   // 지원금 상세 펼침
   const [expandedSupport, setExpandedSupport] = useState<number | null>(null);
@@ -94,18 +90,6 @@ export default function BabyInfoScreen() {
     return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
   })() : null;
 
-  const handleRegionSelect = useCallback(async (region: string) => {
-    setShowRegionPicker(false);
-    setSelectedRegion(region);
-    setLoadingCenters(true);
-    setCentersError('');
-    try {
-      const results = await fetchVaccineCenters(region);
-      setVaccineCenters(results);
-      if (results.length === 0) setCentersError('검색 결과가 없습니다');
-    } catch { setCentersError('조회에 실패했습니다'); }
-    setLoadingCenters(false);
-  }, []);
 
   // 접종 상태 분류 (날짜 기록 기반)
   const isVaccineGroupDone = (item: typeof VACCINATION_SCHEDULE[0]) => {
@@ -192,18 +176,14 @@ export default function BabyInfoScreen() {
                             key={j}
                             style={styles.vaccineItem}
                             onPress={() => {
-                              // 이미 기록 있으면 삭제 확인, 없으면 오늘 날짜로 기록
                               if (recordDate) {
                                 Alert.alert(v, `접종일: ${recordDate}`, [
                                   { text: '닫기' },
+                                  { text: '날짜 수정', onPress: () => setDateModalTarget({ type: 'vaccine', key: v, label: v }) },
                                   { text: '기록 삭제', style: 'destructive', onPress: () => setVaccinationDate(v, null) },
                                 ]);
                               } else {
-                                const today = new Date().toISOString().slice(0, 10);
-                                Alert.alert(v, '접종 완료로 기록할까요?', [
-                                  { text: '취소' },
-                                  { text: `오늘(${today}) 기록`, onPress: () => setVaccinationDate(v, today) },
-                                ]);
+                                setDateModalTarget({ type: 'vaccine', key: v, label: v });
                               }
                             }}
                             activeOpacity={0.6}
@@ -228,38 +208,64 @@ export default function BabyInfoScreen() {
             })}
           </View>
 
-          {/* 접종기관 검색 */}
-          {hasPublicApiKey() && (
-            <View style={styles.apiSection}>
+          {/* 사용자 추가 접종 항목 */}
+          {customVaccines.map((cv, i) => (
+            <View key={`cv-${i}`} style={styles.customItemRow}>
+              <Ionicons
+                name={cv.date ? 'checkmark-circle' : 'ellipse-outline'}
+                size={16}
+                color={cv.date ? theme.success : theme.border}
+              />
               <TouchableOpacity
-                style={styles.searchBtn}
-                onPress={() => { setRegionPickerTarget('vaccine'); setShowRegionPicker(true); }}
-                activeOpacity={0.7}
+                style={{ flex: 1 }}
+                onPress={() => setDateModalTarget({ type: 'vaccine', key: `custom-v-${i}`, label: cv.name })}
               >
-                <Ionicons name="location" size={16} color="#fff" />
-                <Text style={styles.searchBtnText}>
-                  {selectedRegion ? `${selectedRegion} 접종기관` : '가까운 접종기관 검색'}
-                </Text>
+                <Text style={styles.customItemName}>{cv.name}</Text>
+                {cv.date && <Text style={styles.vaccineDate}>{cv.date}</Text>}
               </TouchableOpacity>
-              {loadingCenters && <ActivityIndicator style={{ marginTop: 12 }} color={theme.primary} />}
-              {centersError ? <Text style={styles.apiError}>{centersError}</Text> : null}
-              {vaccineCenters.length > 0 && (
-                <View style={styles.resultList}>
-                  {vaccineCenters.slice(0, 10).map((c, i) => (
-                    <View key={`vc-${i}`} style={styles.resultCard}>
-                      <Text style={styles.resultName}>{c.name}</Text>
-                      <Text style={styles.resultAddr}>{c.address}</Text>
-                      {c.tel ? (
-                        <TouchableOpacity onPress={() => Linking.openURL(`tel:${c.tel.replace(/[^0-9-]/g, '')}`)}>
-                          <Text style={styles.resultTel}>{c.tel}</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                    </View>
-                  ))}
-                </View>
-              )}
+              <TouchableOpacity onPress={() => setCustomVaccines((prev) => prev.filter((_, j) => j !== i))}>
+                <Ionicons name="close-circle-outline" size={18} color={theme.subtext} />
+              </TouchableOpacity>
             </View>
+          ))}
+
+          {/* 접종 항목 추가 */}
+          {showAddInput === 'vaccine' ? (
+            <View style={styles.addInputRow}>
+              <TextInput
+                style={styles.addInput}
+                placeholder="접종 항목명 입력"
+                placeholderTextColor={theme.subtext}
+                value={addInputText}
+                onChangeText={setAddInputText}
+                autoFocus
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  if (addInputText.trim()) {
+                    setCustomVaccines((prev) => [...prev, { name: addInputText.trim() }]);
+                    setAddInputText('');
+                    setShowAddInput(null);
+                  }
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={28} color={theme.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowAddInput(null); setAddInputText(''); }}>
+                <Ionicons name="close-circle" size={28} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddInput('vaccine')} activeOpacity={0.7}>
+              <Ionicons name="add-circle-outline" size={18} color={theme.primary} />
+              <Text style={styles.addBtnText}>접종 항목 추가</Text>
+            </TouchableOpacity>
           )}
+
+          <TouchableOpacity style={styles.linkRow} onPress={() => Linking.openURL('https://nip.kdca.go.kr')} activeOpacity={0.7}>
+            <Ionicons name="open-outline" size={14} color={theme.primary} />
+            <Text style={styles.linkRowText}>예방접종도우미 (접종기관 검색)</Text>
+          </TouchableOpacity>
         </View>
 
         {/* ── 영유아 건강검진 ── */}
@@ -283,14 +289,11 @@ export default function BabyInfoScreen() {
                       if (recordDate) {
                         Alert.alert(`${item.round}차 검진`, `검진일: ${recordDate}`, [
                           { text: '닫기' },
+                          { text: '날짜 수정', onPress: () => setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진` }) },
                           { text: '기록 삭제', style: 'destructive', onPress: () => setCheckupDate(roundKey, null) },
                         ]);
                       } else {
-                        const today = new Date().toISOString().slice(0, 10);
-                        Alert.alert(`${item.round}차 검진 (${item.ageRange})`, '검진 완료로 기록할까요?', [
-                          { text: '취소' },
-                          { text: `오늘(${today}) 기록`, onPress: () => setCheckupDate(roundKey, today) },
-                        ]);
+                        setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진 (${item.ageRange})` });
                       }
                     }}
                     activeOpacity={0.6}
@@ -322,9 +325,61 @@ export default function BabyInfoScreen() {
                   </TouchableOpacity>
                 </View>
               );
-            }
-            ))}
+            })}
           </View>
+
+          {/* 사용자 추가 검진 항목 */}
+          {customCheckups.map((cc, i) => (
+            <View key={`cc-${i}`} style={styles.customItemRow}>
+              <Ionicons
+                name={cc.date ? 'checkmark-circle' : 'ellipse-outline'}
+                size={16}
+                color={cc.date ? theme.success : theme.border}
+              />
+              <TouchableOpacity
+                style={{ flex: 1 }}
+                onPress={() => setDateModalTarget({ type: 'checkup', key: `custom-c-${i}`, label: cc.name })}
+              >
+                <Text style={styles.customItemName}>{cc.name}</Text>
+                {cc.date && <Text style={styles.vaccineDate}>{cc.date}</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setCustomCheckups((prev) => prev.filter((_, j) => j !== i))}>
+                <Ionicons name="close-circle-outline" size={18} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
+          ))}
+
+          {showAddInput === 'checkup' ? (
+            <View style={styles.addInputRow}>
+              <TextInput
+                style={styles.addInput}
+                placeholder="검진 항목명 입력"
+                placeholderTextColor={theme.subtext}
+                value={addInputText}
+                onChangeText={setAddInputText}
+                autoFocus
+              />
+              <TouchableOpacity
+                onPress={() => {
+                  if (addInputText.trim()) {
+                    setCustomCheckups((prev) => [...prev, { name: addInputText.trim() }]);
+                    setAddInputText('');
+                    setShowAddInput(null);
+                  }
+                }}
+              >
+                <Ionicons name="checkmark-circle" size={28} color={theme.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowAddInput(null); setAddInputText(''); }}>
+                <Ionicons name="close-circle" size={28} color={theme.subtext} />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.addBtn} onPress={() => setShowAddInput('checkup')} activeOpacity={0.7}>
+              <Ionicons name="add-circle-outline" size={18} color={theme.primary} />
+              <Text style={styles.addBtnText}>검진 항목 추가</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── 정부 지원금 (앱 내 상세) ── */}
@@ -415,29 +470,52 @@ export default function BabyInfoScreen() {
         </Text>
       </ScrollView>
 
-      {/* 지역 선택 모달 (접종기관/어린이집 공용) */}
-      <Modal visible={showRegionPicker} transparent animationType="slide">
-        <TouchableOpacity style={styles.regionOverlay} activeOpacity={1} onPress={() => setShowRegionPicker(false)}>
-          <View style={styles.regionSheet}>
-            <View style={styles.regionHandle} />
-            <Text style={styles.regionTitle}>
-              접종기관 검색 지역
-            </Text>
-            <ScrollView style={styles.regionList}>
-              {REGIONS.map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={styles.regionItem}
-                  onPress={() => handleRegionSelect(r)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.regionItemText}>{r}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+      {/* 날짜 선택 모달 (접종/검진 공용) */}
+      {dateModalTarget && (
+        <Modal visible transparent animationType="fade">
+          <View style={styles.dateModalOverlay}>
+            <View style={styles.dateModalContent}>
+              <Text style={styles.dateModalTitle}>{dateModalTarget.label}</Text>
+              <DatePickerButton
+                value={
+                  dateModalTarget.type === 'vaccine'
+                    ? (dateModalTarget.key.startsWith('custom-v-')
+                        ? customVaccines[parseInt(dateModalTarget.key.split('-')[2])]?.date || null
+                        : vaccinationRecords[dateModalTarget.key] || null)
+                    : (dateModalTarget.key.startsWith('custom-c-')
+                        ? customCheckups[parseInt(dateModalTarget.key.split('-')[2])]?.date || null
+                        : checkupRecords[dateModalTarget.key] || null)
+                }
+                onChange={(date) => {
+                  if (dateModalTarget.type === 'vaccine') {
+                    if (dateModalTarget.key.startsWith('custom-v-')) {
+                      const idx = parseInt(dateModalTarget.key.split('-')[2]);
+                      setCustomVaccines((prev) => prev.map((v, i) => i === idx ? { ...v, date } : v));
+                    } else {
+                      setVaccinationDate(dateModalTarget.key, date);
+                    }
+                  } else {
+                    if (dateModalTarget.key.startsWith('custom-c-')) {
+                      const idx = parseInt(dateModalTarget.key.split('-')[2]);
+                      setCustomCheckups((prev) => prev.map((c, i) => i === idx ? { ...c, date } : c));
+                    } else {
+                      setCheckupDate(dateModalTarget.key, date);
+                    }
+                  }
+                  setDateModalTarget(null);
+                }}
+                placeholder="날짜를 선택하세요"
+              />
+              <TouchableOpacity
+                style={styles.dateModalCancel}
+                onPress={() => setDateModalTarget(null)}
+              >
+                <Text style={styles.dateModalCancelText}>취소</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </TouchableOpacity>
-      </Modal>
+        </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -476,6 +554,21 @@ const styles = StyleSheet.create({
   vaccineName: { fontSize: 13, color: theme.text, lineHeight: 20 },
   vaccineNameDone: { color: theme.subtext, textDecorationLine: 'line-through' },
   vaccineItem: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 2 },
+
+  // ── 항목 추가 ──
+  customItemRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: theme.border },
+  customItemName: { fontSize: 13, color: theme.text },
+  addInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  addInput: { flex: 1, backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, fontSize: 14, color: theme.text },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10 },
+  addBtnText: { fontSize: 14, fontWeight: '600', color: theme.primary },
+
+  // ── 날짜 선택 모달 ──
+  dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  dateModalContent: { backgroundColor: theme.card, borderRadius: 16, padding: 24, width: '85%', gap: 16 },
+  dateModalTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
+  dateModalCancel: { alignItems: 'center', paddingVertical: 10 },
+  dateModalCancelText: { fontSize: 15, color: theme.subtext },
   vaccineDate: { fontSize: 11, color: theme.success, marginLeft: 'auto' },
   vaccineNote: { fontSize: 11, color: theme.subtext, marginTop: 2 },
   divider: { height: 1, backgroundColor: theme.border },

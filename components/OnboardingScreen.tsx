@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../constants/theme';
 import { useAppStore } from '../store/useAppStore';
+import DatePickerButton from './DatePickerButton';
 
 const { width } = Dimensions.get('window');
 
@@ -69,28 +70,32 @@ function FeatureRow({ icon, text }: { icon: string; text: string }) {
 // ─── Step 2: 아이 정보 입력 (이름 + 성별 + 생년월일) ───
 function StepBabyInfo({ onNext }: { onNext: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { setBabyName, setBabyGender, setBabyBirthDate } = useAppStore();
+  const { setBabyName, setBabyGender, setBabyBirthDate, addChild } = useAppStore();
   const [name, setName] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'unknown'>('unknown');
-  const [year, setYear] = useState('');
-  const [month, setMonth] = useState('');
-  const [day, setDay] = useState('');
+  const [birthDate, setBirthDate] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
 
   const handleSave = () => {
-    if (name.trim()) setBabyName(name.trim());
+    const babyName = name.trim() || '';
+
+    if (babyName) setBabyName(babyName);
     setBabyGender(gender);
-    if (year.length === 4 && month.length >= 1 && day.length >= 1) {
-      const m = month.padStart(2, '0');
-      const d = day.padStart(2, '0');
-      setBabyBirthDate(`${year}-${m}-${d}`);
-    } else if (year.length === 4 && month.length >= 1) {
-      const m = month.padStart(2, '0');
-      setBabyBirthDate(`${year}-${m}-01`);
+    if (birthDate) setBabyBirthDate(birthDate);
+
+    // children[] 배열에도 동시 저장
+    if (babyName && birthDate) {
+      addChild({
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+        name: babyName,
+        gender,
+        birthDate,
+      });
     }
+
     onNext();
   };
 
@@ -145,44 +150,14 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
           ))}
         </View>
 
-        {/* 생년월일 입력 */}
-        <View style={styles.birthInputRow}>
-          <TextInput
-            style={styles.birthInput}
-            placeholder="2024"
-            placeholderTextColor={theme.subtext}
-            value={year}
-            onChangeText={(t) => setYear(t.replace(/[^0-9]/g, '').slice(0, 4))}
-            keyboardType="number-pad"
-            maxLength={4}
+        {/* 생년월일 입력 (캘린더) */}
+        <View style={{ width: '100%', marginTop: 16 }}>
+          <DatePickerButton
+            label="생년월일"
+            value={birthDate}
+            onChange={setBirthDate}
+            placeholder="생년월일을 선택하세요"
           />
-          <Text style={styles.birthLabel}>년</Text>
-          <TextInput
-            style={[styles.birthInput, { width: 60 }]}
-            placeholder="1"
-            placeholderTextColor={theme.subtext}
-            value={month}
-            onChangeText={(t) => {
-              const num = t.replace(/[^0-9]/g, '');
-              if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 12)) setMonth(num);
-            }}
-            keyboardType="number-pad"
-            maxLength={2}
-          />
-          <Text style={styles.birthLabel}>월</Text>
-          <TextInput
-            style={[styles.birthInput, { width: 60 }]}
-            placeholder="1"
-            placeholderTextColor={theme.subtext}
-            value={day}
-            onChangeText={(t) => {
-              const num = t.replace(/[^0-9]/g, '');
-              if (num === '' || (parseInt(num) >= 1 && parseInt(num) <= 31)) setDay(num);
-            }}
-            keyboardType="number-pad"
-            maxLength={2}
-          />
-          <Text style={styles.birthLabel}>일</Text>
         </View>
       </Animated.View>
 

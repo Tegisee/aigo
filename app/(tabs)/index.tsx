@@ -25,7 +25,7 @@ import { getActiveEvents, type EventBanner } from '../../services/events';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { trackedItems, syncFromFirestore, babyBirthDate, babyName, isLinked, children, selectedChildId, selectChild, parentInfo } = useAppStore();
+  const { trackedItems, syncFromFirestore, babyBirthDate, babyName, babyGender, isLinked, children, selectedChildId, selectChild, parentInfo } = useAppStore();
   const appStateRef = useRef(AppState.currentState);
   const [goldbox, setGoldbox] = useState<GoldboxProduct[]>([]);
   const [categoryProducts, setCategoryProducts] = useState<Record<string, CoupangProduct[]>>({});
@@ -48,6 +48,12 @@ export default function HomeScreen() {
   })() : null;
   const categories = getCategoriesByMonth(babyMonths);
   const activeEvents = getActiveEvents(babyBirthDate, displayName, parentInfo);
+
+  // 아이 전환 시 카테고리/추천 상품 초기화
+  useEffect(() => {
+    setCategoryProducts({});
+    setEventProducts({});
+  }, [selectedChildId]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
@@ -116,10 +122,26 @@ export default function HomeScreen() {
         }
       } catch {}
 
-      // 2순위: 쿠팡 파트너스 API 검색
+      // 2순위: 쿠팡 파트너스 API 검색 (월령+성별+카테고리 조합)
       if (hasCoupangApiKeys()) {
-        const ageKeyword = babyInfo ? `${babyInfo.ageText} ` : '';
-        const keyword = `${ageKeyword}${cat}`;
+        const consumable = /기저귀|분유|물티슈|수유용품|이유식|유아식|스킨케어/.test(cat);
+        const clothing = /의류|신발|장난감|가구|도서|학용품/.test(cat);
+
+        let keyword = '';
+        if (consumable) {
+          // 소모품: "아기/유아 {카테고리}"
+          const prefix = babyMonths !== null && babyMonths < 12 ? '아기' : '유아';
+          keyword = `${prefix} ${cat}`;
+        } else if (clothing && babyGender && babyGender !== 'unknown') {
+          // 의류/신발/장난감: "남아/여아 아동 {카테고리}"
+          const genderWord = babyGender === 'male' ? '남아' : '여아';
+          keyword = `${genderWord} 아동 ${cat}`;
+        } else {
+          // 기본: "월령 {카테고리}"
+          const ageKeyword = babyInfo ? `${babyInfo.ageText} ` : '';
+          keyword = `${ageKeyword}${cat}`;
+        }
+
         try {
           const products = await searchProducts(keyword, 10);
           setCategoryProducts((prev) => ({ ...prev, [cat]: products }));
