@@ -53,8 +53,8 @@ export default function SettingsScreen() {
   };
 
   const handleSaveParent = () => {
-    if (!parentDate || !/^\d{4}-\d{2}-\d{2}$/.test(parentDate)) {
-      Alert.alert('알림', 'YYYY-MM-DD 형식으로 입력해주세요.');
+    if (!parentDate) {
+      Alert.alert('알림', '날짜를 선택해주세요.');
       return;
     }
     if (parentField === 'mom') {
@@ -224,11 +224,7 @@ export default function SettingsScreen() {
           {children.map((child, i) => (
             <View key={child.id}>
               {i > 0 && <View style={styles.divider} />}
-              <TouchableOpacity
-                style={styles.row}
-                onPress={() => openEditChild(child)}
-                activeOpacity={0.6}
-              >
+              <View style={styles.row}>
                 <View style={styles.rowLeft}>
                   <Ionicons
                     name={child.gender === 'male' ? 'male' : child.gender === 'female' ? 'female' : 'happy-outline'}
@@ -251,14 +247,14 @@ export default function SettingsScreen() {
                       <Text style={styles.selectBtnText}>선택</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity onPress={() => openEditChild(child)}>
+                  <TouchableOpacity onPress={() => openEditChild(child)} hitSlop={8}>
                     <Ionicons name="create-outline" size={18} color={theme.primary} />
                   </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDeleteChild(child)}>
+                  <TouchableOpacity onPress={() => handleDeleteChild(child)} hitSlop={8}>
                     <Ionicons name="trash-outline" size={18} color="#FF4444" />
                   </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
+              </View>
             </View>
           ))}
 
@@ -514,15 +510,10 @@ export default function SettingsScreen() {
               {parentField === 'mom' ? '엄마 생일' : parentField === 'dad' ? '아빠 생일' : '결혼기념일'}
             </Text>
 
-            <TextInput
-              style={styles.nameInput}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={theme.subtext}
-              value={parentDate}
-              onChangeText={(t) => setParentDate(t.replace(/[^0-9-]/g, ''))}
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
-              autoFocus
+            <DatePickerButton
+              value={parentDate || null}
+              onChange={setParentDate}
+              placeholder="날짜를 선택하세요"
             />
 
             {parentField !== 'anniversary' && (

@@ -3,6 +3,7 @@ import {
   View,
   Text,
   TextInput,
+  Image,
   StyleSheet,
   Dimensions,
   TouchableOpacity,
@@ -38,7 +39,7 @@ function Step1({ onNext }: { onNext: () => void }) {
   return (
     <View style={styles.step}>
       <Animated.View style={[styles.iconCircle, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-        <Text style={styles.iconEmoji}>📉</Text>
+        <Image source={require('../assets/icon.png')} style={styles.iconImage} />
       </Animated.View>
       <Animated.View style={{ opacity: fadeAnim }}>
         <Text style={styles.stepTitle}>아이고</Text>
@@ -70,7 +71,7 @@ function FeatureRow({ icon, text }: { icon: string; text: string }) {
 // ─── Step 2: 아이 정보 입력 (이름 + 성별 + 생년월일) ───
 function StepBabyInfo({ onNext }: { onNext: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const { setBabyName, setBabyGender, setBabyBirthDate, addChild } = useAppStore();
+  const { setBabyName, setBabyGender, setBabyBirthDate, addChild, children } = useAppStore();
   const [name, setName] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'unknown'>('unknown');
   const [birthDate, setBirthDate] = useState<string | null>(null);
@@ -86,8 +87,8 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
     setBabyGender(gender);
     if (birthDate) setBabyBirthDate(birthDate);
 
-    // children[] 배열에도 동시 저장
-    if (babyName && birthDate) {
+    // children[] 배열에도 동시 저장 (중복 방지)
+    if (babyName && birthDate && children.length === 0) {
       addChild({
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
         name: babyName,
@@ -160,20 +161,20 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
           />
         </View>
       </Animated.View>
-
-        <View style={styles.birthButtons}>
-          <TouchableOpacity style={styles.skipBirthBtn} onPress={onNext} activeOpacity={0.7}>
-            <Text style={styles.skipBirthText}>건너뛰기</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.primaryBtn, { flex: 1 }]}
-            onPress={handleSave}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.primaryBtnText}>다음</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
+
+      <View style={styles.birthButtons}>
+        <TouchableOpacity style={styles.skipBirthBtn} onPress={onNext} activeOpacity={0.7}>
+          <Text style={styles.skipBirthText}>건너뛰기</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.primaryBtn, { flex: 1 }]}
+          onPress={handleSave}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.primaryBtnText}>다음</Text>
+        </TouchableOpacity>
+      </View>
     </KeyboardAvoidingView>
   );
 }
@@ -207,7 +208,7 @@ function Step3Share({ onNext }: { onNext: () => void }) {
         </View>
         <View style={styles.mockProduct}>
           <View style={styles.mockImagePlaceholder}>
-            <Ionicons name="image-outline" size={32} color="#555" />
+            <Ionicons name="bag-handle-outline" size={32} color={theme.primary} />
           </View>
           <Text style={styles.mockProductName}>하기스 네이처메이드 기저귀 4단계</Text>
           <Text style={styles.mockProductPrice}>43,900원</Text>
@@ -290,7 +291,7 @@ function Step3({ onNext }: { onNext: () => void }) {
             ]}>
               <Animated.View style={[styles.tapPulse, { opacity: tapOpacity }]} />
               <View style={[styles.shareIconCircle, { backgroundColor: tapped ? theme.primary : '#FFF8F0' }]}>
-                <Text style={styles.shareAppEmoji}>📉</Text>
+                <Image source={require('../assets/icon.png')} style={{ width: 24, height: 24, borderRadius: 6 }} />
               </View>
               <Text style={[styles.shareIconLabel, tapped && { color: theme.primary }]}>아이고</Text>
               {tapped && (
@@ -348,7 +349,7 @@ function Step4({ onComplete }: { onComplete: () => void }) {
         {/* 가상 알림 미리보기 */}
         <View style={styles.mockNotif}>
           <View style={styles.mockNotifIcon}>
-            <Text style={{ fontSize: 16 }}>📉</Text>
+            <Image source={require('../assets/icon.png')} style={{ width: 20, height: 20, borderRadius: 4 }} />
           </View>
           <View style={styles.mockNotifContent}>
             <Text style={styles.mockNotifTitle}>아이고, 지금이 기회!</Text>
@@ -476,6 +477,11 @@ const styles = StyleSheet.create({
   iconEmoji: {
     fontSize: 44,
   },
+  iconImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+  },
   stepTitle: {
     fontSize: 26,
     fontWeight: 'bold',
@@ -577,6 +583,8 @@ const styles = StyleSheet.create({
   birthButtons: {
     flexDirection: 'row',
     gap: 12,
+    paddingHorizontal: 30,
+    paddingBottom: 20,
     marginTop: 32,
     width: '100%',
   },

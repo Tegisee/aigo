@@ -546,12 +546,14 @@ export default function AddItemModal() {
         )}
       </KeyboardAvoidingView>
 
-      <CoupangScraper
-        key={scrapeKeyRef.current}
-        url={scrapeUrl}
-        onResult={handleScrapeResult}
-        onError={handleScrapeError}
-      />
+      {scrapeUrl && (
+        <CoupangScraper
+          key={scrapeKeyRef.current}
+          url={scrapeUrl}
+          onResult={handleScrapeResult}
+          onError={handleScrapeError}
+        />
+      )}
 
       {/* 아이 선택 바텀시트 (2명 이상) */}
       <Modal visible={showChildPicker} transparent animationType="slide">

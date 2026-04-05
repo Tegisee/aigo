@@ -471,51 +471,55 @@ export default function BabyInfoScreen() {
       </ScrollView>
 
       {/* 날짜 선택 모달 (접종/검진 공용) */}
-      {dateModalTarget && (
-        <Modal visible transparent animationType="fade">
-          <View style={styles.dateModalOverlay}>
-            <View style={styles.dateModalContent}>
-              <Text style={styles.dateModalTitle}>{dateModalTarget.label}</Text>
-              <DatePickerButton
-                value={
-                  dateModalTarget.type === 'vaccine'
-                    ? (dateModalTarget.key.startsWith('custom-v-')
-                        ? customVaccines[parseInt(dateModalTarget.key.split('-')[2])]?.date || null
-                        : vaccinationRecords[dateModalTarget.key] || null)
-                    : (dateModalTarget.key.startsWith('custom-c-')
-                        ? customCheckups[parseInt(dateModalTarget.key.split('-')[2])]?.date || null
-                        : checkupRecords[dateModalTarget.key] || null)
-                }
-                onChange={(date) => {
-                  if (dateModalTarget.type === 'vaccine') {
-                    if (dateModalTarget.key.startsWith('custom-v-')) {
-                      const idx = parseInt(dateModalTarget.key.split('-')[2]);
-                      setCustomVaccines((prev) => prev.map((v, i) => i === idx ? { ...v, date } : v));
-                    } else {
-                      setVaccinationDate(dateModalTarget.key, date);
-                    }
-                  } else {
-                    if (dateModalTarget.key.startsWith('custom-c-')) {
-                      const idx = parseInt(dateModalTarget.key.split('-')[2]);
-                      setCustomCheckups((prev) => prev.map((c, i) => i === idx ? { ...c, date } : c));
-                    } else {
-                      setCheckupDate(dateModalTarget.key, date);
-                    }
-                  }
-                  setDateModalTarget(null);
-                }}
-                placeholder="날짜를 선택하세요"
-              />
-              <TouchableOpacity
-                style={styles.dateModalCancel}
-                onPress={() => setDateModalTarget(null)}
-              >
-                <Text style={styles.dateModalCancelText}>취소</Text>
-              </TouchableOpacity>
+      {dateModalTarget && (() => {
+        const today = new Date().toISOString().slice(0, 10);
+        const saveDate = (date: string) => {
+          if (dateModalTarget.type === 'vaccine') {
+            if (dateModalTarget.key.startsWith('custom-v-')) {
+              const idx = parseInt(dateModalTarget.key.split('-')[2]);
+              setCustomVaccines((prev) => prev.map((v, i) => i === idx ? { ...v, date } : v));
+            } else {
+              setVaccinationDate(dateModalTarget.key, date);
+            }
+          } else {
+            if (dateModalTarget.key.startsWith('custom-c-')) {
+              const idx = parseInt(dateModalTarget.key.split('-')[2]);
+              setCustomCheckups((prev) => prev.map((c, i) => i === idx ? { ...c, date } : c));
+            } else {
+              setCheckupDate(dateModalTarget.key, date);
+            }
+          }
+          setDateModalTarget(null);
+        };
+        return (
+          <Modal visible transparent animationType="fade">
+            <View style={styles.dateModalOverlay}>
+              <View style={styles.dateModalContent}>
+                <Text style={styles.dateModalTitle}>{dateModalTarget.label}</Text>
+                <Text style={styles.dateModalDesc}>날짜를 선택하세요</Text>
+                <DatePickerButton
+                  value={null}
+                  onChange={saveDate}
+                  placeholder="캘린더에서 선택"
+                />
+                <TouchableOpacity
+                  style={styles.todayRecordBtn}
+                  onPress={() => saveDate(today)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.todayRecordText}>오늘({today}) 기록</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.dateModalCancel}
+                  onPress={() => setDateModalTarget(null)}
+                >
+                  <Text style={styles.dateModalCancelText}>취소</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        </Modal>
-      )}
+          </Modal>
+        );
+      })()}
     </SafeAreaView>
   );
 }
@@ -567,6 +571,9 @@ const styles = StyleSheet.create({
   dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   dateModalContent: { backgroundColor: theme.card, borderRadius: 16, padding: 24, width: '85%', gap: 16 },
   dateModalTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
+  dateModalDesc: { fontSize: 14, color: theme.subtext },
+  todayRecordBtn: { backgroundColor: 'rgba(255,126,103,0.1)', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  todayRecordText: { fontSize: 15, fontWeight: '600', color: theme.primary },
   dateModalCancel: { alignItems: 'center', paddingVertical: 10 },
   dateModalCancelText: { fontSize: 15, color: theme.subtext },
   vaccineDate: { fontSize: 11, color: theme.success, marginLeft: 'auto' },

@@ -34,6 +34,14 @@ export default {
         foregroundImage: "./assets/icon.png",
       },
       predictiveBackGestureEnabled: false,
+      intentFilters: [
+        {
+          action: "VIEW",
+          autoVerify: false,
+          data: [{ scheme: "coupang" }],
+          category: ["DEFAULT", "BROWSABLE"],
+        },
+      ],
     },
     web: {
       favicon: "./assets/favicon.png",
@@ -57,6 +65,7 @@ export default {
         },
       ],
       "@react-native-google-signin/google-signin",
+      "./plugins/withAndroidQueries",
     ],
     extra: {
       router: {},
