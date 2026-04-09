@@ -8,7 +8,13 @@ on:
     - cron: '0 6 * * *'    # 15:00 KST
     - cron: '0 9 * * *'    # 18:00 KST
     - cron: '0 12 * * *'   # 21:00 KST
-  workflow_dispatch: {}     # 수동 실행
+  workflow_dispatch:
+    inputs:
+      force_night_run:
+        description: '21시 야간 기능 강제 실행 (재구매/미접종 알림)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   price-check:
@@ -36,4 +42,5 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
           COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
           COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+          FORCE_NIGHT_RUN: ${{ github.event.inputs.force_night_run }}
         run: node dist/index.js

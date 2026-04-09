@@ -3,14 +3,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // 공유 상품 가격 데이터: 인증 사용자 읽기/생성, 업데이트는 trackerCount만 허용
-    // (가격 업데이트는 Admin SDK — 가격 체크 봇)
+    // 공유 상품 가격 데이터: 인증 사용자 읽기/생성
+    // 클라이언트 업데이트: trackerCount (등록/삭제), purchaseCount (구매 기록)
+    // 가격 업데이트는 Admin SDK (가격 체크 봇) — rules 무관
     match /shared_products/{productId} {
       allow read: if request.auth != null;
       allow create: if request.auth != null;
       allow update: if request.auth != null
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['trackerCount']);
+            .hasOnly(['trackerCount', 'purchaseCount']);
     }
 
     // 유저 문서: 본인만 읽기/쓰기

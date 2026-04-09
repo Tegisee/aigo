@@ -15,7 +15,8 @@ const db = getFirestore();
 
 // KST 시간 계산
 const kstHour = (new Date().getUTCHours() + 9) % 24;
-const isNightRun = kstHour >= 20 && kstHour <= 22; // 21시 실행 여부
+const forceNightRun = process.env.FORCE_NIGHT_RUN === 'true';
+const isNightRun = forceNightRun || (kstHour >= 20 && kstHour <= 22);
 
 interface UserItem {
   id: string;
@@ -229,7 +230,7 @@ async function cleanupInactiveUsers() {
 // ─── 메인 ───
 
 async function main() {
-  console.log(`[PriceChecker] 시작: ${new Date().toISOString()} (KST ${kstHour}시, 야간=${isNightRun})`);
+  console.log(`[PriceChecker] 시작: ${new Date().toISOString()} (KST ${kstHour}시, 야간=${isNightRun}${forceNightRun ? ', 강제' : ''})`);
 
   const usersSnap = await db.collection('users').get();
   console.log(`[Debug] 전체 유저: ${usersSnap.size}명`);
