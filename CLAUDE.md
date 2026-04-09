@@ -117,11 +117,22 @@
 - ✅ IMPROVE-4: 예방접종 미접종 푸시 알림 (가격 체크 봇 21시)
 - ✅ IMPROVE-5: 접종/검진 병원명 입력 필드 추가
 
+**v1.0.3 추가 수정 (04-09 오후)**
+- ✅ BUG-21: notificationEnabled 덮어쓰기 → _layout.tsx updateUserSettings 제거, 단일 경로 저장
+- ✅ BUG-22: lastVaccineAlertDate 조기 기록 → 실제 발송 후에만 기록
+- ⬜ BUG-23: expoPushToken Firestore 미저장 → 원인 미파악, 1.0.4에서 해결 필요
+- ✅ GitHub Actions force_night_run 옵션 추가
+- ✅ 쿠팡 productId 매칭 실패 시 가격 근접 매칭 fallback 추가
+- ✅ Firestore Rules purchaseCount 업데이트 허용 추가
+
 ### 남은 TODO
 **확인 필요 (v1.0.3 테스트)**
 1. **ENV-1**: 쿠팡 API 동작 여부 (EAS Secret 등록 완료)
 2. **ENV-2**: 구글 로그인 (SHA-1 등록 완료)
 3. **BUG-5**: 쿠팡 앱 딥링크 (intentFilters 추가 완료)
+
+**🔴 v1.0.4 필수**
+- **BUG-23**: expoPushToken Firestore 미저장 → 푸시 알림 전체 불가
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
