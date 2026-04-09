@@ -161,9 +161,13 @@ async function checkVaccineOverdue(
   let hasOverdue = false;
 
   for (const child of children) {
-    if (!child.birthDate) continue;
+    if (!child.birthDate) {
+      console.log(`[Vaccine] ${uid}: 아이 "${child.name || '?'}" birthDate 없음, 스킵`);
+      continue;
+    }
     const babyMonths = calcBabyMonths(child.birthDate);
     const childName = child.name || '우리 아이';
+    console.log(`[Vaccine] ${uid}: ${childName} ${babyMonths}개월 (${child.birthDate})`);
 
     for (const schedule of VACCINATION_SCHEDULE) {
       // 접종 시기가 지난 항목만 체크 (maxMonth < 현재 월령)
@@ -374,18 +378,24 @@ async function main() {
   // 21시에만: 예방접종 미접종 알림
   if (isNightRun) {
     console.log('[Vaccine] 예방접종 미접종 체크 시작');
+    let vaccineChecked = 0;
+    let vaccineSkipped = { noToken: 0, noChildren: 0, notifOff: 0 };
     for (const userDoc of usersSnap.docs) {
       const userData = userDoc.data();
       const token = userData.expoPushToken as string | undefined;
       const notifEnabled = userData.notificationEnabled !== false;
-      if (!token || !notifEnabled) continue;
+      if (!token) { vaccineSkipped.noToken++; continue; }
+      if (!notifEnabled) { vaccineSkipped.notifOff++; continue; }
 
       const children = userData.children || [];
-      if (children.length === 0) continue;
+      if (children.length === 0) { vaccineSkipped.noChildren++; continue; }
 
+      vaccineChecked++;
+      console.log(`[Vaccine] ${userDoc.id}: 아이 ${children.length}명, 접종기록 ${Object.keys(userData.vaccinationRecords || {}).length}건`);
       const vaccineTargets = await checkVaccineOverdue(userDoc.id, token, userData);
       pushTargets.push(...vaccineTargets);
     }
+    console.log(`[Vaccine] 체크 완료: ${vaccineChecked}명 체크, 스킵(토큰없음=${vaccineSkipped.noToken}, 알림끔=${vaccineSkipped.notifOff}, 아이없음=${vaccineSkipped.noChildren})`);
   }
 
   // 알림 발송

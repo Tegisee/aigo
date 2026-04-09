@@ -97,29 +97,42 @@ export async function fetchCurrentPrice(
 
     if (products.length === 0) continue;
 
-    const matches = products.filter((p) => String(p.productId) === productId);
-    if (matches.length === 0) {
-      console.log(`  [API] productId=${productId} 매칭 실패`);
-      continue;
+    // 1순위: productId 정확 매칭
+    const exactMatches = products.filter((p) => String(p.productId) === productId);
+    if (exactMatches.length > 0) {
+      let best = exactMatches[0];
+      if (exactMatches.length > 1 && currentPrice > 0) {
+        best = exactMatches.reduce((a, b) =>
+          Math.abs(a.productPrice - currentPrice) <= Math.abs(b.productPrice - currentPrice) ? a : b
+        );
+      }
+
+      if (currentPrice > 0) {
+        const changeRate = Math.abs(best.productPrice - currentPrice) / currentPrice;
+        if (changeRate > 0.3) {
+          console.log(`  [API] 가격 변동 ${(changeRate * 100).toFixed(0)}% 초과 → 스킵`);
+          return null;
+        }
+      }
+
+      return { price: best.productPrice, image: best.productImage, name: best.productName };
     }
 
-    let best = matches[0];
-    if (matches.length > 1 && currentPrice > 0) {
-      best = matches.reduce((a, b) =>
+    console.log(`  [API] productId=${productId} 정확 매칭 실패 → 가격 근접 매칭 시도`);
+
+    // 2순위: productId 매칭 실패 시 가격 근접 상품으로 fallback
+    if (currentPrice > 0 && products.length > 0) {
+      const closest = products.reduce((a, b) =>
         Math.abs(a.productPrice - currentPrice) <= Math.abs(b.productPrice - currentPrice) ? a : b
       );
-    }
-
-    // 30% 초과 변동 시 스킵
-    if (currentPrice > 0) {
-      const changeRate = Math.abs(best.productPrice - currentPrice) / currentPrice;
-      if (changeRate > 0.3) {
-        console.log(`  [API] 가격 변동 ${(changeRate * 100).toFixed(0)}% 초과 → 스킵`);
-        return null;
+      const changeRate = Math.abs(closest.productPrice - currentPrice) / currentPrice;
+      // 10% 이내 가격 차이면 같은 상품으로 간주
+      if (changeRate <= 0.1) {
+        console.log(`  [API] 가격 근접 매칭: ${closest.productName.slice(0, 30)} (${closest.productPrice}원, 차이 ${(changeRate * 100).toFixed(1)}%)`);
+        return { price: closest.productPrice, image: closest.productImage, name: closest.productName };
       }
+      console.log(`  [API] 가격 근접 매칭도 실패 (최소 차이 ${(changeRate * 100).toFixed(1)}%)`);
     }
-
-    return { price: best.productPrice, image: best.productImage, name: best.productName };
   }
 
   return null;
