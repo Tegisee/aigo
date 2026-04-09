@@ -50,12 +50,13 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.1 비공개 테스트 검토 중 (2026-04-05)
+## 현재 상태: v1.0.3 비공개 테스트 검토 중 (2026-04-09)
 
 ### Google Play
 - 스토어: https://play.google.com/store/apps/details?id=com.aigo.app
 - GitHub: https://github.com/Tegisee/aigo (Private)
-- 비공개 테스트: 검토 중 (v1.0.1, 04-05 제출)
+- 현재 버전: 1.0.3 (버전 코드 9)
+- 비공개 테스트: v1.0.3 검토 중 (04-09 제출)
 - 테스터 그룹: aigo_app@googlegroups.com
 - 상세: docs/014_구글플레이셋팅.md
 
@@ -69,10 +70,10 @@
 - ✅ 앱 아이콘 + splash + favicon + 배너 교체 완료
 - ✅ 개인정보처리방침: https://dafamstore.tistory.com/11
 - ✅ Google Play Console 등록 + 스토어 등록정보 완료
-- ✅ EAS production 빌드 v1.0.0 + v1.0.1
+- ✅ EAS production 빌드 v1.0.0 ~ v1.0.3
 - ✅ 로컬 빌드 환경 설정 (ANDROID_HOME + JAVA_HOME)
 
-**핵심 기능 (012_버그및개선목록 66개 항목 중 62개 완료)**
+**핵심 기능 (012_버그및개선목록 전체 완료)**
 - ✅ 온보딩 리뉴얼 (이름/성별/생년월일 캘린더 + children[] 동시 저장)
 - ✅ 홈화면 개편 (닉네임+월령+D-Day+카테고리+이벤트배너+추천상품)
 - ✅ 하단 탭 4개 (홈/육아정보/관심상품/설정)
@@ -102,14 +103,25 @@
 - ✅ 개인정보처리방침 외부 URL 연동
 - ✅ 쿠팡 딥링크 intentFilters + withAndroidQueries 추가
 
+**v1.0.3 버그 수정 + 개선 (04-09)**
+- ✅ BUG-11,12: 연결 프로그램 선택창 → 쿠팡 앱 딥링크 우선 + WebView link.coupang.com 차단
+- ✅ BUG-13: 구글 로그인 재설치 → signInWithCredential fallback
+- ✅ BUG-14,17: 추천 상품 미표시 → API 키 없을 때 안내 개선 + 이벤트 빈 결과 처리
+- ✅ BUG-15: 삭제 상품 추천 노출 → trackerCount > 0 필터
+- ✅ BUG-16: 홈↔관심상품 아이 선택 불일치 → selectChild 동기화
+- ✅ BUG-18: 접종 날짜 출생일 이전 입력 → DatePicker minimumDate
+- ✅ BUG-19: 접종 항목 추가 시 날짜 모달 자동 열기
+- ✅ BUG-20: 육아정보 연도 하드코딩 → 동적 처리
+- ✅ IMPROVE-1: 앱 공유 스토어 링크 추가
+- ✅ IMPROVE-3: 구매이력 안내 문구 추가
+- ✅ IMPROVE-4: 예방접종 미접종 푸시 알림 (가격 체크 봇 21시)
+- ✅ IMPROVE-5: 접종/검진 병원명 입력 필드 추가
+
 ### 남은 TODO
-**확인 필요 (다음 빌드 시 테스트)**
+**확인 필요 (v1.0.3 테스트)**
 1. **ENV-1**: 쿠팡 API 동작 여부 (EAS Secret 등록 완료)
 2. **ENV-2**: 구글 로그인 (SHA-1 등록 완료)
 3. **BUG-5**: 쿠팡 앱 딥링크 (intentFilters 추가 완료)
-
-**기능 (🟡)**
-4. **GitHub Actions 가격 체크 봇** — shared_products + FCM + 하루 3회 (AQ)
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
@@ -136,7 +148,8 @@
 - EAS Build (iOS + Android)
 
 ## 빌드 아티팩트
-- 네이밍: `aigo-{version}-{versionCode}[-dev].{aab|apk|ipa}`
+- 네이밍: `aigo-v{version}-vc{versionCode}.{aab|apk|ipa}`
+- 버전 관리 규칙: docs/016_버전관리규칙.md
 - 저장 위치:
   - Android: `~/aigo/builds/android/`
   - iOS: `~/aigo/builds/ios/`
