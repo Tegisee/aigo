@@ -139,7 +139,6 @@ export default function AddItemModal() {
       return;
     }
 
-    parsedUrlRef.current = parsedUrl;
     retryCountRef.current = 0;
     setStep('scraping');
     setScraped(null);
@@ -159,11 +158,13 @@ export default function AddItemModal() {
         }
       } catch {}
     }
+    // resolve된 URL을 WebView에 전달 (link.coupang.com → 앱 선택기 방지)
+    parsedUrlRef.current = resolved;
     resolvedUrlRef.current = resolved;
     console.log('[AddItem] resolved:', resolved.slice(0, 80));
 
     // 제휴 딥링크 생성
-    affiliateUrlRef.current = parsedUrl; // fallback
+    affiliateUrlRef.current = parsedUrl; // fallback (원본 URL)
     if (hasCoupangApiKeys() && (resolved.includes('/vp/') || resolved.includes('/vm/'))) {
       try {
         const deepLink = await generateDeepLink(resolved, 'tracked');
@@ -200,7 +201,7 @@ export default function AddItemModal() {
 
     setTimeout(() => {
       scrapeKeyRef.current++;
-      setScrapeUrl(parsedUrl);
+      setScrapeUrl(resolved);
     }, scrapeDelay);
   };
 

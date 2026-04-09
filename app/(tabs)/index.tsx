@@ -158,17 +158,28 @@ export default function HomeScreen() {
       setEventProducts((prev) => { const n = { ...prev }; delete n[index]; return n; });
       return;
     }
-    if (!hasCoupangApiKeys()) return;
+    if (!hasCoupangApiKeys()) {
+      setEventProducts((prev) => ({ ...prev, [index]: [] }));
+      return;
+    }
     setLoadingEvent(index);
     try {
       const keyword = event.keywords[0];
       const products = await searchProducts(keyword, 5);
       setEventProducts((prev) => ({ ...prev, [index]: products }));
-    } catch {}
+    } catch {
+      setEventProducts((prev) => ({ ...prev, [index]: [] }));
+    }
     setLoadingEvent(null);
   }, [eventProducts]);
 
   const handleOpenCoupang = async () => {
+    // 1순위: 쿠팡 앱 딥링크로 직접 열기
+    try {
+      const canOpen = await Linking.canOpenURL('coupang://home');
+      if (canOpen) { await Linking.openURL('coupang://home'); return; }
+    } catch {}
+    // 2순위: 파트너스 딥링크 (쿠팡 앱 미설치 시)
     if (hasCoupangApiKeys()) {
       try {
         const deepLink = await generateDeepLink('https://www.coupang.com', 'home');
@@ -178,10 +189,7 @@ export default function HomeScreen() {
         }
       } catch {}
     }
-    try {
-      const canOpen = await Linking.canOpenURL('coupang://home');
-      if (canOpen) { await Linking.openURL('coupang://home'); return; }
-    } catch {}
+    // 3순위: 웹 브라우저
     Linking.openURL('https://www.coupang.com');
   };
 
@@ -318,6 +326,11 @@ export default function HomeScreen() {
                     ))}
                   </View>
                 )}
+                {eventProducts[i] && eventProducts[i].length === 0 && (
+                  <View style={styles.eventProductList}>
+                    <Text style={styles.catProductEmpty}>서비스 준비 중입니다</Text>
+                  </View>
+                )}
               </View>
             ))}
           </View>
@@ -369,7 +382,7 @@ export default function HomeScreen() {
             <View key={cat} style={styles.catProductSection}>
               <Text style={styles.catProductTitle}>{cat} 추천</Text>
               {products.length === 0 ? (
-                <Text style={styles.catProductEmpty}>추천 상품을 불러올 수 없습니다</Text>
+                <Text style={styles.catProductEmpty}>{hasCoupangApiKeys() ? '추천 상품을 불러올 수 없습니다' : '서비스 준비 중입니다'}</Text>
               ) : (
                 products.slice(0, 5).map((p, idx) => (
                   <TouchableOpacity

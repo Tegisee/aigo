@@ -26,7 +26,7 @@ export { hasCoupangApiKeys };
 // 스토어 링크 (출시 후 업데이트)
 export const STORE_LINKS = {
   ios: '', // App Store URL
-  android: '', // Google Play URL
+  android: 'https://play.google.com/store/apps/details?id=com.aigo.app',
 };
 
 export function getAppShareMessage(): string {

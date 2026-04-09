@@ -9,9 +9,10 @@ interface Props {
   onChange: (date: string) => void;
   placeholder?: string;
   label?: string;
+  minimumDate?: Date;
 }
 
-export default function DatePickerButton({ value, onChange, placeholder = '날짜 선택', label }: Props) {
+export default function DatePickerButton({ value, onChange, placeholder = '날짜 선택', label, minimumDate }: Props) {
   const [show, setShow] = useState(false);
 
   const dateObj = value ? new Date(value + 'T00:00:00') : new Date();
@@ -44,6 +45,7 @@ export default function DatePickerButton({ value, onChange, placeholder = '날�
           display="default"
           onChange={handleChange}
           maximumDate={new Date()}
+          {...(minimumDate ? { minimumDate } : {})}
         />
       )}
 
@@ -64,6 +66,7 @@ export default function DatePickerButton({ value, onChange, placeholder = '날�
                 display="inline"
                 onChange={handleChange}
                 maximumDate={new Date()}
+                {...(minimumDate ? { minimumDate } : {})}
                 style={{ height: 340 }}
               />
             </View>

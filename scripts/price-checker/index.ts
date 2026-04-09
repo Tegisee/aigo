@@ -116,6 +116,92 @@ async function cleanupInvalidUsers(invalidTokens: string[]) {
   }
 }
 
+// ─── 예방접종 스케줄 (babyinfo.tsx와 동일) ───
+
+const VACCINATION_SCHEDULE = [
+  { month: '출생', minMonth: 0, maxMonth: 0, vaccines: ['B형간염 1차', 'BCG(결핵)'] },
+  { month: '1개월', minMonth: 1, maxMonth: 1, vaccines: ['B형간염 2차'] },
+  { month: '2개월', minMonth: 2, maxMonth: 3, vaccines: ['DTaP 1차', 'IPV 1차', 'Hib 1차', 'PCV 1차', '로타바이러스 1차'] },
+  { month: '4개월', minMonth: 4, maxMonth: 5, vaccines: ['DTaP 2차', 'IPV 2차', 'Hib 2차', 'PCV 2차', '로타바이러스 2차'] },
+  { month: '6개월', minMonth: 6, maxMonth: 11, vaccines: ['DTaP 3차', 'IPV 3차', 'Hib 3차', 'PCV 3차', 'B형간염 3차', '인플루엔자(매년)'] },
+  { month: '12개월', minMonth: 12, maxMonth: 14, vaccines: ['MMR 1차', '수두 1차', 'Hib 4차', 'PCV 4차', 'A형간염 1차'] },
+  { month: '15개월', minMonth: 15, maxMonth: 17, vaccines: ['DTaP 4차'] },
+  { month: '18개월', minMonth: 18, maxMonth: 47, vaccines: ['A형간염 2차'] },
+  { month: '만 4~6세', minMonth: 48, maxMonth: 71, vaccines: ['DTaP 5차', 'IPV 4차', 'MMR 2차'] },
+  { month: '만 6세', minMonth: 72, maxMonth: 83, vaccines: ['일본뇌염(사백신 4차 또는 생백신 2차)'] },
+  { month: '만 11~12세', minMonth: 132, maxMonth: 155, vaccines: ['Tdap/Td', 'HPV(자궁경부암) 1~2차', '일본뇌염 5차'] },
+];
+
+/** 아이 월령 계산 */
+function calcBabyMonths(birthDate: string): number {
+  const birth = new Date(birthDate);
+  const now = new Date();
+  return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
+}
+
+/** 예방접종 미접종 체크 → 푸시 대상 반환 */
+async function checkVaccineOverdue(
+  uid: string,
+  token: string,
+  userData: Record<string, any>,
+): Promise<SmartPushTarget[]> {
+  const targets: SmartPushTarget[] = [];
+  const children: Array<{ id: string; name: string; birthDate: string }> = userData.children || [];
+  const vaccinationRecords: Record<string, string> = userData.vaccinationRecords || {};
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 중복 방지: 오늘 이미 발송했으면 스킵
+  const lastAlertDate = userData.lastVaccineAlertDate;
+  if (lastAlertDate === today) {
+    console.log(`[Vaccine] ${uid}: 오늘 이미 발송됨, 스킵`);
+    return targets;
+  }
+
+  let hasOverdue = false;
+
+  for (const child of children) {
+    if (!child.birthDate) continue;
+    const babyMonths = calcBabyMonths(child.birthDate);
+    const childName = child.name || '우리 아이';
+
+    for (const schedule of VACCINATION_SCHEDULE) {
+      // 접종 시기가 지난 항목만 체크 (maxMonth < 현재 월령)
+      if (babyMonths <= schedule.maxMonth) continue;
+
+      for (const vaccine of schedule.vaccines) {
+        // 이미 접종 완료면 스킵
+        if (vaccinationRecords[vaccine]) continue;
+
+        hasOverdue = true;
+        targets.push({
+          token,
+          itemId: '',
+          productName: vaccine,
+          alertType: 'vaccine_overdue',
+          currentPrice: 0,
+          previousPrice: 0,
+          targetPrice: 0,
+          lowestPrice: 0,
+          noChangeDays: 0,
+          childName,
+          vaccineName: vaccine,
+        });
+        console.log(`  💉 ${childName}: ${vaccine} 미접종 (${schedule.month} 시기 경과)`);
+      }
+    }
+  }
+
+  // 미접종 항목이 있으면 오늘 날짜 기록 (중복 방지)
+  if (hasOverdue) {
+    try {
+      await db.collection('users').doc(uid).update({ lastVaccineAlertDate: today });
+    } catch {}
+  }
+
+  // 아이당 최대 3건만 발송 (너무 많은 알림 방지)
+  return targets.slice(0, 3);
+}
+
 // ─── 비활성 유저 정리 (21시에만) ───
 
 async function cleanupInactiveUsers() {
@@ -281,6 +367,23 @@ async function main() {
       }
 
       await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+
+  // 21시에만: 예방접종 미접종 알림
+  if (isNightRun) {
+    console.log('[Vaccine] 예방접종 미접종 체크 시작');
+    for (const userDoc of usersSnap.docs) {
+      const userData = userDoc.data();
+      const token = userData.expoPushToken as string | undefined;
+      const notifEnabled = userData.notificationEnabled !== false;
+      if (!token || !notifEnabled) continue;
+
+      const children = userData.children || [];
+      if (children.length === 0) continue;
+
+      const vaccineTargets = await checkVaccineOverdue(userDoc.id, token, userData);
+      pushTargets.push(...vaccineTargets);
     }
   }
 

@@ -69,14 +69,15 @@ const SUPPORT_DETAIL = [
 ];
 
 export default function BabyInfoScreen() {
-  const { babyBirthDate, babyName, vaccinationRecords, setVaccinationDate, checkupRecords, setCheckupDate } = useAppStore();
+  const { babyBirthDate, babyName, vaccinationRecords, setVaccinationDate, checkupRecords, setCheckupDate, vaccinationHospitals, checkupHospitals } = useAppStore();
 
   // 날짜 입력 모달
   const [dateModalTarget, setDateModalTarget] = useState<{ type: 'vaccine' | 'checkup'; key: string; label: string } | null>(null);
+  const [hospitalInput, setHospitalInput] = useState('');
 
   // 추가 항목
-  const [customVaccines, setCustomVaccines] = useState<{ name: string; date?: string }[]>([]);
-  const [customCheckups, setCustomCheckups] = useState<{ name: string; date?: string }[]>([]);
+  const [customVaccines, setCustomVaccines] = useState<{ name: string; date?: string; hospital?: string }[]>([]);
+  const [customCheckups, setCustomCheckups] = useState<{ name: string; date?: string; hospital?: string }[]>([]);
   const [showAddInput, setShowAddInput] = useState<'vaccine' | 'checkup' | null>(null);
   const [addInputText, setAddInputText] = useState('');
 
@@ -177,12 +178,15 @@ export default function BabyInfoScreen() {
                             style={styles.vaccineItem}
                             onPress={() => {
                               if (recordDate) {
-                                Alert.alert(v, `접종일: ${recordDate}`, [
+                                const hospital = vaccinationHospitals[v];
+                                const info = [`접종일: ${recordDate}`, hospital ? `병원: ${hospital}` : ''].filter(Boolean).join('\n');
+                                Alert.alert(v, info, [
                                   { text: '닫기' },
-                                  { text: '날짜 수정', onPress: () => setDateModalTarget({ type: 'vaccine', key: v, label: v }) },
+                                  { text: '수정', onPress: () => { setHospitalInput(vaccinationHospitals[v] || ''); setDateModalTarget({ type: 'vaccine', key: v, label: v }); } },
                                   { text: '기록 삭제', style: 'destructive', onPress: () => setVaccinationDate(v, null) },
                                 ]);
                               } else {
+                                setHospitalInput('');
                                 setDateModalTarget({ type: 'vaccine', key: v, label: v });
                               }
                             }}
@@ -196,7 +200,7 @@ export default function BabyInfoScreen() {
                             <Text style={[styles.vaccineName, recordDate && styles.vaccineNameDone]}>
                               {v}
                             </Text>
-                            {recordDate && <Text style={styles.vaccineDate}>{recordDate}</Text>}
+                            {recordDate && <Text style={styles.vaccineDate}>{recordDate}{vaccinationHospitals[v] ? ` · ${vaccinationHospitals[v]}` : ''}</Text>}
                           </TouchableOpacity>
                         );
                       })}
@@ -218,10 +222,10 @@ export default function BabyInfoScreen() {
               />
               <TouchableOpacity
                 style={{ flex: 1 }}
-                onPress={() => setDateModalTarget({ type: 'vaccine', key: `custom-v-${i}`, label: cv.name })}
+                onPress={() => { setHospitalInput(cv.hospital || ''); setDateModalTarget({ type: 'vaccine', key: `custom-v-${i}`, label: cv.name }); }}
               >
                 <Text style={styles.customItemName}>{cv.name}</Text>
-                {cv.date && <Text style={styles.vaccineDate}>{cv.date}</Text>}
+                <Text style={styles.vaccineDate}>{cv.date ? `${cv.date}${cv.hospital ? ` · ${cv.hospital}` : ''}` : '탭하여 접종일 기록'}</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setCustomVaccines((prev) => prev.filter((_, j) => j !== i))}>
                 <Ionicons name="close-circle-outline" size={18} color={theme.subtext} />
@@ -243,9 +247,13 @@ export default function BabyInfoScreen() {
               <TouchableOpacity
                 onPress={() => {
                   if (addInputText.trim()) {
-                    setCustomVaccines((prev) => [...prev, { name: addInputText.trim() }]);
+                    const name = addInputText.trim();
+                    const newIndex = customVaccines.length;
+                    setCustomVaccines((prev) => [...prev, { name }]);
                     setAddInputText('');
                     setShowAddInput(null);
+                    // 추가 후 바로 날짜 입력 모달 열기
+                    setTimeout(() => setDateModalTarget({ type: 'vaccine', key: `custom-v-${newIndex}`, label: name }), 300);
                   }
                 }}
               >
@@ -287,12 +295,15 @@ export default function BabyInfoScreen() {
                     style={[styles.vaccineRow, (item.isCurrent || isOverdue) && styles.vaccineRowCurrent]}
                     onPress={() => {
                       if (recordDate) {
-                        Alert.alert(`${item.round}차 검진`, `검진일: ${recordDate}`, [
+                        const hospital = checkupHospitals[roundKey];
+                        const info = [`검진일: ${recordDate}`, hospital ? `병원: ${hospital}` : ''].filter(Boolean).join('\n');
+                        Alert.alert(`${item.round}차 검진`, info, [
                           { text: '닫기' },
-                          { text: '날짜 수정', onPress: () => setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진` }) },
+                          { text: '수정', onPress: () => { setHospitalInput(checkupHospitals[roundKey] || ''); setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진` }); } },
                           { text: '기록 삭제', style: 'destructive', onPress: () => setCheckupDate(roundKey, null) },
                         ]);
                       } else {
+                        setHospitalInput('');
                         setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진 (${item.ageRange})` });
                       }
                     }}
@@ -320,7 +331,7 @@ export default function BabyInfoScreen() {
                     <View style={styles.vaccineRight}>
                       <Text style={[styles.vaccineName, isDone && styles.vaccineNameDone]}>{item.ageRange}</Text>
                       <Text style={styles.vaccineNote}>{item.items.join(', ')}</Text>
-                      {recordDate && <Text style={styles.vaccineDate}>{recordDate}</Text>}
+                      {recordDate && <Text style={styles.vaccineDate}>{recordDate}{checkupHospitals[roundKey] ? ` · ${checkupHospitals[roundKey]}` : ''}</Text>}
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -338,10 +349,10 @@ export default function BabyInfoScreen() {
               />
               <TouchableOpacity
                 style={{ flex: 1 }}
-                onPress={() => setDateModalTarget({ type: 'checkup', key: `custom-c-${i}`, label: cc.name })}
+                onPress={() => { setHospitalInput(cc.hospital || ''); setDateModalTarget({ type: 'checkup', key: `custom-c-${i}`, label: cc.name }); }}
               >
                 <Text style={styles.customItemName}>{cc.name}</Text>
-                {cc.date && <Text style={styles.vaccineDate}>{cc.date}</Text>}
+                {cc.date && <Text style={styles.vaccineDate}>{cc.date}{cc.hospital ? ` · ${cc.hospital}` : ''}</Text>}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setCustomCheckups((prev) => prev.filter((_, j) => j !== i))}>
                 <Ionicons name="close-circle-outline" size={18} color={theme.subtext} />
@@ -466,7 +477,7 @@ export default function BabyInfoScreen() {
         </View>
 
         <Text style={styles.disclaimer}>
-          위 정보는 2026년 기준 참고용이며, 정확한 내용은 해당 기관에 확인하세요.
+          위 정보는 {new Date().getFullYear()}년 기준 참고용이며, 정확한 내용은 해당 기관에 확인하세요.
         </Text>
       </ScrollView>
 
@@ -474,21 +485,23 @@ export default function BabyInfoScreen() {
       {dateModalTarget && (() => {
         const today = new Date().toISOString().slice(0, 10);
         const saveDate = (date: string) => {
+          const hospital = hospitalInput.trim();
           if (dateModalTarget.type === 'vaccine') {
             if (dateModalTarget.key.startsWith('custom-v-')) {
               const idx = parseInt(dateModalTarget.key.split('-')[2]);
-              setCustomVaccines((prev) => prev.map((v, i) => i === idx ? { ...v, date } : v));
+              setCustomVaccines((prev) => prev.map((v, i) => i === idx ? { ...v, date, hospital: hospital || undefined } : v));
             } else {
-              setVaccinationDate(dateModalTarget.key, date);
+              setVaccinationDate(dateModalTarget.key, date, hospital);
             }
           } else {
             if (dateModalTarget.key.startsWith('custom-c-')) {
               const idx = parseInt(dateModalTarget.key.split('-')[2]);
-              setCustomCheckups((prev) => prev.map((c, i) => i === idx ? { ...c, date } : c));
+              setCustomCheckups((prev) => prev.map((c, i) => i === idx ? { ...c, date, hospital: hospital || undefined } : c));
             } else {
-              setCheckupDate(dateModalTarget.key, date);
+              setCheckupDate(dateModalTarget.key, date, hospital);
             }
           }
+          setHospitalInput('');
           setDateModalTarget(null);
         };
         return (
@@ -501,6 +514,14 @@ export default function BabyInfoScreen() {
                   value={null}
                   onChange={saveDate}
                   placeholder="캘린더에서 선택"
+                  minimumDate={babyBirthDate ? new Date(babyBirthDate + 'T00:00:00') : undefined}
+                />
+                <TextInput
+                  style={styles.hospitalInput}
+                  placeholder="병원명 (선택사항)"
+                  placeholderTextColor={theme.subtext}
+                  value={hospitalInput}
+                  onChangeText={setHospitalInput}
                 />
                 <TouchableOpacity
                   style={styles.todayRecordBtn}
@@ -511,7 +532,7 @@ export default function BabyInfoScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.dateModalCancel}
-                  onPress={() => setDateModalTarget(null)}
+                  onPress={() => { setHospitalInput(''); setDateModalTarget(null); }}
                 >
                   <Text style={styles.dateModalCancelText}>취소</Text>
                 </TouchableOpacity>
@@ -572,6 +593,7 @@ const styles = StyleSheet.create({
   dateModalContent: { backgroundColor: theme.card, borderRadius: 16, padding: 24, width: '85%', gap: 16 },
   dateModalTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   dateModalDesc: { fontSize: 14, color: theme.subtext },
+  hospitalInput: { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, fontSize: 14, color: theme.text },
   todayRecordBtn: { backgroundColor: 'rgba(255,126,103,0.1)', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
   todayRecordText: { fontSize: 15, fontWeight: '600', color: theme.primary },
   dateModalCancel: { alignItems: 'center', paddingVertical: 10 },

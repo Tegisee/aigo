@@ -491,6 +491,7 @@ export default function DetailScreen() {
           ) : (
             <View style={styles.purchaseEmpty}>
               <Text style={styles.purchaseEmptyText}>아직 구매 이력이 없어요</Text>
+              <Text style={[styles.purchaseEmptyText, { fontSize: 12, marginTop: 4 }]}>구매일을 기록하면 다음 구매 시기를 알림으로 알려드려요</Text>
             </View>
           )}
         </View>

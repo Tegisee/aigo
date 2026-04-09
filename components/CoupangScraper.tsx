@@ -324,8 +324,7 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
     console.error('[Scraper] HTTP 에러:', syntheticEvent.nativeEvent?.statusCode, syntheticEvent.nativeEvent?.url?.slice(0, 80));
   }, []);
 
-  // 딥링크 및 앱 리다이렉트 차단
-  // 딥링크 및 앱 리다이렉트 차단 (link.coupang.com은 허용 — WebView 내 리다이렉트 필요)
+  // 딥링크 및 앱 리다이렉트 차단 — 앱 선택기 방지
   const handleShouldStartLoad = useCallback((event: { url: string; navigationType?: string }) => {
     const reqUrl = event.url;
     console.log(`[Scraper] shouldStartLoad: type=${event.navigationType} url=${reqUrl.slice(0, 80)}`);
@@ -338,6 +337,7 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
       const host = new URL(reqUrl).hostname;
       if (
         host === 'applink.coupang.com' ||
+        host === 'link.coupang.com' ||
         host === 'play.google.com' ||
         host === 'apps.apple.com' ||
         host === 'itunes.apple.com'

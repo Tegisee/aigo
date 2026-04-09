@@ -50,6 +50,8 @@ interface AppState {
   parentInfo: ParentInfo;
   vaccinationRecords: Record<string, string>; // { 'B형간염 1차': '2026-01-15', ... }
   checkupRecords: Record<string, string>;     // { '1': '2026-05-01', ... } (차수 → 날짜)
+  vaccinationHospitals: Record<string, string>; // { 'B형간염 1차': '서울소아과', ... }
+  checkupHospitals: Record<string, string>;     // { '1': '건강소아과', ... }
   trackedItems: TrackedItem[];
   addItem: (item: TrackedItem) => void;
   removeItem: (id: string) => void;
@@ -71,8 +73,8 @@ interface AppState {
   removeChild: (id: string) => void;
   selectChild: (id: string | null) => void;
   setParentInfo: (info: Partial<ParentInfo>) => void;
-  setVaccinationDate: (vaccineKey: string, date: string | null) => void;
-  setCheckupDate: (round: string, date: string | null) => void;
+  setVaccinationDate: (vaccineKey: string, date: string | null, hospital?: string) => void;
+  setCheckupDate: (round: string, date: string | null, hospital?: string) => void;
   resetAllData: () => Promise<void>;
 }
 
@@ -93,6 +95,8 @@ export const useAppStore = create<AppState>()(
       parentInfo: {},
       vaccinationRecords: {},
       checkupRecords: {},
+      vaccinationHospitals: {},
+      checkupHospitals: {},
       trackedItems: [],
       addItem: (item) => {
         // 소모품이면 자동 재구매 주기 계산
@@ -313,22 +317,40 @@ export const useAppStore = create<AppState>()(
           return { parentInfo: merged };
         });
       },
-      setVaccinationDate: (vaccineKey, date) => {
+      setVaccinationDate: (vaccineKey, date, hospital) => {
         set((state) => {
           const records = { ...state.vaccinationRecords };
-          if (date) records[vaccineKey] = date;
-          else delete records[vaccineKey];
-          updateUserSettings({ vaccinationRecords: records });
-          return { vaccinationRecords: records };
+          const hospitals = { ...state.vaccinationHospitals };
+          if (date) {
+            records[vaccineKey] = date;
+            if (hospital !== undefined) {
+              if (hospital) hospitals[vaccineKey] = hospital;
+              else delete hospitals[vaccineKey];
+            }
+          } else {
+            delete records[vaccineKey];
+            delete hospitals[vaccineKey];
+          }
+          updateUserSettings({ vaccinationRecords: records, vaccinationHospitals: hospitals });
+          return { vaccinationRecords: records, vaccinationHospitals: hospitals };
         });
       },
-      setCheckupDate: (round, date) => {
+      setCheckupDate: (round, date, hospital) => {
         set((state) => {
           const records = { ...state.checkupRecords };
-          if (date) records[round] = date;
-          else delete records[round];
-          updateUserSettings({ checkupRecords: records });
-          return { checkupRecords: records };
+          const hospitals = { ...state.checkupHospitals };
+          if (date) {
+            records[round] = date;
+            if (hospital !== undefined) {
+              if (hospital) hospitals[round] = hospital;
+              else delete hospitals[round];
+            }
+          } else {
+            delete records[round];
+            delete hospitals[round];
+          }
+          updateUserSettings({ checkupRecords: records, checkupHospitals: hospitals });
+          return { checkupRecords: records, checkupHospitals: hospitals };
         });
       },
       toggleNotification: () =>
@@ -363,6 +385,8 @@ export const useAppStore = create<AppState>()(
           parentInfo: {},
           vaccinationRecords: {},
           checkupRecords: {},
+          vaccinationHospitals: {},
+          checkupHospitals: {},
         });
         try {
           const allKeys = await AsyncStorage.getAllKeys();

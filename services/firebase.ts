@@ -30,6 +30,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import type { TrackedItem, SharedProduct, BabyCategory } from '../types';
+export type { SharedProduct };
 
 const firebaseConfig = {
   apiKey: 'AIzaSyA0QT1Fg7vT1C-qDemN-g1zMCy6rlNZC4Q',
@@ -111,7 +112,17 @@ export async function linkGoogleAccount(idToken: string): Promise<{ success: boo
     }
   } catch (e: any) {
     if (e.code === 'auth/credential-already-in-use') {
-      return { success: false, error: '이미 다른 계정에 연동된 구글 계정입니다.' };
+      // 재설치 등으로 새 익명 계정 → 기존 구글 계정 연동 실패
+      // → signInWithCredential로 기존 구글 계정으로 직접 로그인 (데이터 복구)
+      try {
+        const credential = GoogleAuthProvider.credential(idToken);
+        await signInWithCredential(auth!, credential);
+        console.log('[Firebase] 기존 구글 계정으로 로그인 성공 (데이터 복구)');
+        return { success: true };
+      } catch (fallbackError: any) {
+        console.warn('[Firebase] 구글 직접 로그인도 실패:', fallbackError);
+        return { success: false, error: fallbackError.message };
+      }
     }
     console.warn('[Firebase] 구글 연동 실패:', e);
     return { success: false, error: e.message };
@@ -337,6 +348,7 @@ export async function fetchPopularByCategory(
     const q = query(
       collection(db!, 'shared_products'),
       where('category', '==', category),
+      where('trackerCount', '>', 0),
       orderBy('trackerCount', 'desc'),
       firestoreLimit(count),
     );

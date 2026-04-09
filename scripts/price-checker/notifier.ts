@@ -8,7 +8,8 @@ export type AlertType =
   | 'lowest_ever'
   | 'lowest_no_target'
   | 'no_change'
-  | 'repurchase';
+  | 'repurchase'
+  | 'vaccine_overdue';
 
 export interface SmartPushTarget {
   token: string;
@@ -21,6 +22,8 @@ export interface SmartPushTarget {
   lowestPrice: number;
   noChangeDays: number;
   repurchaseDaysLeft?: number;
+  childName?: string;
+  vaccineName?: string;
 }
 
 function buildMessage(t: SmartPushTarget): { title: string; body: string } {
@@ -77,6 +80,12 @@ function buildMessage(t: SmartPushTarget): { title: string; body: string } {
           ? `${name}, 슬슬 다 떨어질 때가 됐어요! 지금 가격 확인해보세요`
           : `${name}, 약 ${t.repurchaseDaysLeft}일 후 소진 예정이에요`,
       };
+
+    case 'vaccine_overdue':
+      return {
+        title: '예방접종 확인해주세요 💉',
+        body: `${t.childName || '아이'}의 ${t.vaccineName || '접종'} 접종 시기가 지났어요! 확인해보세요`,
+      };
   }
 }
 
@@ -96,7 +105,11 @@ export async function sendSmartNotifications(
         sound: 'default' as const,
         title,
         body,
-        data: { itemId: t.itemId, screen: 'detail', alertType: t.alertType },
+        data: {
+          itemId: t.itemId,
+          screen: t.alertType === 'vaccine_overdue' ? 'babyinfo' : 'detail',
+          alertType: t.alertType,
+        },
       };
     });
 
