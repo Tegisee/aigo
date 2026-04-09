@@ -196,14 +196,8 @@ async function checkVaccineOverdue(
     }
   }
 
-  // 미접종 항목이 있으면 오늘 날짜 기록 (중복 방지)
-  if (hasOverdue) {
-    try {
-      await db.collection('users').doc(uid).update({ lastVaccineAlertDate: today });
-    } catch {}
-  }
-
   // 아이당 최대 3건만 발송 (너무 많은 알림 방지)
+  // lastVaccineAlertDate는 실제 발송 후 main에서 기록
   return targets.slice(0, 3);
 }
 
@@ -240,6 +234,7 @@ async function main() {
   console.log(`[Debug] 전체 유저: ${usersSnap.size}명`);
 
   const pushTargets: SmartPushTarget[] = [];
+  const vaccineUserIds: Set<string> = new Set();
   let totalItems = 0;
   let processedItems = 0;
 
@@ -393,9 +388,12 @@ async function main() {
       vaccineChecked++;
       console.log(`[Vaccine] ${userDoc.id}: 아이 ${children.length}명, 접종기록 ${Object.keys(userData.vaccinationRecords || {}).length}건`);
       const vaccineTargets = await checkVaccineOverdue(userDoc.id, token, userData);
+      if (vaccineTargets.length > 0) {
+        vaccineUserIds.add(userDoc.id);
+      }
       pushTargets.push(...vaccineTargets);
     }
-    console.log(`[Vaccine] 체크 완료: ${vaccineChecked}명 체크, 스킵(토큰없음=${vaccineSkipped.noToken}, 알림끔=${vaccineSkipped.notifOff}, 아이없음=${vaccineSkipped.noChildren})`);
+    console.log(`[Vaccine] 체크 완료: ${vaccineChecked}명 체크, 알림대상 ${vaccineUserIds.size}명, 스킵(토큰없음=${vaccineSkipped.noToken}, 알림끔=${vaccineSkipped.notifOff}, 아이없음=${vaccineSkipped.noChildren})`);
   }
 
   // 알림 발송
@@ -403,6 +401,17 @@ async function main() {
   if (pushTargets.length > 0) {
     console.log(`[PriceChecker] 알림 ${pushTargets.length}건 발송`);
     invalidTokens = await sendSmartNotifications(pushTargets);
+  }
+
+  // 예방접종 알림 실제 발송 후 lastVaccineAlertDate 기록
+  if (vaccineUserIds.size > 0) {
+    const today = new Date().toISOString().slice(0, 10);
+    for (const uid of vaccineUserIds) {
+      try {
+        await db.collection('users').doc(uid).update({ lastVaccineAlertDate: today });
+        console.log(`[Vaccine] ${uid}: lastVaccineAlertDate = ${today} 기록`);
+      } catch {}
+    }
   }
 
   await cleanupInvalidUsers(invalidTokens);

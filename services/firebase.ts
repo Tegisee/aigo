@@ -147,14 +147,18 @@ export function getAuthState(): { isAnonymous: boolean; provider: string | null;
 /** Expo Push Token 저장 */
 export async function savePushToken(token: string): Promise<void> {
   const uid = getCurrentUid();
-  if (!uid || !db) return;
+  if (!uid || !db) {
+    console.warn('[Firebase] Push Token 저장 스킵 — uid:', uid, 'db:', !!db);
+    return;
+  }
 
   try {
     await setDoc(
       doc(db!,'users', uid),
-      { expoPushToken: token, notificationEnabled: true, lastActiveAt: new Date().toISOString() },
+      { expoPushToken: token, lastActiveAt: new Date().toISOString() },
       { merge: true },
     );
+    console.log('[Firebase] Push Token 저장 완료:', token?.slice(0, 30));
   } catch (e) {
     console.warn('[Firebase] Push Token 저장 실패:', e);
   }

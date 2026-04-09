@@ -41,17 +41,20 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     if (finalStatus !== 'granted') {
+      console.warn('[Notifications] 알림 권한 미허용:', finalStatus);
       return null;
     }
 
     const projectId = Constants.expoConfig?.extra?.eas?.projectId;
     if (!projectId) {
-      console.warn('[Notifications] EAS projectId 없음');
+      console.warn('[Notifications] EAS projectId 없음 — app.config.js extra.eas.projectId 확인');
       return null;
     }
 
+    console.log('[Notifications] 토큰 발급 시도... projectId:', projectId);
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
+    console.log('[Notifications] 토큰 발급 성공:', token?.slice(0, 30));
 
     await savePushToken(token);
     return token;
