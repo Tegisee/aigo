@@ -196,6 +196,23 @@ export async function updateUserSettings(
   }
 }
 
+/** Firestore에서 유저 설정 복원 (구글 로그인 데이터 복구용) */
+export async function fetchUserSettings(): Promise<Record<string, any> | null> {
+  const uid = getCurrentUid();
+  if (!uid || !db) return null;
+
+  try {
+    const snap = await getDoc(doc(db!, 'users', uid));
+    if (snap.exists()) {
+      return snap.data();
+    }
+    return null;
+  } catch (e) {
+    console.warn('[Firebase] 유저 설정 조회 실패:', e);
+    return null;
+  }
+}
+
 // ─── Firestore CRUD ───
 
 function userItemsCol(uid: string) {

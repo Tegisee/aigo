@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform, InteractionManager, Alert } from 'react-native';
 import { Slot, Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { theme } from '../constants/theme';
@@ -14,6 +15,33 @@ import {
 } from '../services/notifications';
 import { useAppStore } from '../store/useAppStore';
 import OnboardingScreen from '../components/OnboardingScreen';
+
+const INSTALL_MARKER_KEY = 'aigo-install-marker';
+
+/** 재설치 감지: SecureStore 마커가 없으면 AsyncStorage를 초기화하여 온보딩 재표시 */
+async function checkFreshInstall() {
+  try {
+    const marker = await SecureStore.getItemAsync(INSTALL_MARKER_KEY);
+    if (!marker) {
+      // SecureStore에 마커 없음 = 신규 설치 또는 재설치
+      console.log('[Install] 신규/재설치 감지 — AsyncStorage 초기화');
+      try {
+        const allKeys = await AsyncStorage.getAllKeys();
+        if (allKeys.length > 0) {
+          await AsyncStorage.multiRemove(allKeys);
+        }
+      } catch {
+        await AsyncStorage.removeItem('aigo-storage');
+      }
+      // Zustand 상태도 리셋 (persist에서 복원된 값 덮어쓰기)
+      useAppStore.setState({ hasSeenOnboarding: false });
+      // 마커 저장
+      await SecureStore.setItemAsync(INSTALL_MARKER_KEY, new Date().toISOString());
+    }
+  } catch (e) {
+    console.warn('[Install] 설치 확인 실패:', e);
+  }
+}
 
 /** 지금이야 fork 잔재 AsyncStorage 키 마이그레이션 */
 async function migrateStorageKey() {
@@ -96,7 +124,15 @@ export default function RootLayout() {
   const notifListenerRef = useRef<Notifications.EventSubscription>(null);
   const { hasSeenOnboarding, completeOnboarding } = useAppStore();
 
+  const [installChecked, setInstallChecked] = useState(false);
+
+  // 재설치 감지 (최초 1회)
   useEffect(() => {
+    checkFreshInstall().finally(() => setInstallChecked(true));
+  }, []);
+
+  useEffect(() => {
+    if (!installChecked) return;
     migrateStorageKey();
     initCoupangApi();
 
@@ -130,7 +166,7 @@ export default function RootLayout() {
     return () => {
       notifListenerRef.current?.remove();
     };
-  }, []);
+  }, [installChecked]);
 
   return (
     <ShareIntentProvider

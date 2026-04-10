@@ -1,4 +1,18 @@
+import KoreanLunarCalendar from 'korean-lunar-calendar';
+
 // ─── 기념일 / 시즌 / 부모 이벤트 계산 ───
+
+/** 음력 날짜(MM-DD)를 해당 연도의 양력 Date로 변환 */
+function lunarToSolar(year: number, month: number, day: number): Date | null {
+  try {
+    const calendar = new KoreanLunarCalendar();
+    calendar.setLunarDate(year, month, day, false);
+    const solar = calendar.getSolarCalendar();
+    return new Date(solar.year, solar.month - 1, solar.day);
+  } catch {
+    return null;
+  }
+}
 
 export interface EventBanner {
   type: 'anniversary' | 'season' | 'parent';
@@ -25,6 +39,11 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
     const diff = day - daysSinceBirth;
     if (diff >= -0 && diff <= 7) {
       const label = day === 365 ? '돌' : `${day}일`;
+      const keywords = day === 365
+        ? ['돌잔치 용품', '돌잔치 의상', '돌반지']
+        : day === 100
+          ? ['백일 잔치', '백일 사진', '아기 선물']
+          : ['아기 선물', '아기 기념일', '아기 파티용품'];
       if (diff === 0) {
         events.push({
           type: 'anniversary',
@@ -32,6 +51,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
           title: `오늘은 ${babyName} ${label}이에요!`,
           subtitle: '축하해요!',
           daysLeft: 0,
+          keywords,
         });
       } else {
         events.push({
@@ -40,6 +60,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
           title: `${babyName} ${label}까지 D-${diff}`,
           subtitle: `${birth.getFullYear()}.${String(birth.getMonth() + 1).padStart(2, '0')}.${String(birth.getDate()).padStart(2, '0')} 출생`,
           daysLeft: diff,
+          keywords,
         });
       }
     }
@@ -55,6 +76,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
   const age = nextBirthday.getFullYear() - birth.getFullYear();
 
   if (birthdayDiff >= 0 && birthdayDiff <= 7 && age > 1) {
+    const birthdayKeywords = ['생일 선물 아이', '생일 파티 용품', '생일 케이크'];
     if (birthdayDiff === 0) {
       events.push({
         type: 'anniversary',
@@ -62,6 +84,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
         title: `오늘은 ${babyName} ${age}번째 생일이에요!`,
         subtitle: '생일 축하해요!',
         daysLeft: 0,
+        keywords: birthdayKeywords,
       });
     } else {
       events.push({
@@ -70,6 +93,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
         title: `${babyName} 생일까지 D-${birthdayDiff}`,
         subtitle: `${age}번째 생일`,
         daysLeft: birthdayDiff,
+        keywords: birthdayKeywords,
       });
     }
   }
@@ -223,15 +247,27 @@ export function getActiveEvents(birthDate: string | null, babyName: string, pare
   if (parentInfo) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const pEntries: { label: string; emoji: string; date: string; kw: string[] }[] = [];
-    if (parentInfo.momBirthday) pEntries.push({ label: '엄마 생일', emoji: '👩', date: parentInfo.momBirthday.date, kw: ['여성 선물', '엄마 선물'] });
-    if (parentInfo.dadBirthday) pEntries.push({ label: '아빠 생일', emoji: '👨', date: parentInfo.dadBirthday.date, kw: ['남성 선물', '아빠 선물'] });
-    if (parentInfo.anniversary) pEntries.push({ label: '결혼기념일', emoji: '💍', date: parentInfo.anniversary, kw: ['결혼기념일 선물', '커플 선물'] });
+    const pEntries: { label: string; emoji: string; date: string; isLunar: boolean; kw: string[] }[] = [];
+    if (parentInfo.momBirthday) pEntries.push({ label: '엄마 생일', emoji: '👩', date: parentInfo.momBirthday.date, isLunar: parentInfo.momBirthday.isLunar, kw: ['여성 선물', '엄마 선물'] });
+    if (parentInfo.dadBirthday) pEntries.push({ label: '아빠 생일', emoji: '👨', date: parentInfo.dadBirthday.date, isLunar: parentInfo.dadBirthday.isLunar, kw: ['남성 선물', '아빠 선물'] });
+    if (parentInfo.anniversary) pEntries.push({ label: '결혼기념일', emoji: '💍', date: parentInfo.anniversary, isLunar: false, kw: ['결혼기념일 선물', '커플 선물'] });
 
     for (const e of pEntries) {
       const [, m, d] = e.date.split('-').map(Number);
-      const eventDate = new Date(now.getFullYear(), m - 1, d);
-      if (eventDate < today) eventDate.setFullYear(now.getFullYear() + 1);
+      let eventDate: Date;
+      if (e.isLunar) {
+        // 음력 → 양력 변환
+        const converted = lunarToSolar(now.getFullYear(), m, d);
+        if (!converted) continue;
+        eventDate = converted;
+        if (eventDate < today) {
+          const nextConverted = lunarToSolar(now.getFullYear() + 1, m, d);
+          if (nextConverted) eventDate = nextConverted;
+        }
+      } else {
+        eventDate = new Date(now.getFullYear(), m - 1, d);
+        if (eventDate < today) eventDate.setFullYear(now.getFullYear() + 1);
+      }
       const diff = Math.floor((eventDate.getTime() - today.getTime()) / 86400000);
       if (diff >= 0 && diff <= 14) {
         events.push({

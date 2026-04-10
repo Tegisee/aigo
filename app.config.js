@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "아이고",
     slug: "aigo",
-    version: "1.0.3",
+    version: "1.0.4",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -27,13 +27,14 @@ export default {
       },
     },
     android: {
-      versionCode: 7,
+      versionCode: 10,
       package: "com.aigo.app",
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       adaptiveIcon: {
         backgroundColor: "#FFF8F0",
         foregroundImage: "./assets/icon.png",
       },
+      allowBackup: false,
       predictiveBackGestureEnabled: false,
       intentFilters: [
         {

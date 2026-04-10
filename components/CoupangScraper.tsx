@@ -63,6 +63,11 @@ const BLOCK_DEEPLINK_JS = `
       }
     }
   }, true);
+
+  // 앱 열기 유도 팝업/배너 차단: 쿠팡 앱 다운로드/열기 배너 숨기기
+  var style = document.createElement('style');
+  style.textContent = '[class*="app-banner"], [class*="app-download"], [id*="app-banner"], .top-app-bar, .smart-banner { display: none !important; }';
+  document.head.appendChild(style);
 })();
 true;
 `;
@@ -335,14 +340,28 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
     }
     try {
       const host = new URL(reqUrl).hostname;
-      if (
-        host === 'applink.coupang.com' ||
-        host === 'link.coupang.com' ||
-        host === 'play.google.com' ||
-        host === 'apps.apple.com' ||
-        host === 'itunes.apple.com'
-      ) {
+      const blockedHosts = [
+        'applink.coupang.com',
+        'link.coupang.com',
+        'play.google.com',
+        'apps.apple.com',
+        'itunes.apple.com',
+        'app.adjust.com',       // 앱 트래커 리다이렉트
+        'click.coupang.com',    // 클릭 트래커
+        'in-app.coupang.com',   // 인앱 리다이렉트
+      ];
+      if (blockedHosts.includes(host)) {
         console.log('[Scraper] 차단:', host);
+        return false;
+      }
+      // 쿠팡 앱 다운로드/열기 유도 URL 패턴 차단
+      const path = new URL(reqUrl).pathname;
+      if (host.includes('coupang.com') && (
+        path.includes('/app') ||
+        path.includes('/deep-link') ||
+        path.includes('/redirect')
+      )) {
+        console.log('[Scraper] 차단: 앱 유도 경로', path);
         return false;
       }
     } catch {}

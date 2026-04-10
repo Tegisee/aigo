@@ -73,6 +73,7 @@ export default function BabyInfoScreen() {
 
   // 날짜 입력 모달
   const [dateModalTarget, setDateModalTarget] = useState<{ type: 'vaccine' | 'checkup'; key: string; label: string } | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [hospitalInput, setHospitalInput] = useState('');
 
   // 추가 항목
@@ -182,7 +183,7 @@ export default function BabyInfoScreen() {
                                 const info = [`접종일: ${recordDate}`, hospital ? `병원: ${hospital}` : ''].filter(Boolean).join('\n');
                                 Alert.alert(v, info, [
                                   { text: '닫기' },
-                                  { text: '수정', onPress: () => { setHospitalInput(vaccinationHospitals[v] || ''); setDateModalTarget({ type: 'vaccine', key: v, label: v }); } },
+                                  { text: '수정', onPress: () => { setSelectedDate(recordDate); setHospitalInput(vaccinationHospitals[v] || ''); setDateModalTarget({ type: 'vaccine', key: v, label: v }); } },
                                   { text: '기록 삭제', style: 'destructive', onPress: () => setVaccinationDate(v, null) },
                                 ]);
                               } else {
@@ -222,7 +223,7 @@ export default function BabyInfoScreen() {
               />
               <TouchableOpacity
                 style={{ flex: 1 }}
-                onPress={() => { setHospitalInput(cv.hospital || ''); setDateModalTarget({ type: 'vaccine', key: `custom-v-${i}`, label: cv.name }); }}
+                onPress={() => { setSelectedDate(cv.date || null); setHospitalInput(cv.hospital || ''); setDateModalTarget({ type: 'vaccine', key: `custom-v-${i}`, label: cv.name }); }}
               >
                 <Text style={styles.customItemName}>{cv.name}</Text>
                 <Text style={styles.vaccineDate}>{cv.date ? `${cv.date}${cv.hospital ? ` · ${cv.hospital}` : ''}` : '탭하여 접종일 기록'}</Text>
@@ -299,7 +300,7 @@ export default function BabyInfoScreen() {
                         const info = [`검진일: ${recordDate}`, hospital ? `병원: ${hospital}` : ''].filter(Boolean).join('\n');
                         Alert.alert(`${item.round}차 검진`, info, [
                           { text: '닫기' },
-                          { text: '수정', onPress: () => { setHospitalInput(checkupHospitals[roundKey] || ''); setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진` }); } },
+                          { text: '수정', onPress: () => { setSelectedDate(recordDate); setHospitalInput(checkupHospitals[roundKey] || ''); setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진` }); } },
                           { text: '기록 삭제', style: 'destructive', onPress: () => setCheckupDate(roundKey, null) },
                         ]);
                       } else {
@@ -349,7 +350,7 @@ export default function BabyInfoScreen() {
               />
               <TouchableOpacity
                 style={{ flex: 1 }}
-                onPress={() => { setHospitalInput(cc.hospital || ''); setDateModalTarget({ type: 'checkup', key: `custom-c-${i}`, label: cc.name }); }}
+                onPress={() => { setSelectedDate(cc.date || null); setHospitalInput(cc.hospital || ''); setDateModalTarget({ type: 'checkup', key: `custom-c-${i}`, label: cc.name }); }}
               >
                 <Text style={styles.customItemName}>{cc.name}</Text>
                 {cc.date && <Text style={styles.vaccineDate}>{cc.date}{cc.hospital ? ` · ${cc.hospital}` : ''}</Text>}
@@ -484,7 +485,9 @@ export default function BabyInfoScreen() {
       {/* 날짜 선택 모달 (접종/검진 공용) */}
       {dateModalTarget && (() => {
         const today = new Date().toISOString().slice(0, 10);
-        const saveDate = (date: string) => {
+        const confirmSave = () => {
+          const date = selectedDate;
+          if (!date) return;
           const hospital = hospitalInput.trim();
           if (dateModalTarget.type === 'vaccine') {
             if (dateModalTarget.key.startsWith('custom-v-')) {
@@ -501,6 +504,7 @@ export default function BabyInfoScreen() {
               setCheckupDate(dateModalTarget.key, date, hospital);
             }
           }
+          setSelectedDate(null);
           setHospitalInput('');
           setDateModalTarget(null);
         };
@@ -509,30 +513,41 @@ export default function BabyInfoScreen() {
             <View style={styles.dateModalOverlay}>
               <View style={styles.dateModalContent}>
                 <Text style={styles.dateModalTitle}>{dateModalTarget.label}</Text>
-                <Text style={styles.dateModalDesc}>날짜를 선택하세요</Text>
+                <Text style={styles.dateModalDesc}>1. 날짜를 선택하세요</Text>
                 <DatePickerButton
-                  value={null}
-                  onChange={saveDate}
+                  value={selectedDate}
+                  onChange={(date) => setSelectedDate(date)}
                   placeholder="캘린더에서 선택"
                   minimumDate={babyBirthDate ? new Date(babyBirthDate + 'T00:00:00') : undefined}
                 />
+                <TouchableOpacity
+                  style={styles.todayRecordBtn}
+                  onPress={() => setSelectedDate(today)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.todayRecordText}>오늘({today}) 선택</Text>
+                </TouchableOpacity>
+                <Text style={[styles.dateModalDesc, { marginTop: 4 }]}>2. 병원명 (선택사항)</Text>
                 <TextInput
                   style={styles.hospitalInput}
-                  placeholder="병원명 (선택사항)"
+                  placeholder="예: 서울소아과"
                   placeholderTextColor={theme.subtext}
                   value={hospitalInput}
                   onChangeText={setHospitalInput}
                 />
                 <TouchableOpacity
-                  style={styles.todayRecordBtn}
-                  onPress={() => saveDate(today)}
+                  style={[styles.confirmBtn, !selectedDate && styles.confirmBtnDisabled]}
+                  onPress={confirmSave}
+                  disabled={!selectedDate}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.todayRecordText}>오늘({today}) 기록</Text>
+                  <Text style={[styles.confirmBtnText, !selectedDate && styles.confirmBtnTextDisabled]}>
+                    {selectedDate ? '기록 완료' : '날짜를 먼저 선택하세요'}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.dateModalCancel}
-                  onPress={() => { setHospitalInput(''); setDateModalTarget(null); }}
+                  onPress={() => { setSelectedDate(null); setHospitalInput(''); setDateModalTarget(null); }}
                 >
                   <Text style={styles.dateModalCancelText}>취소</Text>
                 </TouchableOpacity>
@@ -594,8 +609,12 @@ const styles = StyleSheet.create({
   dateModalTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   dateModalDesc: { fontSize: 14, color: theme.subtext },
   hospitalInput: { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, fontSize: 14, color: theme.text },
-  todayRecordBtn: { backgroundColor: 'rgba(255,126,103,0.1)', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  todayRecordText: { fontSize: 15, fontWeight: '600', color: theme.primary },
+  todayRecordBtn: { backgroundColor: 'rgba(255,126,103,0.1)', borderRadius: 12, paddingVertical: 10, alignItems: 'center' },
+  todayRecordText: { fontSize: 14, fontWeight: '600', color: theme.primary },
+  confirmBtn: { backgroundColor: theme.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
+  confirmBtnDisabled: { backgroundColor: theme.border },
+  confirmBtnText: { fontSize: 16, fontWeight: '700', color: '#fff' },
+  confirmBtnTextDisabled: { color: theme.subtext },
   dateModalCancel: { alignItems: 'center', paddingVertical: 10 },
   dateModalCancelText: { fontSize: 15, color: theme.subtext },
   vaccineDate: { fontSize: 11, color: theme.success, marginLeft: 'auto' },

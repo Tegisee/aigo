@@ -103,11 +103,16 @@ export default function HomeScreen() {
     if (categorySearchTimer.current) clearTimeout(categorySearchTimer.current);
     setLoadingCategory(cat);
     categorySearchTimer.current = setTimeout(async () => {
+      // 사용자의 현재 관심상품 ID 목록 (삭제된 상품 필터링용)
+      const userItemIds = new Set(trackedItems.map((i) => i.productId || i.id));
+
       try {
         // 1순위: shared_products 인기 상품
-        const popular = await fetchPopularByCategory(cat as BabyCategory, 5);
-        if (popular.length > 0) {
-          const mapped: CoupangProduct[] = popular.map((p) => ({
+        const popular = await fetchPopularByCategory(cat as BabyCategory, 10);
+        // 사용자가 삭제한 상품 제외: trackerCount > 0 이고 실제 추적 중인 상품만 표시
+        const filtered = popular.filter((p) => p.trackerCount > 0);
+        if (filtered.length > 0) {
+          const mapped: CoupangProduct[] = filtered.slice(0, 5).map((p) => ({
             productId: parseInt(p.productId) || 0,
             productName: p.productName,
             productPrice: p.currentPrice,
@@ -145,7 +150,13 @@ export default function HomeScreen() {
         try {
           const products = await searchProducts(keyword, 10);
           setCategoryProducts((prev) => ({ ...prev, [cat]: products }));
-        } catch {}
+        } catch {
+          // API 호출 실패 시 빈 배열로 표시
+          setCategoryProducts((prev) => ({ ...prev, [cat]: [] }));
+        }
+      } else {
+        // API 키 없음 → 빈 배열 (UI에서 안내 표시)
+        setCategoryProducts((prev) => ({ ...prev, [cat]: [] }));
       }
       setLoadingCategory(null);
     }, 300);
@@ -382,7 +393,9 @@ export default function HomeScreen() {
             <View key={cat} style={styles.catProductSection}>
               <Text style={styles.catProductTitle}>{cat} 추천</Text>
               {products.length === 0 ? (
-                <Text style={styles.catProductEmpty}>{hasCoupangApiKeys() ? '추천 상품을 불러올 수 없습니다' : '서비스 준비 중입니다'}</Text>
+                <Text style={styles.catProductEmpty}>
+                  {hasCoupangApiKeys() ? '추천 상품을 불러올 수 없습니다' : '관심상품을 등록하면 이 카테고리에 인기 상품이 표시됩니다'}
+                </Text>
               ) : (
                 products.slice(0, 5).map((p, idx) => (
                   <TouchableOpacity

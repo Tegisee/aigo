@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
-import { savePushToken } from './firebase';
+import { savePushToken, getCurrentUid } from './firebase';
 
 // 포그라운드에서도 알림 표시
 Notifications.setNotificationHandler({
@@ -45,18 +45,29 @@ export async function registerForPushNotifications(): Promise<string | null> {
       return null;
     }
 
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId;
-    if (!projectId) {
-      console.warn('[Notifications] EAS projectId 없음 — app.config.js extra.eas.projectId 확인');
-      return null;
-    }
-
+    const projectId =
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      (Constants as any).manifest2?.extra?.eas?.projectId ??
+      (Constants as any).manifest?.extra?.eas?.projectId ??
+      'caf70306-f2c6-40d7-8e12-817fa67b6477'; // fallback: hardcoded EAS projectId
     console.log('[Notifications] 토큰 발급 시도... projectId:', projectId);
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     const token = tokenData.data;
     console.log('[Notifications] 토큰 발급 성공:', token?.slice(0, 30));
 
+    // 즉시 저장 시도
     await savePushToken(token);
+
+    // uid가 아직 없었을 경우 3초 후 재시도
+    if (!getCurrentUid()) {
+      setTimeout(async () => {
+        try {
+          await savePushToken(token);
+          console.log('[Notifications] 토큰 재시도 저장 완료');
+        } catch {}
+      }, 3000);
+    }
+
     return token;
   } catch (e) {
     console.warn('[Notifications] 토큰 등록 실패:', e);

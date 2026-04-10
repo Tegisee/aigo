@@ -35,7 +35,7 @@
 | 013 | 쿠팡 파트너스 API 연동 | ⬜ | 013_파트너스API.md |
 | 014 | 육아용품 카테고리 + 아이 나이별 필터 | ✅ | 014_카테고리_필터.md |
 | 015 | 소모품 재구매 알림 (기저귀/분유 주기) | ✅ | 015_재구매알림.md |
-| - | 버그 및 개선 목록 (31개 항목) | ✅ 30/31 | 012_버그및개선목록.md |
+| - | 버그 및 개선 목록 (31+10개 항목) | ✅ 41/41 | 012_버그및개선목록.md |
 
 ### Phase 3 (성장 + 확장)
 | 번호 | 작업 | 상태 | sub MD |
@@ -120,19 +120,26 @@
 **v1.0.3 추가 수정 (04-09 오후)**
 - ✅ BUG-21: notificationEnabled 덮어쓰기 → _layout.tsx updateUserSettings 제거, 단일 경로 저장
 - ✅ BUG-22: lastVaccineAlertDate 조기 기록 → 실제 발송 후에만 기록
-- ⬜ BUG-23: expoPushToken Firestore 미저장 → 원인 미파악, 1.0.4에서 해결 필요
+- ✅ BUG-23: expoPushToken projectId fallback + 저장 재시도 추가
 - ✅ GitHub Actions force_night_run 옵션 추가
 - ✅ 쿠팡 productId 매칭 실패 시 가격 근접 매칭 fallback 추가
 - ✅ Firestore Rules purchaseCount 업데이트 허용 추가
 
-### 남은 TODO
-**확인 필요 (v1.0.3 테스트)**
-1. **ENV-1**: 쿠팡 API 동작 여부 (EAS Secret 등록 완료)
-2. **ENV-2**: 구글 로그인 (SHA-1 등록 완료)
-3. **BUG-5**: 쿠팡 앱 딥링크 (intentFilters 추가 완료)
+**v1.0.4 수정 완료 (04-10)**
+- ✅ BUG-29: 재설치 온보딩 → expo-secure-store 설치 마커 + allowBackup:false
+- ✅ BUG-27,28: 접종/검진 플로우 → 날짜→병원명→확인 순서, 취소 시 미저장
+- ✅ BUG-26: 기념일 탭 반응 없음 → keywords 추가
+- ✅ ENV-2: 구글 로그인 데이터 복원 → Firestore에서 설정+상품 복원
+- ✅ BUG-23: 푸시 토큰 → projectId fallback + 재시도
+- ✅ ENV-1: 카테고리 추천 → 삭제 상품 필터링 + 안내 개선
+- ✅ BUG-12: 쿠팡 앱 전환 → WebView 차단 강화
+- ✅ BUG-24: 음력 생일 → korean-lunar-calendar 변환
+- ✅ BUG-25: 기념일 서비스 준비 중 → BUG-26+ENV-1로 해결
 
-**🔴 v1.0.4 필수**
-- **BUG-23**: expoPushToken Firestore 미저장 → 푸시 알림 전체 불가
+### 남은 TODO
+**확인 필요 (v1.0.4 테스트)**
+1. **BUG-5**: 쿠팡 앱 딥링크 (intentFilters 추가 완료)
+2. **ENV-1**: 쿠팡 파트너스 API 키 실제 동작 확인
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)

@@ -5,7 +5,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
-import { getAuthState, linkGoogleAccount } from '../../services/firebase';
+import { getAuthState, linkGoogleAccount, fetchUserSettings, fetchItemsFromFirestore } from '../../services/firebase';
 import { signInWithGoogle } from '../../services/googleAuth';
 
 export default function LoginScreen() {
@@ -31,7 +31,32 @@ export default function LoginScreen() {
       const firebaseResult = await linkGoogleAccount(googleResult.idToken);
       if (firebaseResult.success) {
         setLinked('google');
-        Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.`);
+
+        // 3. Firestore에서 기존 데이터 복원 (재설치 시)
+        try {
+          const [settings, items] = await Promise.all([
+            fetchUserSettings(),
+            fetchItemsFromFirestore(),
+          ]);
+          if (settings) {
+            const restoreKeys = ['children', 'selectedChildId', 'babyName', 'babyGender', 'babyBirthDate', 'parentInfo', 'vaccinationRecords', 'checkupRecords', 'vaccinationHospitals', 'checkupHospitals', 'notificationEnabled', 'repurchaseNotificationEnabled', 'isWowMember'] as const;
+            const restoreData: Record<string, any> = {};
+            for (const key of restoreKeys) {
+              if (settings[key] !== undefined) restoreData[key] = settings[key];
+            }
+            if (Object.keys(restoreData).length > 0) {
+              useAppStore.setState(restoreData);
+            }
+          }
+          if (items.length > 0) {
+            useAppStore.setState({ trackedItems: items });
+          }
+          const restoredCount = items.length;
+          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.${restoredCount > 0 ? `\n관심상품 ${restoredCount}건 복원됨` : ''}`);
+        } catch (e) {
+          console.warn('[Login] 데이터 복원 실패:', e);
+          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.`);
+        }
       } else {
         Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
       }
