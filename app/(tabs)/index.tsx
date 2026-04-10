@@ -102,6 +102,7 @@ export default function HomeScreen() {
     // 디바운싱 300ms
     if (categorySearchTimer.current) clearTimeout(categorySearchTimer.current);
     setLoadingCategory(cat);
+    console.log(`[Home] 카테고리 탭: "${cat}" — API키: ${hasCoupangApiKeys()}, access: ${process.env.EXPO_PUBLIC_COUPANG_ACCESS_KEY ? '있음' : '없음'}`);
     categorySearchTimer.current = setTimeout(async () => {
       // 사용자의 현재 관심상품 ID 목록 (삭제된 상품 필터링용)
       const userItemIds = new Set(trackedItems.map((i) => i.productId || i.id));
@@ -169,18 +170,53 @@ export default function HomeScreen() {
       setEventProducts((prev) => { const n = { ...prev }; delete n[index]; return n; });
       return;
     }
-    if (!hasCoupangApiKeys()) {
-      setEventProducts((prev) => ({ ...prev, [index]: [] }));
-      return;
-    }
     setLoadingEvent(index);
-    try {
-      const keyword = event.keywords[0];
-      const products = await searchProducts(keyword, 5);
-      setEventProducts((prev) => ({ ...prev, [index]: products }));
-    } catch {
-      setEventProducts((prev) => ({ ...prev, [index]: [] }));
+
+    // 1순위: 쿠팡 파트너스 API
+    if (hasCoupangApiKeys()) {
+      try {
+        const keyword = event.keywords[0];
+        const products = await searchProducts(keyword, 5);
+        if (products.length > 0) {
+          setEventProducts((prev) => ({ ...prev, [index]: products }));
+          setLoadingEvent(null);
+          return;
+        }
+      } catch {}
     }
+
+    // 2순위: shared_products에서 키워드 관련 카테고리 조회
+    try {
+      // 키워드에서 카테고리 추출 시도 (예: '돌잔치 용품' → '장난감', '생일 선물' → '장난감')
+      const categoryMap: Record<string, string> = {
+        '돌잔치': '장난감', '백일': '스킨케어', '생일': '장난감',
+        '선물': '장난감', '파티': '장난감',
+      };
+      const matchedCat = Object.entries(categoryMap).find(([kw]) =>
+        event.keywords!.some((k) => k.includes(kw))
+      );
+      if (matchedCat) {
+        const popular = await fetchPopularByCategory(matchedCat[1] as BabyCategory, 5);
+        const filtered = popular.filter((p) => p.trackerCount > 0);
+        if (filtered.length > 0) {
+          const mapped: CoupangProduct[] = filtered.map((p) => ({
+            productId: parseInt(p.productId) || 0,
+            productName: p.productName,
+            productPrice: p.currentPrice,
+            productImage: p.thumbnail,
+            productUrl: '',
+            categoryName: p.category,
+            isRocket: false,
+          }));
+          setEventProducts((prev) => ({ ...prev, [index]: mapped }));
+          setLoadingEvent(null);
+          return;
+        }
+      }
+    } catch {}
+
+    // 결과 없음
+    setEventProducts((prev) => ({ ...prev, [index]: [] }));
     setLoadingEvent(null);
   }, [eventProducts]);
 
@@ -339,7 +375,9 @@ export default function HomeScreen() {
                 )}
                 {eventProducts[i] && eventProducts[i].length === 0 && (
                   <View style={styles.eventProductList}>
-                    <Text style={styles.catProductEmpty}>서비스 준비 중입니다</Text>
+                    <Text style={styles.catProductEmpty}>
+                      {hasCoupangApiKeys() ? '추천 상품을 불러올 수 없습니다' : '관심상품을 등록하면 추천 상품이 표시됩니다'}
+                    </Text>
                   </View>
                 )}
               </View>

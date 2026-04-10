@@ -7,11 +7,13 @@ export function initCoupangApi() {
   const accessKey = process.env.EXPO_PUBLIC_COUPANG_ACCESS_KEY || '';
   const secretKey = process.env.EXPO_PUBLIC_COUPANG_SECRET_KEY || '';
 
+  console.log('[Config] 쿠팡 API 키 확인 — access:', accessKey ? `${accessKey.slice(0, 8)}...` : '(없음)', 'secret:', secretKey ? `${secretKey.slice(0, 4)}...` : '(없음)');
+
   if (accessKey && secretKey) {
     setCoupangApiKeys(accessKey, secretKey);
     console.log('[Config] 쿠팡 파트너스 API 키 로드 완료');
   } else {
-    console.log('[Config] 쿠팡 파트너스 API 키 없음 (EAS Secrets 미설정)');
+    console.log('[Config] 쿠팡 파트너스 API 키 없음 — eas.json에 "environment": "production" 확인 필요');
   }
 
   // 공공데이터 API 초기화

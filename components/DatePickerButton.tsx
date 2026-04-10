@@ -17,8 +17,10 @@ export default function DatePickerButton({ value, onChange, placeholder = '날�
 
   const dateObj = value ? new Date(value + 'T00:00:00') : new Date();
 
-  const handleChange = (_: DateTimePickerEvent, selected?: Date) => {
+  const handleChange = (event: DateTimePickerEvent, selected?: Date) => {
     if (Platform.OS === 'android') setShow(false);
+    // Android: 'set' = 확인, 'dismissed' = 취소. 취소 시 onChange 호출하지 않음
+    if (event.type === 'dismissed') return;
     if (selected) {
       const y = selected.getFullYear();
       const m = String(selected.getMonth() + 1).padStart(2, '0');

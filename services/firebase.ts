@@ -90,25 +90,37 @@ export function getCurrentUid(): string | null {
   return auth?.currentUser?.uid ?? null;
 }
 
+export interface LinkGoogleResult {
+  success: boolean;
+  error?: string;
+  /** uid가 변경됨 = 기존 계정 복구 (재설치 시나리오). 데이터 복원 필요 */
+  recoveredAccount: boolean;
+}
+
 /** 구글 로그인 → 익명 계정에 연동 (merge) */
-export async function linkGoogleAccount(idToken: string): Promise<{ success: boolean; error?: string }> {
-  if (!auth) return { success: false, error: 'Firebase 미초기화' };
+export async function linkGoogleAccount(idToken: string): Promise<LinkGoogleResult> {
+  if (!auth) return { success: false, error: 'Firebase 미초기화', recoveredAccount: false };
+
+  const prevUid = auth.currentUser?.uid;
 
   try {
     const credential = GoogleAuthProvider.credential(idToken);
     const currentUser = auth.currentUser;
 
     if (currentUser?.isAnonymous) {
-      // 익명 → 구글 연동 (데이터 유지)
+      // 익명 → 구글 연동 (데이터 유지, uid 불변)
       await linkWithCredential(currentUser, credential);
-      return { success: true };
+      console.log('[Firebase] 구글 연동 성공 (uid 유지):', currentUser.uid);
+      return { success: true, recoveredAccount: false };
     } else if (currentUser) {
       // 이미 로그인된 상태
-      return { success: true };
+      return { success: true, recoveredAccount: false };
     } else {
       // 로그인 안 된 상태 → 구글로 직접 로그인
-      await signInWithCredential(auth, credential);
-      return { success: true };
+      const result = await signInWithCredential(auth, credential);
+      const newUid = result.user.uid;
+      console.log('[Firebase] 구글 직접 로그인 성공:', newUid);
+      return { success: true, recoveredAccount: prevUid !== newUid };
     }
   } catch (e: any) {
     if (e.code === 'auth/credential-already-in-use') {
@@ -116,16 +128,17 @@ export async function linkGoogleAccount(idToken: string): Promise<{ success: boo
       // → signInWithCredential로 기존 구글 계정으로 직접 로그인 (데이터 복구)
       try {
         const credential = GoogleAuthProvider.credential(idToken);
-        await signInWithCredential(auth!, credential);
-        console.log('[Firebase] 기존 구글 계정으로 로그인 성공 (데이터 복구)');
-        return { success: true };
+        const result = await signInWithCredential(auth!, credential);
+        const newUid = result.user.uid;
+        console.log('[Firebase] 기존 구글 계정으로 로그인 성공 (데이터 복구):', prevUid, '→', newUid);
+        return { success: true, recoveredAccount: true };
       } catch (fallbackError: any) {
         console.warn('[Firebase] 구글 직접 로그인도 실패:', fallbackError);
-        return { success: false, error: fallbackError.message };
+        return { success: false, error: fallbackError.message, recoveredAccount: false };
       }
     }
     console.warn('[Firebase] 구글 연동 실패:', e);
-    return { success: false, error: e.message };
+    return { success: false, error: e.message, recoveredAccount: false };
   }
 }
 

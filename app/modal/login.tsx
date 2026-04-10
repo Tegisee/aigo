@@ -5,8 +5,69 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
-import { getAuthState, linkGoogleAccount, fetchUserSettings, fetchItemsFromFirestore } from '../../services/firebase';
+import { getAuthState, linkGoogleAccount, fetchUserSettings, fetchItemsFromFirestore, getCurrentUid } from '../../services/firebase';
+import { registerForPushNotifications } from '../../services/notifications';
 import { signInWithGoogle } from '../../services/googleAuth';
+
+/** Firestore에서 유저 설정 + 관심상품을 복원하여 Zustand에 반영 */
+async function restoreDataFromFirestore(): Promise<{ childrenCount: number; itemsCount: number }> {
+  const uid = getCurrentUid();
+  console.log('[Login] 데이터 복원 시작 — uid:', uid);
+
+  const [settings, items] = await Promise.all([
+    fetchUserSettings(),
+    fetchItemsFromFirestore(),
+  ]);
+
+  console.log('[Login] Firestore 조회 결과 — settings:', settings ? Object.keys(settings) : 'null', 'items:', items.length);
+
+  let childrenCount = 0;
+
+  if (settings) {
+    const restoreKeys = [
+      'children', 'selectedChildId',
+      'babyName', 'babyGender', 'babyBirthDate',
+      'parentInfo',
+      'vaccinationRecords', 'checkupRecords',
+      'vaccinationHospitals', 'checkupHospitals',
+      'notificationEnabled', 'repurchaseNotificationEnabled',
+      'isWowMember',
+    ] as const;
+
+    const restoreData: Record<string, any> = {};
+    for (const key of restoreKeys) {
+      if (settings[key] !== undefined) {
+        restoreData[key] = settings[key];
+      }
+    }
+
+    // children 배열이 있으면 selectedChild 데이터 동기화 보장
+    if (restoreData.children?.length > 0) {
+      childrenCount = restoreData.children.length;
+      const selectedId = restoreData.selectedChildId;
+      const selectedChild = restoreData.children.find((c: any) => c.id === selectedId) || restoreData.children[0];
+      if (selectedChild) {
+        restoreData.selectedChildId = selectedChild.id;
+        restoreData.babyName = selectedChild.name;
+        restoreData.babyGender = selectedChild.gender;
+        restoreData.babyBirthDate = selectedChild.birthDate;
+      }
+    }
+
+    if (Object.keys(restoreData).length > 0) {
+      // hasSeenOnboarding도 true로 설정 (데이터가 있으므로 온보딩 불필요)
+      restoreData.hasSeenOnboarding = true;
+      useAppStore.setState(restoreData);
+      console.log('[Login] Zustand 복원 완료 — keys:', Object.keys(restoreData));
+    }
+  }
+
+  if (items.length > 0) {
+    useAppStore.setState({ trackedItems: items });
+  }
+
+  return { childrenCount, itemsCount: items.length };
+}
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -27,35 +88,31 @@ export default function LoginScreen() {
         return;
       }
 
-      // 2. Firebase에 연동 (익명 → 구글 merge)
+      // 2. Firebase에 연동 (익명 → 구글 merge 또는 기존 계정 복구)
       const firebaseResult = await linkGoogleAccount(googleResult.idToken);
       if (firebaseResult.success) {
         setLinked('google');
 
-        // 3. Firestore에서 기존 데이터 복원 (재설치 시)
+        // 3. uid가 변경된 경우 (재설치 → 기존 계정 복구) push token 재등록
+        if (firebaseResult.recoveredAccount) {
+          console.log('[Login] 계정 복구 감지 — push token 재등록');
+          registerForPushNotifications().catch(() => {});
+        }
+
+        // 4. Firestore에서 데이터 복원
         try {
-          const [settings, items] = await Promise.all([
-            fetchUserSettings(),
-            fetchItemsFromFirestore(),
-          ]);
-          if (settings) {
-            const restoreKeys = ['children', 'selectedChildId', 'babyName', 'babyGender', 'babyBirthDate', 'parentInfo', 'vaccinationRecords', 'checkupRecords', 'vaccinationHospitals', 'checkupHospitals', 'notificationEnabled', 'repurchaseNotificationEnabled', 'isWowMember'] as const;
-            const restoreData: Record<string, any> = {};
-            for (const key of restoreKeys) {
-              if (settings[key] !== undefined) restoreData[key] = settings[key];
-            }
-            if (Object.keys(restoreData).length > 0) {
-              useAppStore.setState(restoreData);
-            }
+          const { childrenCount, itemsCount } = await restoreDataFromFirestore();
+
+          const parts = [`${googleResult.email}`, '구글 계정이 연동되었습니다.'];
+          if (firebaseResult.recoveredAccount && (childrenCount > 0 || itemsCount > 0)) {
+            parts.push(`\n이전 데이터 복원 완료`);
+            if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
+            if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
           }
-          if (items.length > 0) {
-            useAppStore.setState({ trackedItems: items });
-          }
-          const restoredCount = items.length;
-          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.${restoredCount > 0 ? `\n관심상품 ${restoredCount}건 복원됨` : ''}`);
+          Alert.alert('연동 완료', parts.join('\n'));
         } catch (e) {
           console.warn('[Login] 데이터 복원 실패:', e);
-          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.`);
+          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.\n(데이터 복원 중 오류 발생)`);
         }
       } else {
         Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');

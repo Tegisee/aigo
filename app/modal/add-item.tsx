@@ -84,6 +84,7 @@ export default function AddItemModal() {
   const [scraped, setScraped] = useState<ScrapedProduct | null>(null);
   const [scrapeFailed, setScrapeFailed] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState<string | null>(null);
+  const [scrapeHtml, setScrapeHtml] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<BabyCategory>('기타');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -107,6 +108,7 @@ export default function AddItemModal() {
       setScraped(null);
       setScrapeFailed(false);
       setScrapeUrl(null);
+      setScrapeHtml(null);
       setSaving(false);
     }, [sharedUrl])
   );
@@ -178,9 +180,53 @@ export default function AddItemModal() {
     const isIos = Platform.OS === 'ios';
     const scrapeDelay = isIos ? 4000 : 0;
 
+    // Android: fetch()로 HTML을 먼저 받아와서 WebView에 html로 전달
+    // → intent:// 리다이렉트로 쿠팡 앱이 열리는 문제를 근본적으로 차단
+    if (Platform.OS === 'android') {
+      try {
+        console.log('[AddItem] Android: fetch로 HTML 선행 로드');
+        const res = await fetch(resolved, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' },
+          redirect: 'follow',
+        });
+        // fetch가 따라간 최종 URL 기록
+        if (res.url && res.url.includes('coupang.com')) {
+          resolvedUrlRef.current = res.url;
+        }
+        const html = await res.text();
+        if (html && html.length > 1000) {
+          console.log('[AddItem] Android: HTML 로드 성공 (' + html.length + 'bytes), finalUrl:', (res.url || '').slice(0, 80));
+          // 타임아웃 설정
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          timeoutRef.current = setTimeout(() => {
+            setScrapeHtml(null);
+            setScrapeUrl(null);
+            if (retryCountRef.current === 0 && parsedUrlRef.current) {
+              retryCountRef.current++;
+              console.log('[AddItem] 타임아웃 → URL 직접 로드 재시도');
+              setTimeout(() => {
+                scrapeKeyRef.current++;
+                setScrapeUrl(parsedUrlRef.current);
+                timeoutRef.current = setTimeout(() => { setScrapeFailed(true); setScrapeUrl(null); }, 30000);
+              }, 1000);
+              return;
+            }
+            setScrapeFailed(true);
+          }, 25000);
+
+          scrapeKeyRef.current++;
+          setScrapeHtml(html);
+          return; // HTML 모드로 스크래핑 시작, 아래 URL 모드 건너뜀
+        }
+      } catch (e) {
+        console.warn('[AddItem] Android: HTML fetch 실패, URL 모드 fallback:', e);
+      }
+    }
+
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       setScrapeUrl(null);
+      setScrapeHtml(null);
       // 첫 타임아웃 시 자동 재시도 1회
       if (retryCountRef.current === 0 && parsedUrlRef.current) {
         retryCountRef.current++;
@@ -214,6 +260,7 @@ export default function AddItemModal() {
     setRepurchaseEnabled(isConsumable(cat));
     setRepurchaseDays(defaultRepurchaseDays(cat));
     setScrapeUrl(null);
+    setScrapeHtml(null);
     setStep('target');
   }, []);
 
@@ -222,6 +269,7 @@ export default function AddItemModal() {
   const handleScrapeError = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setScrapeUrl(null);
+    setScrapeHtml(null);
 
     // 첫 실패 시 자동 재시도 1회 (WebView 콜드 스타트 대응)
     if (retryCountRef.current === 0 && parsedUrlRef.current) {
@@ -547,10 +595,12 @@ export default function AddItemModal() {
         )}
       </KeyboardAvoidingView>
 
-      {scrapeUrl && (
+      {(scrapeUrl || scrapeHtml) && (
         <CoupangScraper
           key={scrapeKeyRef.current}
           url={scrapeUrl}
+          html={scrapeHtml}
+          baseUrl="https://www.coupang.com"
           onResult={handleScrapeResult}
           onError={handleScrapeError}
         />

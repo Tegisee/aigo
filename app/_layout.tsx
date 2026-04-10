@@ -18,28 +18,85 @@ import OnboardingScreen from '../components/OnboardingScreen';
 
 const INSTALL_MARKER_KEY = 'aigo-install-marker';
 
-/** 재설치 감지: SecureStore 마커가 없으면 AsyncStorage를 초기화하여 온보딩 재표시 */
+/** Zustand persist rehydration 완료 대기 */
+function waitForHydration(): Promise<void> {
+  if (useAppStore.persist.hasHydrated()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsub = useAppStore.persist.onFinishHydration(() => {
+      unsub();
+      resolve();
+    });
+  });
+}
+
+/** 전체 로컬 데이터 초기화 (재설치 시) */
+async function clearLocalData() {
+  // 1. AsyncStorage 전체 삭제
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    if (allKeys.length > 0) await AsyncStorage.multiRemove(allKeys);
+  } catch {
+    await AsyncStorage.removeItem('aigo-storage').catch(() => {});
+  }
+  // 2. Zustand 인메모리 상태 초기화
+  useAppStore.setState({
+    hasSeenOnboarding: false,
+    children: [],
+    selectedChildId: null,
+    babyName: '',
+    babyGender: 'unknown',
+    babyBirthDate: null,
+    parentInfo: {},
+    trackedItems: [],
+    vaccinationRecords: {},
+    checkupRecords: {},
+    vaccinationHospitals: {},
+    checkupHospitals: {},
+    isLinked: false,
+    linkedProvider: null,
+    isWowMember: false,
+    notificationEnabled: true,
+    repurchaseNotificationEnabled: true,
+  });
+}
+
+/**
+ * 재설치 감지 로직
+ *
+ * 핵심 원리:
+ * - Android auto-backup이 AsyncStorage(SharedPreferences)를 복원하지만
+ *   Keystore 키는 복원하지 않으므로 SecureStore 읽기가 실패하거나 null 반환
+ * - SecureStore 읽기 실패 + hasSeenOnboarding=true → 재설치 확정
+ * - 반드시 Zustand rehydration 완료 후 판단해야 올바른 상태를 확인 가능
+ */
 async function checkFreshInstall() {
+  // 1. Zustand persist가 AsyncStorage에서 복원 완료될 때까지 대기
+  await waitForHydration();
+
+  const state = useAppStore.getState();
+  let markerValid = false;
+
+  // 2. SecureStore 마커 확인
   try {
     const marker = await SecureStore.getItemAsync(INSTALL_MARKER_KEY);
-    if (!marker) {
-      // SecureStore에 마커 없음 = 신규 설치 또는 재설치
-      console.log('[Install] 신규/재설치 감지 — AsyncStorage 초기화');
-      try {
-        const allKeys = await AsyncStorage.getAllKeys();
-        if (allKeys.length > 0) {
-          await AsyncStorage.multiRemove(allKeys);
-        }
-      } catch {
-        await AsyncStorage.removeItem('aigo-storage');
-      }
-      // Zustand 상태도 리셋 (persist에서 복원된 값 덮어쓰기)
-      useAppStore.setState({ hasSeenOnboarding: false });
-      // 마커 저장
-      await SecureStore.setItemAsync(INSTALL_MARKER_KEY, new Date().toISOString());
-    }
+    markerValid = !!marker;
+  } catch {
+    // Keystore 키 소실 = 재설치 증거
+    console.log('[Install] SecureStore 읽기 실패 — Keystore 키 소실');
+    markerValid = false;
+  }
+
+  // 3. 판단: 마커 없음 + 온보딩 완료 상태 = 백업 데이터가 복원된 재설치
+  if (!markerValid && state.hasSeenOnboarding) {
+    console.log('[Install] 재설치 감지 — 백업 데이터 초기화');
+    await clearLocalData();
+  }
+
+  // 4. 마커 (재)저장
+  try {
+    await SecureStore.setItemAsync(INSTALL_MARKER_KEY, new Date().toISOString());
   } catch (e) {
-    console.warn('[Install] 설치 확인 실패:', e);
+    console.warn('[Install] SecureStore 마커 저장 실패:', e);
   }
 }
 
