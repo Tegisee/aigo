@@ -61,24 +61,6 @@ function parseProductName(text: string): string {
   return '';
 }
 
-/** fetch한 쿠팡 HTML에서 앱 유도 코드를 제거 (BUG-12) */
-function sanitizeCoupangHtml(html: string): string {
-  return html
-    // intent://, coupang://, market:// URL을 포함하는 script 태그 제거
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, (match) => {
-      if (/intent:\/\/|coupang:\/\/|market:\/\/|\.coupang\.com\/app|applink\.coupang|deeplink/i.test(match)) {
-        return '<!-- blocked script -->';
-      }
-      return match;
-    })
-    // 앱 열기 유도 meta 태그 제거 (예: <meta http-equiv="refresh" content="0;url=intent://...">)
-    .replace(/<meta[^>]*(?:intent:\/\/|coupang:\/\/|market:\/\/|app-argument)[^>]*>/gi, '<!-- blocked meta -->')
-    // 앱 다운로드/열기 배너 div 제거
-    .replace(/<div[^>]*class="[^"]*(?:app-banner|app-download|smart-banner|top-app-bar)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
-    // a 태그의 intent:// href 무력화
-    .replace(/href\s*=\s*["'](?:intent:\/\/|coupang:\/\/|market:\/\/)[^"']*["']/gi, 'href="#"');
-}
-
 type Step = 'url' | 'scraping' | 'target';
 
 export default function AddItemModal() {
@@ -102,7 +84,6 @@ export default function AddItemModal() {
   const [scraped, setScraped] = useState<ScrapedProduct | null>(null);
   const [scrapeFailed, setScrapeFailed] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState<string | null>(null);
-  const [scrapeHtml, setScrapeHtml] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<BabyCategory>('기타');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -126,7 +107,6 @@ export default function AddItemModal() {
       setScraped(null);
       setScrapeFailed(false);
       setScrapeUrl(null);
-      setScrapeHtml(null);
       setSaving(false);
     }, [sharedUrl])
   );
@@ -164,7 +144,10 @@ export default function AddItemModal() {
     setScraped(null);
     setScrapeFailed(false);
 
-    // URL resolve + 제휴 딥링크 생성 (WebView와 무관하게 선행)
+    // 원본 URL 보존 (지금이야 방식: WebView가 직접 리다이렉트 처리)
+    parsedUrlRef.current = parsedUrl;
+
+    // URL resolve (제휴 딥링크 생성용, WebView에는 원본 URL 전달)
     let resolved = parsedUrl;
     if (parsedUrl.includes('link.coupang.com')) {
       try {
@@ -178,13 +161,11 @@ export default function AddItemModal() {
         }
       } catch {}
     }
-    // resolve된 URL을 WebView에 전달 (link.coupang.com → 앱 선택기 방지)
-    parsedUrlRef.current = resolved;
     resolvedUrlRef.current = resolved;
     console.log('[AddItem] resolved:', resolved.slice(0, 80));
 
     // 제휴 딥링크 생성
-    affiliateUrlRef.current = parsedUrl; // fallback (원본 URL)
+    affiliateUrlRef.current = parsedUrl; // fallback
     if (hasCoupangApiKeys() && (resolved.includes('/vp/') || resolved.includes('/vm/'))) {
       try {
         const deepLink = await generateDeepLink(resolved, 'tracked');
@@ -198,55 +179,9 @@ export default function AddItemModal() {
     const isIos = Platform.OS === 'ios';
     const scrapeDelay = isIos ? 4000 : 0;
 
-    // Android: fetch()로 HTML을 먼저 받아와서 WebView에 html로 전달
-    // → intent:// 리다이렉트로 쿠팡 앱이 열리는 문제를 근본적으로 차단
-    if (Platform.OS === 'android') {
-      try {
-        console.log('[AddItem] Android: fetch로 HTML 선행 로드');
-        const res = await fetch(resolved, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36' },
-          redirect: 'follow',
-        });
-        // fetch가 따라간 최종 URL 기록
-        if (res.url && res.url.includes('coupang.com')) {
-          resolvedUrlRef.current = res.url;
-        }
-        let html = await res.text();
-        if (html && html.length > 1000) {
-          // 앱 유도 코드 제거: intent://, coupang://, market:// 관련 script/meta/a 태그 무력화
-          html = sanitizeCoupangHtml(html);
-          console.log('[AddItem] Android: HTML 로드+정제 성공 (' + html.length + 'bytes), finalUrl:', (res.url || '').slice(0, 80));
-          // 타임아웃 설정
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          timeoutRef.current = setTimeout(() => {
-            setScrapeHtml(null);
-            setScrapeUrl(null);
-            if (retryCountRef.current === 0 && parsedUrlRef.current) {
-              retryCountRef.current++;
-              console.log('[AddItem] 타임아웃 → URL 직접 로드 재시도');
-              setTimeout(() => {
-                scrapeKeyRef.current++;
-                setScrapeUrl(parsedUrlRef.current);
-                timeoutRef.current = setTimeout(() => { setScrapeFailed(true); setScrapeUrl(null); }, 30000);
-              }, 1000);
-              return;
-            }
-            setScrapeFailed(true);
-          }, 25000);
-
-          scrapeKeyRef.current++;
-          setScrapeHtml(html);
-          return; // HTML 모드로 스크래핑 시작, 아래 URL 모드 건너뜀
-        }
-      } catch (e) {
-        console.warn('[AddItem] Android: HTML fetch 실패, URL 모드 fallback:', e);
-      }
-    }
-
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       setScrapeUrl(null);
-      setScrapeHtml(null);
       // 첫 타임아웃 시 자동 재시도 1회
       if (retryCountRef.current === 0 && parsedUrlRef.current) {
         retryCountRef.current++;
@@ -265,9 +200,10 @@ export default function AddItemModal() {
       setScrapeFailed(true);
     }, 30000 + scrapeDelay);
 
+    // WebView에 원본 URL 전달 (지금이야 방식: WebView가 리다이렉트 직접 처리)
     setTimeout(() => {
       scrapeKeyRef.current++;
-      setScrapeUrl(resolved);
+      setScrapeUrl(parsedUrl);
     }, scrapeDelay);
   };
 
@@ -280,7 +216,6 @@ export default function AddItemModal() {
     setRepurchaseEnabled(isConsumable(cat));
     setRepurchaseDays(defaultRepurchaseDays(cat));
     setScrapeUrl(null);
-    setScrapeHtml(null);
     setStep('target');
   }, []);
 
@@ -289,7 +224,6 @@ export default function AddItemModal() {
   const handleScrapeError = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setScrapeUrl(null);
-    setScrapeHtml(null);
 
     // 첫 실패 시 자동 재시도 1회 (WebView 콜드 스타트 대응)
     if (retryCountRef.current === 0 && parsedUrlRef.current) {
@@ -615,12 +549,10 @@ export default function AddItemModal() {
         )}
       </KeyboardAvoidingView>
 
-      {(scrapeUrl || scrapeHtml) && (
+      {scrapeUrl && (
         <CoupangScraper
           key={scrapeKeyRef.current}
           url={scrapeUrl}
-          html={scrapeHtml}
-          baseUrl="https://www.coupang.com"
           onResult={handleScrapeResult}
           onError={handleScrapeError}
         />

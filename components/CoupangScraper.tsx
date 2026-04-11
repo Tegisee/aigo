@@ -329,7 +329,7 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
     console.error('[Scraper] HTTP 에러:', syntheticEvent.nativeEvent?.statusCode, syntheticEvent.nativeEvent?.url?.slice(0, 80));
   }, []);
 
-  // 딥링크 및 앱 리다이렉트 차단 — 앱 선택기 방지
+  // 딥링크 및 앱 리다이렉트 차단 (지금이야 동일 — link.coupang.com 허용)
   const handleShouldStartLoad = useCallback((event: { url: string; navigationType?: string }) => {
     const reqUrl = event.url;
     console.log(`[Scraper] shouldStartLoad: type=${event.navigationType} url=${reqUrl.slice(0, 80)}`);
@@ -340,28 +340,13 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
     }
     try {
       const host = new URL(reqUrl).hostname;
-      const blockedHosts = [
-        'applink.coupang.com',
-        // link.coupang.com은 허용 — WebView 내 리다이렉트 필요 (v1.0.0 동작 복원)
-        'play.google.com',
-        'apps.apple.com',
-        'itunes.apple.com',
-        'app.adjust.com',       // 앱 트래커 리다이렉트
-        'click.coupang.com',    // 클릭 트래커
-        'in-app.coupang.com',   // 인앱 리다이렉트
-      ];
-      if (blockedHosts.includes(host)) {
+      if (
+        host === 'applink.coupang.com' ||
+        host === 'play.google.com' ||
+        host === 'apps.apple.com' ||
+        host === 'itunes.apple.com'
+      ) {
         console.log('[Scraper] 차단:', host);
-        return false;
-      }
-      // 쿠팡 앱 다운로드/열기 유도 URL 패턴 차단
-      const path = new URL(reqUrl).pathname;
-      if (host.includes('coupang.com') && (
-        path.includes('/app') ||
-        path.includes('/deep-link') ||
-        path.includes('/redirect')
-      )) {
-        console.log('[Scraper] 차단: 앱 유도 경로', path);
         return false;
       }
     } catch {}
@@ -374,16 +359,8 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
   }
   console.log('[Scraper] WebView 렌더! source=', activeHtml ? 'html' : activeUrl?.slice(0, 80));
 
-  // HTML source 모드: 딥링크 차단 JS를 <head> 최상단에 직접 삽입
-  // injectedJavaScriptBeforeContentLoaded는 HTML source에서 실행 타이밍 불안정
   const source = activeHtml
-    ? {
-        html: activeHtml.replace(
-          /(<head[^>]*>)/i,
-          `$1<script>${BLOCK_DEEPLINK_JS}</script>`
-        ),
-        baseUrl: activeBaseUrl || 'https://www.coupang.com',
-      }
+    ? { html: activeHtml, baseUrl: activeBaseUrl || 'https://www.coupang.com' }
     : { uri: activeUrl! };
 
   return (
