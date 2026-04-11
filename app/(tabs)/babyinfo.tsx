@@ -201,7 +201,12 @@ export default function BabyInfoScreen() {
                             <Text style={[styles.vaccineName, recordDate && styles.vaccineNameDone]}>
                               {v}
                             </Text>
-                            {recordDate && <Text style={styles.vaccineDate}>{recordDate}{vaccinationHospitals[v] ? ` · ${vaccinationHospitals[v]}` : ''}</Text>}
+                            {recordDate && (
+                              <View style={styles.vaccineDateCol}>
+                                <Text style={styles.vaccineDate}>{recordDate}</Text>
+                                {vaccinationHospitals[v] ? <Text style={styles.vaccineHospital}>{vaccinationHospitals[v]}</Text> : null}
+                              </View>
+                            )}
                           </TouchableOpacity>
                         );
                       })}
@@ -226,7 +231,14 @@ export default function BabyInfoScreen() {
                 onPress={() => { setSelectedDate(cv.date || null); setHospitalInput(cv.hospital || ''); setDateModalTarget({ type: 'vaccine', key: `custom-v-${i}`, label: cv.name }); }}
               >
                 <Text style={styles.customItemName}>{cv.name}</Text>
-                <Text style={styles.vaccineDate}>{cv.date ? `${cv.date}${cv.hospital ? ` · ${cv.hospital}` : ''}` : '탭하여 접종일 기록'}</Text>
+                {cv.date ? (
+                  <View style={styles.vaccineDateCol}>
+                    <Text style={styles.vaccineDate}>{cv.date}</Text>
+                    {cv.hospital ? <Text style={styles.vaccineHospital}>{cv.hospital}</Text> : null}
+                  </View>
+                ) : (
+                  <Text style={styles.vaccineDate}>탭하여 접종일 기록</Text>
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setCustomVaccines((prev) => prev.filter((_, j) => j !== i))}>
                 <Ionicons name="close-circle-outline" size={18} color={theme.subtext} />
@@ -332,7 +344,12 @@ export default function BabyInfoScreen() {
                     <View style={styles.vaccineRight}>
                       <Text style={[styles.vaccineName, isDone && styles.vaccineNameDone]}>{item.ageRange}</Text>
                       <Text style={styles.vaccineNote}>{item.items.join(', ')}</Text>
-                      {recordDate && <Text style={styles.vaccineDate}>{recordDate}{checkupHospitals[roundKey] ? ` · ${checkupHospitals[roundKey]}` : ''}</Text>}
+                      {recordDate && (
+                        <View style={styles.vaccineDateCol}>
+                          <Text style={styles.vaccineDate}>{recordDate}</Text>
+                          {checkupHospitals[roundKey] ? <Text style={styles.vaccineHospital}>{checkupHospitals[roundKey]}</Text> : null}
+                        </View>
+                      )}
                     </View>
                   </TouchableOpacity>
                 </View>
@@ -353,7 +370,12 @@ export default function BabyInfoScreen() {
                 onPress={() => { setSelectedDate(cc.date || null); setHospitalInput(cc.hospital || ''); setDateModalTarget({ type: 'checkup', key: `custom-c-${i}`, label: cc.name }); }}
               >
                 <Text style={styles.customItemName}>{cc.name}</Text>
-                {cc.date && <Text style={styles.vaccineDate}>{cc.date}{cc.hospital ? ` · ${cc.hospital}` : ''}</Text>}
+                {cc.date && (
+                  <View style={styles.vaccineDateCol}>
+                    <Text style={styles.vaccineDate}>{cc.date}</Text>
+                    {cc.hospital ? <Text style={styles.vaccineHospital}>{cc.hospital}</Text> : null}
+                  </View>
+                )}
               </TouchableOpacity>
               <TouchableOpacity onPress={() => setCustomCheckups((prev) => prev.filter((_, j) => j !== i))}>
                 <Ionicons name="close-circle-outline" size={18} color={theme.subtext} />
@@ -512,7 +534,8 @@ export default function BabyInfoScreen() {
           <Modal visible transparent animationType="fade">
             <KeyboardAvoidingView
               style={styles.dateModalOverlay}
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              behavior="padding"
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
               <ScrollView
                 contentContainerStyle={styles.dateModalScrollContent}
@@ -542,6 +565,12 @@ export default function BabyInfoScreen() {
                     placeholderTextColor={theme.subtext}
                     value={hospitalInput}
                     onChangeText={setHospitalInput}
+                    onFocus={() => {
+                      // Android: 키패드 올라올 때 ScrollView가 입력창까지 스크롤
+                      setTimeout(() => {
+                        // ScrollView contentContainerStyle의 padding이 키패드 높이만큼 여유 확보
+                      }, 300);
+                    }}
                   />
                   <TouchableOpacity
                     style={[styles.confirmBtn, !selectedDate && styles.confirmBtnDisabled]}
@@ -560,6 +589,9 @@ export default function BabyInfoScreen() {
                     <Text style={styles.dateModalCancelText}>취소</Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* 키패드가 올라올 때 스크롤 여유 공간 */}
+                <View style={{ height: 200 }} />
               </ScrollView>
             </KeyboardAvoidingView>
           </Modal>
@@ -627,7 +659,9 @@ const styles = StyleSheet.create({
   confirmBtnTextDisabled: { color: theme.subtext },
   dateModalCancel: { alignItems: 'center', paddingVertical: 10 },
   dateModalCancelText: { fontSize: 15, color: theme.subtext },
-  vaccineDate: { fontSize: 11, color: theme.success, marginLeft: 'auto' },
+  vaccineDateCol: { marginLeft: 'auto', alignItems: 'flex-end', flexShrink: 0 },
+  vaccineDate: { fontSize: 11, color: theme.success },
+  vaccineHospital: { fontSize: 10, color: theme.subtext, marginTop: 1 },
   vaccineNote: { fontSize: 11, color: theme.subtext, marginTop: 2 },
   divider: { height: 1, backgroundColor: theme.border },
 

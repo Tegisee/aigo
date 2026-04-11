@@ -342,7 +342,7 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
       const host = new URL(reqUrl).hostname;
       const blockedHosts = [
         'applink.coupang.com',
-        'link.coupang.com',
+        // link.coupang.com은 허용 — WebView 내 리다이렉트 필요 (v1.0.0 동작 복원)
         'play.google.com',
         'apps.apple.com',
         'itunes.apple.com',

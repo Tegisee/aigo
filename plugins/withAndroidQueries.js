@@ -9,15 +9,13 @@ module.exports = function withAndroidQueries(config) {
       manifest.queries = [];
     }
 
+    // coupang scheme 쿼리 제거 (BUG-12: WebView에서 앱 선택기 유발)
+    // https scheme만 유지 — 쿠팡 앱 설치 여부 확인용
     manifest.queries.push({
       package: [
         { $: { 'android:name': 'com.coupang.mobile' } },
       ],
       intent: [
-        {
-          action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
-          data: [{ $: { 'android:scheme': 'coupang' } }],
-        },
         {
           action: [{ $: { 'android:name': 'android.intent.action.VIEW' } }],
           data: [{ $: { 'android:scheme': 'https' } }],
