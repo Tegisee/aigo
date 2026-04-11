@@ -183,6 +183,11 @@ export default function RootLayout() {
 
   const [installChecked, setInstallChecked] = useState(false);
 
+  // API 키 초기화 — AsyncStorage/Zustand과 무관, 즉시 실행 (ENV-1 수정)
+  useEffect(() => {
+    initCoupangApi();
+  }, []);
+
   // 재설치 감지 (최초 1회)
   useEffect(() => {
     checkFreshInstall().finally(() => setInstallChecked(true));
@@ -191,7 +196,6 @@ export default function RootLayout() {
   useEffect(() => {
     if (!installChecked) return;
     migrateStorageKey();
-    initCoupangApi();
 
     (async () => {
       await signInAnonymously();

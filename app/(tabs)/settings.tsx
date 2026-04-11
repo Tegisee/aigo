@@ -9,6 +9,7 @@ import { theme } from '../../constants/theme';
 import { useAppStore, type BabyGender, type Child, type ParentInfo } from '../../store/useAppStore';
 import DatePickerButton from '../../components/DatePickerButton';
 import { getPushDebugInfo } from '../../services/notifications';
+import { getCoupangApiDebug } from '../../services/config';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -374,6 +375,18 @@ export default function SettingsScreen() {
             <View style={styles.rowLeft}>
               <Ionicons name="notifications-outline" size={20} color={theme.subtext} />
               <Text style={styles.label}>푸시 알림 상태</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.row}
+            onPress={() => Alert.alert('쿠팡 API 상태', getCoupangApiDebug())}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="bag-outline" size={20} color={theme.subtext} />
+              <Text style={styles.label}>쿠팡 API 상태</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
           </TouchableOpacity>

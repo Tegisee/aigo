@@ -25,6 +25,17 @@ export function initCoupangApi() {
 
 export { hasCoupangApiKeys };
 
+/** 쿠팡 API 키 상태 디버그 (설정 화면용) */
+export function getCoupangApiDebug(): string {
+  const accessKey = process.env.EXPO_PUBLIC_COUPANG_ACCESS_KEY || '';
+  const secretKey = process.env.EXPO_PUBLIC_COUPANG_SECRET_KEY || '';
+  return [
+    `access: ${accessKey ? accessKey.slice(0, 12) + '...' : '(없음)'}`,
+    `secret: ${secretKey ? secretKey.slice(0, 8) + '...' : '(없음)'}`,
+    `hasCoupangApiKeys(): ${hasCoupangApiKeys()}`,
+  ].join('\n');
+}
+
 // 스토어 링크 (출시 후 업데이트)
 export const STORE_LINKS = {
   ios: '', // App Store URL
