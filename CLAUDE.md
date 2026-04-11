@@ -50,13 +50,13 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.3 비공개 테스트 검토 중 (2026-04-09)
+## 현재 상태: v1.0.4 (vc11) 내부 테스트 중 (2026-04-11)
 
 ### Google Play
 - 스토어: https://play.google.com/store/apps/details?id=com.aigo.app
 - GitHub: https://github.com/Tegisee/aigo (Private)
-- 현재 버전: 1.0.3 (버전 코드 9)
-- 비공개 테스트: v1.0.3 검토 중 (04-09 제출)
+- 현재 버전: 1.0.4 (버전 코드 11)
+- 비공개 테스트: v1.0.4 내부 테스트 중
 - 테스터 그룹: aigo_app@googlegroups.com
 - 상세: docs/014_구글플레이셋팅.md
 
@@ -125,24 +125,30 @@
 - ✅ 쿠팡 productId 매칭 실패 시 가격 근접 매칭 fallback 추가
 - ✅ Firestore Rules purchaseCount 업데이트 허용 추가
 
-**v1.0.4 수정 완료 (04-10)**
-- ✅ BUG-29: 재설치 온보딩 → expo-secure-store 설치 마커 + allowBackup:false
-- ✅ BUG-27,28: 접종/검진 플로우 → 날짜→병원명→확인 순서, 취소 시 미저장
-- ✅ BUG-26: 기념일 탭 반응 없음 → keywords 추가
-- ✅ ENV-2: 구글 로그인 데이터 복원 → Firestore에서 설정+상품 복원
-- ✅ BUG-23: 푸시 토큰 → projectId fallback + 재시도
-- ✅ ENV-1: 카테고리 추천 → 삭제 상품 필터링 + 안내 개선
-- ✅ BUG-12: 쿠팡 앱 전환 → WebView 차단 강화
-- ✅ BUG-24: 음력 생일 → korean-lunar-calendar 변환
+**v1.0.4 코드 수정 완료 (04-10)**
+- ✅ BUG-29: 재설치 온보딩 → expo-secure-store 설치 마커 + Zustand rehydration 대기 + allowBackup:false
+- ✅ BUG-27,28: 접종/검진 플로우 → DatePicker dismissed 체크 + 날짜→병원명→확인 3단계, 취소 시 미저장
+- ✅ BUG-26: 기념일 탭 반응 없음 → anniversary keywords 추가 + shared_products fallback
+- ✅ BUG-24: 음력 생일 → korean-lunar-calendar 음력→양력 변환
 - ✅ BUG-25: 기념일 서비스 준비 중 → BUG-26+ENV-1로 해결
 
 ### 남은 TODO
-**확인 필요 (v1.0.4 테스트)**
-1. **BUG-5**: 쿠팡 앱 딥링크 (intentFilters 추가 완료)
-2. **ENV-1**: 쿠팡 파트너스 API 키 실제 동작 확인
+
+**🔴 P0 — 기능 블로커**
+- **ENV-1**: 카테고리 추천 상품 미동작 — **원인 확정: EAS env가 sensitive로 등록됨 + SECRET_KEY 복붙 오류**. plaintext로 재등록 필요 (코드 수정 불필요)
+- **ENV-2**: 구글 로그인 데이터 복원 — 🔧 디버그 Alert 추가 완료 (uid/settings 키/children 표시). 다음 빌드 테스트에서 원인 특정
+- **BUG-23**: 푸시 토큰 — 🔧 설정 > "푸시 알림 상태" 디버그 화면 추가 완료. 다음 빌드에서 실패 단계 특정 가능
+- **BUG-12**: 쿠팡 공유 → 쿠팡앱 튕김 — 🔧 3중 수정 완료: intentFilter 제거 + HTML sanitize + `<head>` JS 삽입
+
+**✅ P1 — UX 버그 (수정 완료)**
+- **BUG-30**: 병원명 키패드 가림 → KeyboardAvoidingView + ScrollView 추가 (04-11)
+- **BUG-31**: 온보딩 레이아웃 → nextBtn 스타일 분리 + genderRow width 고정 (04-11)
+- **BUG-32**: 온보딩 필수 입력 → 비공개 제거 + isComplete 체크 + Alert (04-11)
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
+
+**다음 단계**: P0 블로커 순서대로 해결 → 로컬 빌드 → 비공개 테스트 제출
 
 ### EAS 빌드 크레딧
 - 현재: 100% 소진 (리셋: 2026-04-21)

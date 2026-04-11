@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   Animated,
   Platform,
+  Alert,
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
@@ -73,27 +74,39 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const { setBabyName, setBabyGender, setBabyBirthDate, addChild, children } = useAppStore();
   const [name, setName] = useState('');
-  const [gender, setGender] = useState<'male' | 'female' | 'unknown'>('unknown');
+  const [gender, setGender] = useState<'male' | 'female' | null>(null);
   const [birthDate, setBirthDate] = useState<string | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
   }, []);
 
-  const handleSave = () => {
-    const babyName = name.trim() || '';
+  const isComplete = name.trim().length > 0 && gender !== null && birthDate !== null;
 
-    if (babyName) setBabyName(babyName);
-    setBabyGender(gender);
-    if (birthDate) setBabyBirthDate(birthDate);
+  const handleSave = () => {
+    if (!isComplete) {
+      Alert.alert(
+        '필수 정보 입력',
+        '아이 이름, 성별, 생년월일을 모두 입력해야 월령별 맞춤 서비스를 이용할 수 있어요.',
+      );
+      return;
+    }
+
+    const babyName = name.trim();
+    const selectedGender = gender!; // isComplete 체크 후이므로 non-null
+    const selectedBirthDate = birthDate!;
+
+    setBabyName(babyName);
+    setBabyGender(selectedGender);
+    setBabyBirthDate(selectedBirthDate);
 
     // children[] 배열에도 동시 저장 (중복 방지)
-    if (babyName && birthDate && children.length === 0) {
+    if (children.length === 0) {
       addChild({
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
         name: babyName,
-        gender,
-        birthDate,
+        gender: selectedGender,
+        birthDate: selectedBirthDate,
       });
     }
 
@@ -111,7 +124,7 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        <Animated.View style={{ opacity: fadeAnim, alignItems: 'center', width: '100%' }}>
+        <Animated.View style={[styles.babyInfoContent, { opacity: fadeAnim }]}>
           <View style={styles.iconCircle}>
             <Text style={styles.iconEmoji}>👶</Text>
           </View>
@@ -120,47 +133,46 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
             아이 정보를 입력하면{'\n'}맞춤 상품을 추천해드려요
           </Text>
 
-        {/* 이름 입력 */}
-        <TextInput
-          style={styles.nameInput}
-          placeholder="이름 또는 애칭 (예: 쪼꼬미, 콩이)"
-          placeholderTextColor={theme.subtext}
-          value={name}
-          onChangeText={setName}
-          maxLength={20}
-        />
-
-        {/* 성별 선택 */}
-        <View style={styles.genderRow}>
-          {([
-            { key: 'male', label: '남아', emoji: '👦' },
-            { key: 'female', label: '여아', emoji: '👧' },
-            { key: 'unknown', label: '비공개', emoji: '🤍' },
-          ] as const).map((opt) => (
-            <TouchableOpacity
-              key={opt.key}
-              style={[styles.genderBtn, gender === opt.key && styles.genderBtnActive]}
-              onPress={() => setGender(opt.key)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.genderEmoji}>{opt.emoji}</Text>
-              <Text style={[styles.genderLabel, gender === opt.key && styles.genderLabelActive]}>
-                {opt.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* 생년월일 입력 (캘린더) */}
-        <View style={{ width: '100%', marginTop: 16 }}>
-          <DatePickerButton
-            label="생년월일"
-            value={birthDate}
-            onChange={setBirthDate}
-            placeholder="생년월일을 선택하세요"
+          {/* 이름 입력 */}
+          <TextInput
+            style={styles.nameInput}
+            placeholder="이름 또는 애칭 (예: 쪼꼬미, 콩이)"
+            placeholderTextColor={theme.subtext}
+            value={name}
+            onChangeText={setName}
+            maxLength={20}
           />
-        </View>
-      </Animated.View>
+
+          {/* 성별 선택 */}
+          <View style={styles.genderRow}>
+            {([
+              { key: 'male' as const, label: '남아', emoji: '👦' },
+              { key: 'female' as const, label: '여아', emoji: '👧' },
+            ]).map((opt) => (
+              <TouchableOpacity
+                key={opt.key}
+                style={[styles.genderBtn, gender === opt.key && styles.genderBtnActive]}
+                onPress={() => setGender(opt.key)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.genderEmoji}>{opt.emoji}</Text>
+                <Text style={[styles.genderLabel, gender === opt.key && styles.genderLabelActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* 생년월일 입력 (캘린더) */}
+          <View style={styles.birthDateWrap}>
+            <DatePickerButton
+              label="생년월일"
+              value={birthDate}
+              onChange={setBirthDate}
+              placeholder="생년월일을 선택하세요"
+            />
+          </View>
+        </Animated.View>
       </ScrollView>
 
       <View style={styles.birthButtons}>
@@ -168,11 +180,11 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
           <Text style={styles.skipBirthText}>건너뛰기</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.primaryBtn, { flex: 1 }]}
+          style={[styles.nextBtn, !isComplete && styles.nextBtnDisabled]}
           onPress={handleSave}
           activeOpacity={0.8}
         >
-          <Text style={styles.primaryBtnText}>다음</Text>
+          <Text style={[styles.nextBtnText, !isComplete && styles.nextBtnTextDisabled]}>다음</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -511,6 +523,10 @@ const styles = StyleSheet.create({
   },
 
   // ── Step 2: Baby Info ──
+  babyInfoContent: {
+    alignItems: 'center',
+    width: '100%',
+  },
   nameInput: {
     backgroundColor: theme.card,
     borderWidth: 1,
@@ -525,16 +541,17 @@ const styles = StyleSheet.create({
   },
   genderRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     marginTop: 16,
+    width: '100%',
   },
   genderBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
-    paddingVertical: 12,
+    gap: 6,
+    paddingVertical: 14,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: theme.border,
@@ -545,40 +562,19 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 126, 103, 0.1)',
   },
   genderEmoji: {
-    fontSize: 16,
+    fontSize: 18,
   },
   genderLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: theme.subtext,
   },
   genderLabelActive: {
     color: theme.primary,
   },
-  birthInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 24,
-    justifyContent: 'center',
-  },
-  birthInput: {
-    backgroundColor: theme.card,
-    borderWidth: 1,
-    borderColor: theme.border,
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme.text,
-    width: 100,
-    textAlign: 'center',
-  },
-  birthLabel: {
-    fontSize: 16,
-    color: theme.text,
-    fontWeight: '500',
+  birthDateWrap: {
+    width: '100%',
+    marginTop: 16,
   },
   birthButtons: {
     flexDirection: 'row',
@@ -590,8 +586,8 @@ const styles = StyleSheet.create({
   },
   skipBirthBtn: {
     paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 16,
+    paddingHorizontal: 24,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: theme.border,
     alignItems: 'center',
@@ -601,6 +597,25 @@ const styles = StyleSheet.create({
     color: theme.subtext,
     fontSize: 15,
     fontWeight: '600',
+  },
+  nextBtn: {
+    flex: 1,
+    backgroundColor: theme.primary,
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  nextBtnDisabled: {
+    backgroundColor: theme.border,
+  },
+  nextBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  nextBtnTextDisabled: {
+    color: theme.subtext,
   },
 
   // ── Step 1 ──

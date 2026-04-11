@@ -2,7 +2,27 @@ import { Platform } from 'react-native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { savePushToken, getCurrentUid } from './firebase';
+
+const PUSH_DEBUG_KEY = 'aigo-push-debug';
+
+/** production에서도 확인 가능한 디버그 정보 저장 */
+async function savePushDebug(info: string) {
+  try {
+    const timestamp = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    await AsyncStorage.setItem(PUSH_DEBUG_KEY, `[${timestamp}]\n${info}`);
+  } catch {}
+}
+
+/** 설정 화면에서 호출 — 푸시 토큰 등록 상태 반환 */
+export async function getPushDebugInfo(): Promise<string> {
+  try {
+    return (await AsyncStorage.getItem(PUSH_DEBUG_KEY)) || '디버그 정보 없음';
+  } catch {
+    return '읽기 실패';
+  }
+}
 
 // 포그라운드에서도 알림 표시
 Notifications.setNotificationHandler({
@@ -35,11 +55,11 @@ function resolveProjectId(): string {
 
 /** 푸시 알림 권한 요청 + Expo Push Token 발급 → Firestore 저장 */
 export async function registerForPushNotifications(): Promise<string | null> {
+  const debug: string[] = [];
+
   // ── Step 1: 디바이스 확인 ──
-  if (!Device.isDevice) {
-    console.warn('[Notifications] 실물 기기가 아님 — 에뮬레이터에서는 푸시 토큰 발급이 불안정합니다');
-    // 에뮬레이터에서도 시도는 하되, 실패해도 무시
-  }
+  const isReal = Device.isDevice;
+  debug.push(`S1: device=${isReal ? '실기기' : '에뮬레이터'}`);
 
   // ── Step 2: Android 알림 채널 생성 ──
   try {
@@ -55,10 +75,10 @@ export async function registerForPushNotifications(): Promise<string | null> {
         description: '소모품 재구매 주기 알림',
         importance: Notifications.AndroidImportance.DEFAULT,
       });
-      console.log('[Notifications] Step2: 알림 채널 생성 완료');
+      debug.push('S2: 채널 OK');
     }
-  } catch (e) {
-    console.warn('[Notifications] Step2: 알림 채널 생성 실패:', e);
+  } catch (e: any) {
+    debug.push(`S2: 채널 실패 — ${e?.message}`);
   }
 
   // ── Step 3: 권한 요청 ──
@@ -72,12 +92,14 @@ export async function registerForPushNotifications(): Promise<string | null> {
     }
 
     if (finalStatus !== 'granted') {
-      console.warn('[Notifications] Step3: 알림 권한 미허용:', finalStatus);
+      debug.push(`S3: 권한 거부 (${finalStatus})`);
+      await savePushDebug(debug.join('\n'));
       return null;
     }
-    console.log('[Notifications] Step3: 알림 권한 허용됨');
-  } catch (e) {
-    console.warn('[Notifications] Step3: 권한 요청 실패:', e);
+    debug.push('S3: 권한 OK');
+  } catch (e: any) {
+    debug.push(`S3: 권한 오류 — ${e?.message}`);
+    await savePushDebug(debug.join('\n'));
     return null;
   }
 
@@ -85,46 +107,47 @@ export async function registerForPushNotifications(): Promise<string | null> {
   let token: string;
   try {
     const projectId = resolveProjectId();
-    console.log('[Notifications] Step4: 토큰 발급 시도 — projectId:', projectId, 'source:',
+    const source =
       Constants.expoConfig?.extra?.eas?.projectId ? 'expoConfig' :
       (Constants as any).manifest2?.extra?.eas?.projectId ? 'manifest2' :
-      (Constants as any).manifest?.extra?.eas?.projectId ? 'manifest' : 'hardcoded'
-    );
+      (Constants as any).manifest?.extra?.eas?.projectId ? 'manifest' : 'hardcoded';
+    debug.push(`S4: projectId=${projectId.slice(0, 12)}... (${source})`);
 
     const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     token = tokenData.data;
-    console.log('[Notifications] Step4: 토큰 발급 성공:', token?.slice(0, 30), '...');
+    debug.push(`S4: 토큰=${token.slice(0, 25)}...`);
   } catch (e: any) {
-    console.error('[Notifications] Step4: 토큰 발급 실패:', e?.message || e, '— code:', e?.code);
-    console.error('[Notifications] 디버그 — isDevice:', Device.isDevice, 'OS:', Platform.OS, 'SDK:', Platform.Version);
+    debug.push(`S4: 토큰 실패 — ${e?.message || e}`);
+    debug.push(`  code=${e?.code}, device=${isReal}, OS=${Platform.OS}, SDK=${Platform.Version}`);
+    await savePushDebug(debug.join('\n'));
     return null;
   }
 
   // ── Step 5: Firestore 저장 ──
   const uid = getCurrentUid();
-  console.log('[Notifications] Step5: Firestore 저장 시도 — uid:', uid || '(없음)');
+  debug.push(`S5: uid=${uid || '(없음)'}`);
 
   if (uid) {
     try {
       await savePushToken(token);
-      console.log('[Notifications] Step5: Firestore 저장 완료');
-    } catch (e) {
-      console.warn('[Notifications] Step5: Firestore 저장 실패:', e);
+      debug.push('S5: Firestore 저장 OK');
+    } catch (e: any) {
+      debug.push(`S5: Firestore 저장 실패 — ${e?.message}`);
     }
   } else {
-    // signInAnonymously 이후 호출되므로 uid가 없으면 비정상
-    // 최대 3회 재시도 (2초 간격)
-    console.warn('[Notifications] Step5: uid 없음 — 재시도 예약');
-    retryTokenSave(token, 1);
+    debug.push('S5: uid 없음 — 재시도 예약');
+    retryTokenSave(token, 1, debug);
   }
 
+  await savePushDebug(debug.join('\n'));
   return token;
 }
 
 /** uid가 확보될 때까지 토큰 저장 재시도 (최대 3회) */
-function retryTokenSave(token: string, attempt: number) {
+function retryTokenSave(token: string, attempt: number, debug: string[]) {
   if (attempt > 3) {
-    console.error('[Notifications] 토큰 저장 재시도 3회 실패 — uid 확보 불가');
+    debug.push('S5: 재시도 3회 실패');
+    savePushDebug(debug.join('\n'));
     return;
   }
   setTimeout(async () => {
@@ -132,13 +155,14 @@ function retryTokenSave(token: string, attempt: number) {
     if (uid) {
       try {
         await savePushToken(token);
-        console.log(`[Notifications] 토큰 저장 재시도 #${attempt} 성공 — uid:`, uid);
-      } catch (e) {
-        console.warn(`[Notifications] 토큰 저장 재시도 #${attempt} 실패:`, e);
+        debug.push(`S5: 재시도#${attempt} OK — uid=${uid}`);
+      } catch (e: any) {
+        debug.push(`S5: 재시도#${attempt} 실패 — ${e?.message}`);
       }
+      await savePushDebug(debug.join('\n'));
     } else {
-      console.warn(`[Notifications] 재시도 #${attempt} — uid 아직 없음`);
-      retryTokenSave(token, attempt + 1);
+      debug.push(`S5: 재시도#${attempt} — uid 아직 없음`);
+      retryTokenSave(token, attempt + 1, debug);
     }
   }, 2000 * attempt);
 }

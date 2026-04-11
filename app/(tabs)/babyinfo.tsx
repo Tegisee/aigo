@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Linking, Alert, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Linking, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
@@ -510,49 +510,58 @@ export default function BabyInfoScreen() {
         };
         return (
           <Modal visible transparent animationType="fade">
-            <View style={styles.dateModalOverlay}>
-              <View style={styles.dateModalContent}>
-                <Text style={styles.dateModalTitle}>{dateModalTarget.label}</Text>
-                <Text style={styles.dateModalDesc}>1. 날짜를 선택하세요</Text>
-                <DatePickerButton
-                  value={selectedDate}
-                  onChange={(date) => setSelectedDate(date)}
-                  placeholder="캘린더에서 선택"
-                  minimumDate={babyBirthDate ? new Date(babyBirthDate + 'T00:00:00') : undefined}
-                />
-                <TouchableOpacity
-                  style={styles.todayRecordBtn}
-                  onPress={() => setSelectedDate(today)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.todayRecordText}>오늘({today}) 선택</Text>
-                </TouchableOpacity>
-                <Text style={[styles.dateModalDesc, { marginTop: 4 }]}>2. 병원명 (선택사항)</Text>
-                <TextInput
-                  style={styles.hospitalInput}
-                  placeholder="예: 서울소아과"
-                  placeholderTextColor={theme.subtext}
-                  value={hospitalInput}
-                  onChangeText={setHospitalInput}
-                />
-                <TouchableOpacity
-                  style={[styles.confirmBtn, !selectedDate && styles.confirmBtnDisabled]}
-                  onPress={confirmSave}
-                  disabled={!selectedDate}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.confirmBtnText, !selectedDate && styles.confirmBtnTextDisabled]}>
-                    {selectedDate ? '기록 완료' : '날짜를 먼저 선택하세요'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.dateModalCancel}
-                  onPress={() => { setSelectedDate(null); setHospitalInput(''); setDateModalTarget(null); }}
-                >
-                  <Text style={styles.dateModalCancelText}>취소</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+            <KeyboardAvoidingView
+              style={styles.dateModalOverlay}
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+              <ScrollView
+                contentContainerStyle={styles.dateModalScrollContent}
+                keyboardShouldPersistTaps="handled"
+                bounces={false}
+              >
+                <View style={styles.dateModalContent}>
+                  <Text style={styles.dateModalTitle}>{dateModalTarget.label}</Text>
+                  <Text style={styles.dateModalDesc}>1. 날짜를 선택하세요</Text>
+                  <DatePickerButton
+                    value={selectedDate}
+                    onChange={(date) => setSelectedDate(date)}
+                    placeholder="캘린더에서 선택"
+                    minimumDate={babyBirthDate ? new Date(babyBirthDate + 'T00:00:00') : undefined}
+                  />
+                  <TouchableOpacity
+                    style={styles.todayRecordBtn}
+                    onPress={() => setSelectedDate(today)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.todayRecordText}>오늘({today}) 선택</Text>
+                  </TouchableOpacity>
+                  <Text style={[styles.dateModalDesc, { marginTop: 4 }]}>2. 병원명 (선택사항)</Text>
+                  <TextInput
+                    style={styles.hospitalInput}
+                    placeholder="예: 서울소아과"
+                    placeholderTextColor={theme.subtext}
+                    value={hospitalInput}
+                    onChangeText={setHospitalInput}
+                  />
+                  <TouchableOpacity
+                    style={[styles.confirmBtn, !selectedDate && styles.confirmBtnDisabled]}
+                    onPress={confirmSave}
+                    disabled={!selectedDate}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.confirmBtnText, !selectedDate && styles.confirmBtnTextDisabled]}>
+                      {selectedDate ? '기록 완료' : '날짜를 먼저 선택하세요'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.dateModalCancel}
+                    onPress={() => { setSelectedDate(null); setHospitalInput(''); setDateModalTarget(null); }}
+                  >
+                    <Text style={styles.dateModalCancelText}>취소</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </KeyboardAvoidingView>
           </Modal>
         );
       })()}
@@ -604,8 +613,9 @@ const styles = StyleSheet.create({
   addBtnText: { fontSize: 14, fontWeight: '600', color: theme.primary },
 
   // ── 날짜 선택 모달 ──
-  dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  dateModalContent: { backgroundColor: theme.card, borderRadius: 16, padding: 24, width: '85%', gap: 16 },
+  dateModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  dateModalScrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  dateModalContent: { backgroundColor: theme.card, borderRadius: 16, padding: 24, width: '90%', maxWidth: 360, gap: 16 },
   dateModalTitle: { fontSize: 18, fontWeight: 'bold', color: theme.text },
   dateModalDesc: { fontSize: 14, color: theme.subtext },
   hospitalInput: { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.border, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, fontSize: 14, color: theme.text },

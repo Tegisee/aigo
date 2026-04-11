@@ -36,14 +36,9 @@ export default {
       },
       allowBackup: false,
       predictiveBackGestureEnabled: false,
-      intentFilters: [
-        {
-          action: "VIEW",
-          autoVerify: false,
-          data: [{ scheme: "coupang" }],
-          category: ["DEFAULT", "BROWSABLE"],
-        },
-      ],
+      // intentFilters에서 coupang scheme 제거 (BUG-12)
+      // 아이고 앱이 coupang:// intent 수신 대상이 되면 WebView에서 앱 선택기 발생
+      // 공유 수신은 expo-share-intent (SEND action)이 처리하므로 VIEW intent 불필요
     },
     web: {
       favicon: "./assets/favicon.png",

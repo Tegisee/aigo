@@ -61,6 +61,24 @@ function parseProductName(text: string): string {
   return '';
 }
 
+/** fetch한 쿠팡 HTML에서 앱 유도 코드를 제거 (BUG-12) */
+function sanitizeCoupangHtml(html: string): string {
+  return html
+    // intent://, coupang://, market:// URL을 포함하는 script 태그 제거
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, (match) => {
+      if (/intent:\/\/|coupang:\/\/|market:\/\/|\.coupang\.com\/app|applink\.coupang|deeplink/i.test(match)) {
+        return '<!-- blocked script -->';
+      }
+      return match;
+    })
+    // 앱 열기 유도 meta 태그 제거 (예: <meta http-equiv="refresh" content="0;url=intent://...">)
+    .replace(/<meta[^>]*(?:intent:\/\/|coupang:\/\/|market:\/\/|app-argument)[^>]*>/gi, '<!-- blocked meta -->')
+    // 앱 다운로드/열기 배너 div 제거
+    .replace(/<div[^>]*class="[^"]*(?:app-banner|app-download|smart-banner|top-app-bar)[^"]*"[^>]*>[\s\S]*?<\/div>/gi, '')
+    // a 태그의 intent:// href 무력화
+    .replace(/href\s*=\s*["'](?:intent:\/\/|coupang:\/\/|market:\/\/)[^"']*["']/gi, 'href="#"');
+}
+
 type Step = 'url' | 'scraping' | 'target';
 
 export default function AddItemModal() {
@@ -193,9 +211,11 @@ export default function AddItemModal() {
         if (res.url && res.url.includes('coupang.com')) {
           resolvedUrlRef.current = res.url;
         }
-        const html = await res.text();
+        let html = await res.text();
         if (html && html.length > 1000) {
-          console.log('[AddItem] Android: HTML 로드 성공 (' + html.length + 'bytes), finalUrl:', (res.url || '').slice(0, 80));
+          // 앱 유도 코드 제거: intent://, coupang://, market:// 관련 script/meta/a 태그 무력화
+          html = sanitizeCoupangHtml(html);
+          console.log('[AddItem] Android: HTML 로드+정제 성공 (' + html.length + 'bytes), finalUrl:', (res.url || '').slice(0, 80));
           // 타임아웃 설정
           if (timeoutRef.current) clearTimeout(timeoutRef.current);
           timeoutRef.current = setTimeout(() => {

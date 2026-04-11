@@ -10,16 +10,19 @@ import { registerForPushNotifications } from '../../services/notifications';
 import { signInWithGoogle } from '../../services/googleAuth';
 
 /** Firestore에서 유저 설정 + 관심상품을 복원하여 Zustand에 반영 */
-async function restoreDataFromFirestore(): Promise<{ childrenCount: number; itemsCount: number }> {
+async function restoreDataFromFirestore(): Promise<{ childrenCount: number; itemsCount: number; debugInfo: string }> {
   const uid = getCurrentUid();
-  console.log('[Login] 데이터 복원 시작 — uid:', uid);
+  const debugLines: string[] = [`uid: ${uid}`];
 
   const [settings, items] = await Promise.all([
     fetchUserSettings(),
     fetchItemsFromFirestore(),
   ]);
 
-  console.log('[Login] Firestore 조회 결과 — settings:', settings ? Object.keys(settings) : 'null', 'items:', items.length);
+  debugLines.push(`settings: ${settings ? Object.keys(settings).join(',') : 'null'}`);
+  debugLines.push(`items: ${items.length}건`);
+  if (settings?.children) debugLines.push(`children: ${JSON.stringify(settings.children.map((c: any) => c.name))}`);
+  if (settings?.babyName) debugLines.push(`babyName: ${settings.babyName}`);
 
   let childrenCount = 0;
 
@@ -55,10 +58,9 @@ async function restoreDataFromFirestore(): Promise<{ childrenCount: number; item
     }
 
     if (Object.keys(restoreData).length > 0) {
-      // hasSeenOnboarding도 true로 설정 (데이터가 있으므로 온보딩 불필요)
       restoreData.hasSeenOnboarding = true;
       useAppStore.setState(restoreData);
-      console.log('[Login] Zustand 복원 완료 — keys:', Object.keys(restoreData));
+      debugLines.push(`restored: ${Object.keys(restoreData).join(',')}`);
     }
   }
 
@@ -66,7 +68,7 @@ async function restoreDataFromFirestore(): Promise<{ childrenCount: number; item
     useAppStore.setState({ trackedItems: items });
   }
 
-  return { childrenCount, itemsCount: items.length };
+  return { childrenCount, itemsCount: items.length, debugInfo: debugLines.join('\n') };
 }
 
 export default function LoginScreen() {
@@ -101,18 +103,20 @@ export default function LoginScreen() {
 
         // 4. Firestore에서 데이터 복원
         try {
-          const { childrenCount, itemsCount } = await restoreDataFromFirestore();
+          const { childrenCount, itemsCount, debugInfo } = await restoreDataFromFirestore();
 
           const parts = [`${googleResult.email}`, '구글 계정이 연동되었습니다.'];
-          if (firebaseResult.recoveredAccount && (childrenCount > 0 || itemsCount > 0)) {
+          if (childrenCount > 0 || itemsCount > 0) {
             parts.push(`\n이전 데이터 복원 완료`);
             if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
             if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
           }
+          // 디버그: 복원 결과 상세 (production 테스트용, 안정화 후 제거)
+          parts.push(`\n[디버그]\nrecovered: ${firebaseResult.recoveredAccount}\n${debugInfo}`);
           Alert.alert('연동 완료', parts.join('\n'));
-        } catch (e) {
+        } catch (e: any) {
           console.warn('[Login] 데이터 복원 실패:', e);
-          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.\n(데이터 복원 중 오류 발생)`);
+          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.\n(복원 오류: ${e?.message || e})`);
         }
       } else {
         Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');

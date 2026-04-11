@@ -374,8 +374,16 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
   }
   console.log('[Scraper] WebView 렌더! source=', activeHtml ? 'html' : activeUrl?.slice(0, 80));
 
+  // HTML source 모드: 딥링크 차단 JS를 <head> 최상단에 직접 삽입
+  // injectedJavaScriptBeforeContentLoaded는 HTML source에서 실행 타이밍 불안정
   const source = activeHtml
-    ? { html: activeHtml, baseUrl: activeBaseUrl || 'https://www.coupang.com' }
+    ? {
+        html: activeHtml.replace(
+          /(<head[^>]*>)/i,
+          `$1<script>${BLOCK_DEEPLINK_JS}</script>`
+        ),
+        baseUrl: activeBaseUrl || 'https://www.coupang.com',
+      }
     : { uri: activeUrl! };
 
   return (

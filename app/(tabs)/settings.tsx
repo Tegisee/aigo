@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../../constants/theme';
 import { useAppStore, type BabyGender, type Child, type ParentInfo } from '../../store/useAppStore';
 import DatePickerButton from '../../components/DatePickerButton';
+import { getPushDebugInfo } from '../../services/notifications';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -361,6 +362,21 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.versionText}>{appVersion}</Text>
           </View>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.row}
+            onPress={async () => {
+              const info = await getPushDebugInfo();
+              Alert.alert('푸시 알림 상태', info);
+            }}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="notifications-outline" size={20} color={theme.subtext} />
+              <Text style={styles.label}>푸시 알림 상태</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
         </View>
 
         {/* 데이터 */}
