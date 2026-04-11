@@ -10,6 +10,7 @@ import {
   Animated,
   Platform,
   Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   ScrollView,
 } from 'react-native';
@@ -17,6 +18,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../constants/theme';
 import { useAppStore } from '../store/useAppStore';
+import { signInWithGoogle } from '../services/googleAuth';
+import { linkGoogleAccount } from '../services/firebase';
+import { registerForPushNotifications } from '../services/notifications';
+import { restoreDataFromFirestore } from '../services/restore';
 import DatePickerButton from './DatePickerButton';
 
 const { width } = Dimensions.get('window');
@@ -25,10 +30,12 @@ interface Props {
   onComplete: () => void;
 }
 
-// ─── Step 1: 앱 소개 ───
-function Step1({ onNext }: { onNext: () => void }) {
+// ─── Step 1: 앱 소개 + 구글 복원 ───
+function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => void }) {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
+  const { setLinked } = useAppStore();
+  const [restoring, setRestoring] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -36,6 +43,56 @@ function Step1({ onNext }: { onNext: () => void }) {
       Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  const handleGoogleRestore = async () => {
+    setRestoring(true);
+    try {
+      // 1. Google Sign-In
+      const googleResult = await signInWithGoogle();
+      if ('error' in googleResult) {
+        if (googleResult.error !== '로그인이 취소되었습니다.') {
+          Alert.alert('로그인 실패', googleResult.error);
+        }
+        setRestoring(false);
+        return;
+      }
+
+      // 2. Firebase 연동
+      const firebaseResult = await linkGoogleAccount(googleResult.idToken);
+      if (!firebaseResult.success) {
+        Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
+        setRestoring(false);
+        return;
+      }
+      setLinked('google');
+
+      // 3. push token 재등록
+      if (firebaseResult.recoveredAccount) {
+        registerForPushNotifications().catch(() => {});
+      }
+
+      // 4. Firestore에서 데이터 복원
+      const { childrenCount, itemsCount } = await restoreDataFromFirestore();
+
+      if (childrenCount > 0 || itemsCount > 0) {
+        Alert.alert(
+          '데이터 복원 완료',
+          `${googleResult.email}\n아이 정보 ${childrenCount}건, 관심상품 ${itemsCount}건 복원됨`,
+          [{ text: '확인', onPress: onRestore }],
+        );
+      } else {
+        // 구글 연동은 됐지만 복원할 데이터 없음 → 신규 사용자 플로우
+        Alert.alert(
+          '연동 완료',
+          `${googleResult.email}\n구글 계정이 연동되었습니다.\n아이 정보를 입력해주세요.`,
+          [{ text: '확인', onPress: onNext }],
+        );
+      }
+    } catch (e: any) {
+      Alert.alert('오류', e.message || '구글 로그인 중 오류가 발생했습니다.');
+    }
+    setRestoring(false);
+  };
 
   return (
     <View style={styles.step}>
@@ -56,6 +113,26 @@ function Step1({ onNext }: { onNext: () => void }) {
       <TouchableOpacity style={styles.primaryBtn} onPress={onNext} activeOpacity={0.8}>
         <Text style={styles.primaryBtnText}>시작하기</Text>
       </TouchableOpacity>
+
+      {/* 구글 계정 복원 */}
+      <View style={styles.restoreSection}>
+        <Text style={styles.restoreHint}>이전에 사용하셨나요?</Text>
+        <TouchableOpacity
+          style={[styles.restoreBtn, restoring && { opacity: 0.6 }]}
+          onPress={handleGoogleRestore}
+          activeOpacity={0.7}
+          disabled={restoring}
+        >
+          {restoring ? (
+            <ActivityIndicator size="small" color="#4285F4" />
+          ) : (
+            <Ionicons name="logo-google" size={18} color="#4285F4" />
+          )}
+          <Text style={styles.restoreBtnText}>
+            {restoring ? '복원 중...' : '구글 계정으로 복원'}
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -389,6 +466,13 @@ export default function OnboardingScreen({ onComplete }: Props) {
     });
   };
 
+  const goToStep = (target: number) => {
+    Animated.timing(transitionAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setStep(target);
+      Animated.timing(transitionAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    });
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* 진행 인디케이터 */}
@@ -412,7 +496,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
       )}
 
       <Animated.View style={[styles.stepContainer, { opacity: transitionAnim }]}>
-        {step === 0 && <Step1 onNext={goNext} />}
+        {step === 0 && <Step1 onNext={goNext} onRestore={() => goToStep(4)} />}
         {step === 1 && <StepBabyInfo onNext={goNext} />}
         {step === 2 && <Step3Share onNext={goNext} />}
         {step === 3 && <Step3 onNext={goNext} />}
@@ -520,6 +604,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '700',
+  },
+  restoreSection: {
+    alignItems: 'center',
+    marginTop: 24,
+    gap: 8,
+  },
+  restoreHint: {
+    fontSize: 13,
+    color: theme.subtext,
+  },
+  restoreBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#4285F4',
+    backgroundColor: 'rgba(66, 133, 244, 0.06)',
+  },
+  restoreBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4285F4',
   },
 
   // ── Step 2: Baby Info ──
