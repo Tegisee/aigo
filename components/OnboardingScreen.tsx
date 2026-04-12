@@ -484,13 +484,6 @@ export default function OnboardingScreen({ onComplete }: Props) {
     });
   };
 
-  const goToStep = (target: number) => {
-    Animated.timing(transitionAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
-      setStep(target);
-      Animated.timing(transitionAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
-    });
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       {/* 진행 인디케이터 */}
@@ -514,7 +507,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
       )}
 
       <Animated.View style={[styles.stepContainer, { opacity: transitionAnim }]}>
-        {step === 0 && <Step1 onNext={goNext} onRestore={() => goToStep(4)} />}
+        {step === 0 && <Step1 onNext={goNext} onRestore={onComplete} />}
         {step === 1 && <StepBabyInfo onNext={goNext} />}
         {step === 2 && <Step3Share onNext={goNext} />}
         {step === 3 && <Step3 onNext={goNext} />}

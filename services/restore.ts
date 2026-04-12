@@ -60,7 +60,8 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
     }
 
     if (Object.keys(restoreData).length > 0) {
-      restoreData.hasSeenOnboarding = true;
+      // hasSeenOnboarding은 여기서 세팅하지 않음
+      // → 호출측(OnboardingScreen)에서 Alert 확인 후 completeOnboarding 호출
       useAppStore.setState(restoreData);
       debugLines.push(`restored: ${Object.keys(restoreData).join(',')}`);
     }
