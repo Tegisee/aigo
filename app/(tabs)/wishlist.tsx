@@ -31,10 +31,9 @@ export default function WishlistScreen() {
   const [selectedCategory, setSelectedCategory] = useState<BabyCategory | null>(null);
   const [filterChildId, setFilterChildId] = useState<string | null>(null);
 
-  // 아이 전환 시 필터 초기화
+  // 홈에서 아이 전환 시 카테고리만 초기화 (아이 필터는 유지)
   useEffect(() => {
     setSelectedCategory(null);
-    setFilterChildId(null);
   }, [selectedChildId]);
 
   const childFilteredItems = filterChildId
@@ -71,11 +70,7 @@ export default function WishlistScreen() {
             <TouchableOpacity
               key={child.id}
               style={[styles.childFilterChip, filterChildId === child.id && styles.childFilterChipActive]}
-              onPress={() => {
-              const newId = filterChildId === child.id ? null : child.id;
-              setFilterChildId(newId);
-              if (newId) selectChild(newId);
-            }}
+              onPress={() => setFilterChildId(filterChildId === child.id ? null : child.id)}
               activeOpacity={0.7}
             >
               <Text style={[styles.childFilterText, filterChildId === child.id && styles.childFilterTextActive]}>

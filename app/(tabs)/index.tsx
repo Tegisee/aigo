@@ -107,28 +107,30 @@ export default function HomeScreen() {
       // 사용자의 현재 관심상품 ID 목록 (삭제된 상품 필터링용)
       const userItemIds = new Set(trackedItems.map((i) => i.productId || i.id));
 
+      // shared_products 인기 상품 조회
+      let sharedMapped: CoupangProduct[] = [];
       try {
-        // 1순위: shared_products 인기 상품
         const popular = await fetchPopularByCategory(cat as BabyCategory, 10);
-        // 사용자가 삭제한 상품 제외: trackerCount > 0 이고 실제 추적 중인 상품만 표시
         const filtered = popular.filter((p) => p.trackerCount > 0);
-        if (filtered.length > 0) {
-          const mapped: CoupangProduct[] = filtered.slice(0, 5).map((p) => ({
-            productId: parseInt(p.productId) || 0,
-            productName: p.productName,
-            productPrice: p.currentPrice,
-            productImage: p.thumbnail,
-            productUrl: '', // shared_products는 URL 없음 → 상세로 이동
-            categoryName: p.category,
-            isRocket: false,
-          }));
-          setCategoryProducts((prev) => ({ ...prev, [cat]: mapped }));
-          setLoadingCategory(null);
-          return;
-        }
+        sharedMapped = filtered.slice(0, 5).map((p) => ({
+          productId: parseInt(p.productId) || 0,
+          productName: p.productName,
+          productPrice: p.currentPrice,
+          productImage: p.thumbnail,
+          productUrl: '',
+          categoryName: p.category,
+          isRocket: false,
+        }));
       } catch {}
 
-      // 2순위: 쿠팡 파트너스 API 검색 (월령+성별+카테고리 조합)
+      // shared_products가 3개 이상이면 충분 → 바로 표시
+      if (sharedMapped.length >= 3) {
+        setCategoryProducts((prev) => ({ ...prev, [cat]: sharedMapped }));
+        setLoadingCategory(null);
+        return;
+      }
+
+      // 쿠팡 파트너스 API 검색으로 보충
       if (hasCoupangApiKeys()) {
         const consumable = /기저귀|분유|물티슈|수유용품|이유식|유아식|스킨케어/.test(cat);
         const clothing = /의류|신발|장난감|가구|도서|학용품/.test(cat);
@@ -150,14 +152,18 @@ export default function HomeScreen() {
 
         try {
           const products = await searchProducts(keyword, 10);
-          setCategoryProducts((prev) => ({ ...prev, [cat]: products }));
+          // shared_products + API 결과 합치기 (중복 제거)
+          const sharedIds = new Set(sharedMapped.map((p) => p.productId));
+          const apiOnly = products.filter((p) => !sharedIds.has(p.productId));
+          const combined = [...sharedMapped, ...apiOnly].slice(0, 10);
+          setCategoryProducts((prev) => ({ ...prev, [cat]: combined }));
         } catch {
-          // API 호출 실패 시 빈 배열로 표시
-          setCategoryProducts((prev) => ({ ...prev, [cat]: [] }));
+          // API 실패 시 shared_products만이라도 표시
+          setCategoryProducts((prev) => ({ ...prev, [cat]: sharedMapped.length > 0 ? sharedMapped : [] }));
         }
       } else {
-        // API 키 없음 → 빈 배열 (UI에서 안내 표시)
-        setCategoryProducts((prev) => ({ ...prev, [cat]: [] }));
+        // API 키 없음 → shared_products만 표시
+        setCategoryProducts((prev) => ({ ...prev, [cat]: sharedMapped.length > 0 ? sharedMapped : [] }));
       }
       setLoadingCategory(null);
     }, 300);
