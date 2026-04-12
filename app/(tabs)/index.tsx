@@ -17,15 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { getCategoriesByMonth, type BabyCategory } from '../../types';
-import { useRouter } from 'expo-router';
 import { fetchGoldbox, searchProducts, hasCoupangApiKeys, generateDeepLink, type GoldboxProduct, type CoupangProduct } from '../../services/coupangApi';
 import { fetchPopularByCategory, type SharedProduct } from '../../services/firebase';
 import { getAppShareMessage } from '../../services/config';
 import { getActiveEvents, type EventBanner } from '../../services/events';
 
 export default function HomeScreen() {
-  const router = useRouter();
-  const { trackedItems, syncFromFirestore, babyBirthDate, babyName, babyGender, isLinked, children, selectedChildId, selectChild, parentInfo } = useAppStore();
+  const { trackedItems, syncFromFirestore, babyBirthDate, babyName, babyGender, children, selectedChildId, selectChild, parentInfo } = useAppStore();
   const appStateRef = useRef(AppState.currentState);
   const [goldbox, setGoldbox] = useState<GoldboxProduct[]>([]);
   const [categoryProducts, setCategoryProducts] = useState<Record<string, CoupangProduct[]>>({});
@@ -284,18 +282,6 @@ export default function HomeScreen() {
           <View style={styles.headerRight}>
             <TouchableOpacity onPress={handleShareApp} style={styles.headerIconBtn}>
               <Ionicons name="share-outline" size={22} color={theme.text} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.profileBtn, !isLinked && styles.profileBtnWarn]}
-              onPress={() => router.push('/modal/login')}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isLinked ? 'person-circle' : 'person-circle-outline'}
-                size={28}
-                color={isLinked ? theme.primary : theme.subtext}
-              />
-              {!isLinked && <View style={styles.warnDot} />}
             </TouchableOpacity>
           </View>
         </View>

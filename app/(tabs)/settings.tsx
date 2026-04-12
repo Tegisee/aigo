@@ -159,29 +159,24 @@ export default function SettingsScreen() {
         {/* 계정 */}
         <Text style={styles.sectionTitle}>계정</Text>
         <View style={styles.card}>
-          <TouchableOpacity
-            style={styles.row}
-            onPress={() => router.push('/modal/login')}
-            activeOpacity={0.6}
-          >
+          <View style={styles.row}>
             <View style={styles.rowLeft}>
               <Ionicons
                 name={isLinked ? 'shield-checkmark' : 'shield-outline'}
                 size={20}
-                color={isLinked ? theme.success : '#FF9500'}
+                color={isLinked ? theme.success : theme.subtext}
               />
               <View style={styles.rowText}>
-                <Text style={styles.label}>{isLinked ? '계정 연동됨' : '계정 연동하기'}</Text>
+                <Text style={styles.label}>{isLinked ? '구글 계정 연동됨' : '익명 사용 중'}</Text>
                 <Text style={styles.desc}>
                   {isLinked
-                    ? `${linkedProvider === 'google' ? '구글' : '소셜'} 계정 연동`
-                    : '데이터 백업을 위해 연동하세요'
+                    ? '기기 변경 시에도 데이터가 유지됩니다'
+                    : '앱 삭제 시 데이터가 초기화됩니다'
                   }
                 </Text>
               </View>
             </View>
-            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
-          </TouchableOpacity>
+          </View>
         </View>
 
         {/* 알림 */}
