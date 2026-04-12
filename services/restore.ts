@@ -15,15 +15,22 @@ export interface RestoreResult {
 export async function restoreDataFromFirestore(): Promise<RestoreResult> {
   const uid = getCurrentUid();
   const debugLines: string[] = [`uid: ${uid}`];
+  console.log('[Restore] 시작 — uid:', uid);
 
   const [settings, items] = await Promise.all([
     fetchUserSettings(),
     fetchItemsFromFirestore(),
   ]);
 
+  console.log('[Restore] Firestore 조회 완료 — settings:', settings ? Object.keys(settings).length + '개 키' : 'null', 'items:', items.length);
   debugLines.push(`settings: ${settings ? Object.keys(settings).join(',') : 'null'}`);
   debugLines.push(`items: ${items.length}건`);
-  if (settings?.children) debugLines.push(`children: ${JSON.stringify(settings.children.map((c: any) => c.name))}`);
+  if (settings?.children) {
+    console.log('[Restore] children 발견:', settings.children.length, '건 —', settings.children.map((c: any) => c.name));
+    debugLines.push(`children: ${JSON.stringify(settings.children.map((c: any) => c.name))}`);
+  } else {
+    console.log('[Restore] children 없음');
+  }
   if (settings?.babyName) debugLines.push(`babyName: ${settings.babyName}`);
 
   let childrenCount = 0;
@@ -60,14 +67,18 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
     }
 
     if (Object.keys(restoreData).length > 0) {
-      // hasSeenOnboarding은 여기서 세팅하지 않음
-      // → 호출측(OnboardingScreen)에서 Alert 확인 후 completeOnboarding 호출
+      console.log('[Restore] Zustand setState — keys:', Object.keys(restoreData).join(','));
       useAppStore.setState(restoreData);
       debugLines.push(`restored: ${Object.keys(restoreData).join(',')}`);
+    } else {
+      console.log('[Restore] 복원할 데이터 없음 (restoreData 비어있음)');
     }
+  } else {
+    console.log('[Restore] settings null — Firestore 문서 없음');
   }
 
   if (items.length > 0) {
+    console.log('[Restore] trackedItems setState —', items.length, '건');
     useAppStore.setState({ trackedItems: items });
   }
 
