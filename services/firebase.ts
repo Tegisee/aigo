@@ -199,8 +199,23 @@ export async function updateNotificationEnabled(
 export async function updateUserSettings(
   data: Record<string, any>,
 ): Promise<void> {
-  const uid = getCurrentUid();
-  if (!uid || !db) return;
+  let uid = getCurrentUid();
+
+  // uid 없으면 signInAnonymously 대기 후 재시도 (온보딩 타이밍 이슈 방지)
+  if (!uid && auth) {
+    try {
+      const user = await new Promise<User | null>((resolve) => {
+        const unsub = onAuthStateChanged(auth!, (u) => { unsub(); resolve(u); });
+        setTimeout(() => resolve(null), 3000); // 3초 타임아웃
+      });
+      uid = user?.uid ?? null;
+    } catch {}
+  }
+
+  if (!uid || !db) {
+    console.warn('[Firebase] 유저 설정 저장 스킵 — uid 없음. keys:', Object.keys(data).join(','));
+    return;
+  }
 
   try {
     await setDoc(doc(db!,'users', uid), data, { merge: true });
