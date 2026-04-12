@@ -62,7 +62,6 @@ export default {
         },
       ],
       "@react-native-google-signin/google-signin",
-      "./plugins/withAndroidQueries",
     ],
     extra: {
       router: {},

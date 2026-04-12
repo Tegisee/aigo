@@ -221,12 +221,7 @@ export default function HomeScreen() {
   }, [eventProducts]);
 
   const handleOpenCoupang = async () => {
-    // 1순위: 쿠팡 앱 딥링크로 직접 열기
-    try {
-      const canOpen = await Linking.canOpenURL('coupang://home');
-      if (canOpen) { await Linking.openURL('coupang://home'); return; }
-    } catch {}
-    // 2순위: 파트너스 딥링크 (쿠팡 앱 미설치 시)
+    // 1순위: 파트너스 딥링크 (수수료 발생, 지금이야 동일)
     if (hasCoupangApiKeys()) {
       try {
         const deepLink = await generateDeepLink('https://www.coupang.com', 'home');
@@ -236,6 +231,11 @@ export default function HomeScreen() {
         }
       } catch {}
     }
+    // 2순위: 쿠팡 앱 딥링크
+    try {
+      const canOpen = await Linking.canOpenURL('coupang://home');
+      if (canOpen) { await Linking.openURL('coupang://home'); return; }
+    } catch {}
     // 3순위: 웹 브라우저
     Linking.openURL('https://www.coupang.com');
   };
