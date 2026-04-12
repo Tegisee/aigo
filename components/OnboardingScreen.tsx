@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../constants/theme';
 import { useAppStore } from '../store/useAppStore';
 import { signInWithGoogle } from '../services/googleAuth';
-import { linkGoogleAccount } from '../services/firebase';
+import { signInAnonymously, linkGoogleAccount } from '../services/firebase';
 import { registerForPushNotifications } from '../services/notifications';
 import { restoreDataFromFirestore } from '../services/restore';
 import DatePickerButton from './DatePickerButton';
@@ -47,6 +47,9 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
   const handleGoogleStart = async () => {
     setLoading(true);
     try {
+      // 0. 익명 로그인 보장 (linkGoogleAccount가 auth.currentUser 필요)
+      await signInAnonymously();
+
       // 1. Google Sign-In
       const googleResult = await signInWithGoogle();
       if ('error' in googleResult) {
@@ -98,7 +101,7 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
   const handleAnonymousStart = () => {
     Alert.alert(
       '익명으로 시작',
-      '앱 삭제 또는 기기 변경 시\n데이터가 복원되지 않습니다.\n\n나중에 설정에서 구글 계정을 연동할 수 있습니다.',
+      '구글 계정으로 시작하지 않으면 앱 재설치 시 데이터가 복원되지 않습니다.\n\n익명으로 계속하시겠습니까?',
       [
         { text: '취소', style: 'cancel' },
         { text: '익명으로 시작', onPress: onNext },
