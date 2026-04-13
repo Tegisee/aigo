@@ -176,12 +176,11 @@ export default function HomeScreen() {
     }
     setLoadingEvent(index);
 
-    // 1순위: 쿠팡 파트너스 API (기념일 유형별 최소 가격 필터)
+    // 쿠팡 파트너스 API
     if (hasCoupangApiKeys()) {
       try {
         const keyword = event.keywords[0];
-        const minPrice = event.type === 'parent' ? 100000 : 50000;
-        const products = await searchProducts(keyword, 5, minPrice);
+        const products = await searchProducts(keyword, 5);
         if (products.length > 0) {
           setEventProducts((prev) => ({ ...prev, [index]: products }));
           setLoadingEvent(null);
