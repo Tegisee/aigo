@@ -190,37 +190,7 @@ export default function HomeScreen() {
       } catch {}
     }
 
-    // 2순위: shared_products에서 키워드 관련 카테고리 조회
-    try {
-      // 키워드에서 카테고리 추출 시도 (예: '돌잔치 용품' → '장난감', '생일 선물' → '장난감')
-      const categoryMap: Record<string, string> = {
-        '돌잔치': '장난감', '백일': '스킨케어', '생일': '장난감',
-        '선물': '장난감', '파티': '장난감',
-      };
-      const matchedCat = Object.entries(categoryMap).find(([kw]) =>
-        event.keywords!.some((k) => k.includes(kw))
-      );
-      if (matchedCat) {
-        const popular = await fetchPopularByCategory(matchedCat[1] as BabyCategory, 5);
-        const filtered = popular.filter((p) => p.trackerCount > 0);
-        if (filtered.length > 0) {
-          const mapped: CoupangProduct[] = filtered.map((p) => ({
-            productId: parseInt(p.productId) || 0,
-            productName: p.productName,
-            productPrice: p.currentPrice,
-            productImage: p.thumbnail,
-            productUrl: '',
-            categoryName: p.category,
-            isRocket: false,
-          }));
-          setEventProducts((prev) => ({ ...prev, [index]: mapped }));
-          setLoadingEvent(null);
-          return;
-        }
-      }
-    } catch {}
-
-    // 결과 없음
+    // 쿠팡 API 결과 없음
     setEventProducts((prev) => ({ ...prev, [index]: [] }));
     setLoadingEvent(null);
   }, [eventProducts]);
