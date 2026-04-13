@@ -92,11 +92,13 @@ export interface CoupangProduct {
 export async function searchProducts(
   keyword: string,
   limit: number = 5,
+  minPrice?: number,
 ): Promise<CoupangProduct[]> {
   if (!hasCoupangApiKeys()) return [];
 
   try {
-    const query = `keyword=${encodeURIComponent(keyword)}&limit=${limit}`;
+    let query = `keyword=${encodeURIComponent(keyword)}&limit=${limit}`;
+    if (minPrice) query += `&minPrice=${minPrice}`;
     const authorization = generateAuthorization('GET', SEARCH_PATH, query);
 
     const res = await fetch(`${BASE_URL}${SEARCH_PATH}?${query}`, {
