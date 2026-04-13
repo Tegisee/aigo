@@ -114,7 +114,10 @@ export const useAppStore = create<AppState>()(
         }
         set((state) => ({ trackedItems: [...state.trackedItems, item] }));
         saveItemToFirestore(item);
-        upsertSharedProduct(item);
+        // 현재 선택된 아이 성별을 shared_products gender로 전달
+        const { babyGender } = useAppStore.getState();
+        const gender = babyGender === 'male' || babyGender === 'female' ? babyGender : 'both';
+        upsertSharedProduct(item, gender);
       },
       removeItem: (id) => {
         const item = useAppStore.getState().trackedItems.find((i) => i.id === id);

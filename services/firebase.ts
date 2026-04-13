@@ -318,7 +318,10 @@ export async function updateItemInFirestore(
 // ─── Shared Products (공유 가격 데이터) ───
 
 /** 상품 등록/관심 추가 시 shared_products 생성 또는 trackerCount 증가 */
-export async function upsertSharedProduct(item: TrackedItem): Promise<void> {
+export async function upsertSharedProduct(
+  item: TrackedItem,
+  gender?: 'male' | 'female' | 'both',
+): Promise<void> {
   if (!db) return;
 
   const productId = item.productId || item.id;
@@ -336,6 +339,7 @@ export async function upsertSharedProduct(item: TrackedItem): Promise<void> {
         productName: item.productName,
         category: item.category || '기타',
         ageGroup: '',
+        gender: gender || 'both',
         currentPrice: item.currentPrice,
         previousPrice: item.currentPrice,
         thumbnail: item.thumbnail,
@@ -391,10 +395,11 @@ export async function fetchSharedProduct(productId: string): Promise<SharedProdu
   }
 }
 
-/** 카테고리별 인기 상품 조회 (trackerCount 내림차순) */
+/** 카테고리별 인기 상품 조회 (trackerCount 내림차순, 성별 필터링) */
 export async function fetchPopularByCategory(
   category: BabyCategory,
   count: number = 10,
+  gender?: 'male' | 'female' | 'unknown',
 ): Promise<SharedProduct[]> {
   if (!db) return [];
 
@@ -404,10 +409,17 @@ export async function fetchPopularByCategory(
       where('category', '==', category),
       where('trackerCount', '>', 0),
       orderBy('trackerCount', 'desc'),
-      firestoreLimit(count),
+      firestoreLimit(count * 2), // 성별 필터링 후 부족하지 않도록 여유분 조회
     );
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((d) => d.data() as SharedProduct);
+    let results = snapshot.docs.map((d) => d.data() as SharedProduct);
+
+    // 성별 필터링: male/female인 경우 해당 성별 + both + gender 미설정 상품만
+    if (gender && gender !== 'unknown') {
+      results = results.filter((p) => !p.gender || p.gender === 'both' || p.gender === gender);
+    }
+
+    return results.slice(0, count);
   } catch (e) {
     console.warn('[Firebase] 카테고리별 인기 상품 조회 실패:', e);
     return [];

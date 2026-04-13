@@ -108,7 +108,7 @@ export default function HomeScreen() {
       // shared_products 인기 상품 조회
       let sharedMapped: CoupangProduct[] = [];
       try {
-        const popular = await fetchPopularByCategory(cat as BabyCategory, 10);
+        const popular = await fetchPopularByCategory(cat as BabyCategory, 10, babyGender);
         const filtered = popular.filter((p) => p.trackerCount > 0);
         sharedMapped = filtered.slice(0, 5).map((p) => ({
           productId: parseInt(p.productId) || 0,

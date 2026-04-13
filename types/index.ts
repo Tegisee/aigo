@@ -77,6 +77,7 @@ export interface SharedProduct {
   productName: string;
   category: BabyCategory;
   ageGroup: string;
+  gender?: 'male' | 'female' | 'both'; // 아이 성별 기반 필터링용
   currentPrice: number;
   previousPrice: number;
   thumbnail: string;
