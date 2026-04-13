@@ -31,10 +31,14 @@ function waitForHydration(): Promise<void> {
 
 /** 전체 로컬 데이터 초기화 (재설치 시) */
 async function clearLocalData() {
-  // 1. AsyncStorage 전체 삭제
+  // 1. AsyncStorage 전체 삭제 (Firebase Auth persistence 키는 보존)
   try {
     const allKeys = await AsyncStorage.getAllKeys();
-    if (allKeys.length > 0) await AsyncStorage.multiRemove(allKeys);
+    const keysToRemove = allKeys.filter(
+      (key) => !key.startsWith('firebase:authUser:'),
+    );
+    if (keysToRemove.length > 0) await AsyncStorage.multiRemove(keysToRemove);
+    console.log('[Install] AsyncStorage 초기화 — 삭제:', keysToRemove.length, '보존(Auth):', allKeys.length - keysToRemove.length);
   } catch {
     await AsyncStorage.removeItem('aigo-storage').catch(() => {});
   }

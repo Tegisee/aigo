@@ -64,7 +64,7 @@ if (isFirebaseConfigured) {
   console.warn('[Firebase] 설정 미완료 — TODO placeholder 감지. Firestore/Auth 비활성화.');
 }
 
-/** Anonymous Auth 로그인 (자동) — AsyncStorage 복원 완료 대기 후 판단 */
+/** Anonymous Auth 로그인 (자동) — 기존 세션(구글 포함) 복원 우선, 없을 때만 익명 생성 */
 export async function signInAnonymously(): Promise<string | null> {
   if (!auth) return null;
   try {
@@ -75,8 +75,13 @@ export async function signInAnonymously(): Promise<string | null> {
       });
     });
 
-    if (restoredUser) return restoredUser.uid;
+    if (restoredUser) {
+      const isGoogle = restoredUser.providerData.some((p) => p.providerId === 'google.com');
+      console.log('[Firebase] 기존 세션 복원 —', isGoogle ? '구글 계정' : '익명', 'uid:', restoredUser.uid);
+      return restoredUser.uid;
+    }
 
+    console.log('[Firebase] 기존 세션 없음 — 새 익명 계정 생성');
     const credential = await firebaseSignInAnonymously(auth);
     return credential.user.uid;
   } catch (e) {
