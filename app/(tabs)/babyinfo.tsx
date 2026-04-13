@@ -69,7 +69,51 @@ const SUPPORT_DETAIL = [
 ];
 
 export default function BabyInfoScreen() {
-  const { babyBirthDate, babyName, vaccinationRecords, setVaccinationDate, checkupRecords, setCheckupDate, vaccinationHospitals, checkupHospitals } = useAppStore();
+  const { babyBirthDate, babyName, selectedChildId, vaccinationRecords, setVaccinationDate, checkupRecords, setCheckupDate, vaccinationHospitals, checkupHospitals } = useAppStore();
+
+  // 아이별 독립 키 prefix (childId가 없으면 legacy 호환용 빈 문자열)
+  const childPrefix = selectedChildId ? `${selectedChildId}::` : '';
+
+  // 현재 선택된 아이의 접종/검진 기록만 필터링하여 사용
+  const childVaccinationRecords: Record<string, string> = {};
+  const childVaccinationHospitals: Record<string, string> = {};
+  const childCheckupRecords: Record<string, string> = {};
+  const childCheckupHospitals: Record<string, string> = {};
+
+  for (const [key, val] of Object.entries(vaccinationRecords)) {
+    if (childPrefix && key.startsWith(childPrefix)) {
+      childVaccinationRecords[key.slice(childPrefix.length)] = val;
+    } else if (!childPrefix && !key.includes('::')) {
+      childVaccinationRecords[key] = val;
+    }
+  }
+  for (const [key, val] of Object.entries(vaccinationHospitals)) {
+    if (childPrefix && key.startsWith(childPrefix)) {
+      childVaccinationHospitals[key.slice(childPrefix.length)] = val;
+    } else if (!childPrefix && !key.includes('::')) {
+      childVaccinationHospitals[key] = val;
+    }
+  }
+  for (const [key, val] of Object.entries(checkupRecords)) {
+    if (childPrefix && key.startsWith(childPrefix)) {
+      childCheckupRecords[key.slice(childPrefix.length)] = val;
+    } else if (!childPrefix && !key.includes('::')) {
+      childCheckupRecords[key] = val;
+    }
+  }
+  for (const [key, val] of Object.entries(checkupHospitals)) {
+    if (childPrefix && key.startsWith(childPrefix)) {
+      childCheckupHospitals[key.slice(childPrefix.length)] = val;
+    } else if (!childPrefix && !key.includes('::')) {
+      childCheckupHospitals[key] = val;
+    }
+  }
+
+  // setVaccinationDate / setCheckupDate 호출 시 prefix 붙여서 저장
+  const setVaccDate = (vaccineKey: string, date: string | null, hospital?: string) =>
+    setVaccinationDate(`${childPrefix}${vaccineKey}`, date, hospital);
+  const setChkDate = (round: string, date: string | null, hospital?: string) =>
+    setCheckupDate(`${childPrefix}${round}`, date, hospital);
 
   // 날짜 입력 모달
   const [dateModalTarget, setDateModalTarget] = useState<{ type: 'vaccine' | 'checkup'; key: string; label: string } | null>(null);
@@ -95,7 +139,7 @@ export default function BabyInfoScreen() {
 
   // 접종 상태 분류 (날짜 기록 기반)
   const isVaccineGroupDone = (item: typeof VACCINATION_SCHEDULE[0]) => {
-    return item.vaccines.every((v) => !!vaccinationRecords[v]);
+    return item.vaccines.every((v) => !!childVaccinationRecords[v]);
   };
 
   const getVaccineStatus = (item: typeof VACCINATION_SCHEDULE[0]) => {
@@ -172,19 +216,19 @@ export default function BabyInfoScreen() {
                     </View>
                     <View style={styles.vaccineRight}>
                       {item.vaccines.map((v, j) => {
-                        const recordDate = vaccinationRecords[v];
+                        const recordDate = childVaccinationRecords[v];
                         return (
                           <TouchableOpacity
                             key={j}
                             style={styles.vaccineItem}
                             onPress={() => {
                               if (recordDate) {
-                                const hospital = vaccinationHospitals[v];
+                                const hospital = childVaccinationHospitals[v];
                                 const info = [`접종일: ${recordDate}`, hospital ? `병원: ${hospital}` : ''].filter(Boolean).join('\n');
                                 Alert.alert(v, info, [
                                   { text: '닫기' },
-                                  { text: '수정', onPress: () => { setSelectedDate(recordDate); setHospitalInput(vaccinationHospitals[v] || ''); setDateModalTarget({ type: 'vaccine', key: v, label: v }); } },
-                                  { text: '기록 삭제', style: 'destructive', onPress: () => setVaccinationDate(v, null) },
+                                  { text: '수정', onPress: () => { setSelectedDate(recordDate); setHospitalInput(childVaccinationHospitals[v] || ''); setDateModalTarget({ type: 'vaccine', key: v, label: v }); } },
+                                  { text: '기록 삭제', style: 'destructive', onPress: () => setVaccDate(v, null) },
                                 ]);
                               } else {
                                 setHospitalInput('');
@@ -204,7 +248,7 @@ export default function BabyInfoScreen() {
                             {recordDate && (
                               <View style={styles.vaccineDateCol}>
                                 <Text style={styles.vaccineDate}>{recordDate}</Text>
-                                {vaccinationHospitals[v] ? <Text style={styles.vaccineHospital}>{vaccinationHospitals[v]}</Text> : null}
+                                {childVaccinationHospitals[v] ? <Text style={styles.vaccineHospital}>{childVaccinationHospitals[v]}</Text> : null}
                               </View>
                             )}
                           </TouchableOpacity>
@@ -298,7 +342,7 @@ export default function BabyInfoScreen() {
           <View style={styles.card}>
             {getHealthCheckupSchedule(babyMonths).map((item, i) => {
               const roundKey = String(item.round);
-              const recordDate = checkupRecords[roundKey];
+              const recordDate = childCheckupRecords[roundKey];
               const isDone = !!recordDate;
               const isOverdue = !isDone && item.isPast;
               return (
@@ -308,12 +352,12 @@ export default function BabyInfoScreen() {
                     style={[styles.vaccineRow, (item.isCurrent || isOverdue) && styles.vaccineRowCurrent]}
                     onPress={() => {
                       if (recordDate) {
-                        const hospital = checkupHospitals[roundKey];
+                        const hospital = childCheckupHospitals[roundKey];
                         const info = [`검진일: ${recordDate}`, hospital ? `병원: ${hospital}` : ''].filter(Boolean).join('\n');
                         Alert.alert(`${item.round}차 검진`, info, [
                           { text: '닫기' },
-                          { text: '수정', onPress: () => { setSelectedDate(recordDate); setHospitalInput(checkupHospitals[roundKey] || ''); setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진` }); } },
-                          { text: '기록 삭제', style: 'destructive', onPress: () => setCheckupDate(roundKey, null) },
+                          { text: '수정', onPress: () => { setSelectedDate(recordDate); setHospitalInput(childCheckupHospitals[roundKey] || ''); setDateModalTarget({ type: 'checkup', key: roundKey, label: `${item.round}차 검진` }); } },
+                          { text: '기록 삭제', style: 'destructive', onPress: () => setChkDate(roundKey, null) },
                         ]);
                       } else {
                         setHospitalInput('');
@@ -347,7 +391,7 @@ export default function BabyInfoScreen() {
                       {recordDate && (
                         <View style={styles.vaccineDateCol}>
                           <Text style={styles.vaccineDate}>{recordDate}</Text>
-                          {checkupHospitals[roundKey] ? <Text style={styles.vaccineHospital}>{checkupHospitals[roundKey]}</Text> : null}
+                          {childCheckupHospitals[roundKey] ? <Text style={styles.vaccineHospital}>{childCheckupHospitals[roundKey]}</Text> : null}
                         </View>
                       )}
                     </View>
@@ -516,14 +560,14 @@ export default function BabyInfoScreen() {
               const idx = parseInt(dateModalTarget.key.split('-')[2]);
               setCustomVaccines((prev) => prev.map((v, i) => i === idx ? { ...v, date, hospital: hospital || undefined } : v));
             } else {
-              setVaccinationDate(dateModalTarget.key, date, hospital);
+              setVaccDate(dateModalTarget.key, date, hospital);
             }
           } else {
             if (dateModalTarget.key.startsWith('custom-c-')) {
               const idx = parseInt(dateModalTarget.key.split('-')[2]);
               setCustomCheckups((prev) => prev.map((c, i) => i === idx ? { ...c, date, hospital: hospital || undefined } : c));
             } else {
-              setCheckupDate(dateModalTarget.key, date, hospital);
+              setChkDate(dateModalTarget.key, date, hospital);
             }
           }
           setSelectedDate(null);

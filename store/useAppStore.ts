@@ -48,10 +48,10 @@ interface AppState {
   children: Child[];
   selectedChildId: string | null;
   parentInfo: ParentInfo;
-  vaccinationRecords: Record<string, string>; // { 'B형간염 1차': '2026-01-15', ... }
-  checkupRecords: Record<string, string>;     // { '1': '2026-05-01', ... } (차수 → 날짜)
-  vaccinationHospitals: Record<string, string>; // { 'B형간염 1차': '서울소아과', ... }
-  checkupHospitals: Record<string, string>;     // { '1': '건강소아과', ... }
+  vaccinationRecords: Record<string, string>; // { '{childId}::B형간염 1차': '2026-01-15', ... } (아이별 독립)
+  checkupRecords: Record<string, string>;     // { '{childId}::1': '2026-05-01', ... } (아이별 독립)
+  vaccinationHospitals: Record<string, string>; // { '{childId}::B형간염 1차': '서울소아과', ... }
+  checkupHospitals: Record<string, string>;     // { '{childId}::1': '건강소아과', ... }
   trackedItems: TrackedItem[];
   addItem: (item: TrackedItem) => void;
   removeItem: (id: string) => void;

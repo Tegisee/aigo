@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../constants/theme';
 import { useAppStore } from '../store/useAppStore';
 import { signInWithGoogle } from '../services/googleAuth';
-import { signInAnonymously, linkGoogleAccount, getCurrentUid } from '../services/firebase';
+import { signInAnonymously, linkGoogleAccount } from '../services/firebase';
 import { registerForPushNotifications } from '../services/notifications';
 import { restoreDataFromFirestore } from '../services/restore';
 import DatePickerButton from './DatePickerButton';
@@ -44,17 +44,11 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
     ]).start();
   }, []);
 
-  /** Alert을 Promise로 래핑 — 확인 누를 때까지 대기 */
-  const debugAlert = (title: string, msg: string): Promise<void> =>
-    new Promise((resolve) => Alert.alert(title, msg, [{ text: '확인', onPress: () => resolve() }]));
-
   const handleGoogleStart = async () => {
     setLoading(true);
     try {
       // 1. 익명 로그인 보장
       await signInAnonymously();
-      const anonUid = getCurrentUid();
-      await debugAlert('[1/5] 익명 로그인', `uid: ${anonUid}`);
 
       // 2. Google Sign-In
       const googleResult = await signInWithGoogle();
@@ -65,7 +59,6 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
         setLoading(false);
         return;
       }
-      await debugAlert('[2/5] 구글 로그인 완료', `email: ${googleResult.email}\nuid: ${getCurrentUid()}`);
 
       // 3. Firebase 연동
       const firebaseResult = await linkGoogleAccount(googleResult.idToken);
@@ -75,7 +68,6 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
         return;
       }
       setLinked('google');
-      await debugAlert('[3/5] Firebase 연동', `recovered: ${firebaseResult.recoveredAccount}\nuid: ${getCurrentUid()}`);
 
       // push token 재등록
       if (firebaseResult.recoveredAccount) {
@@ -83,22 +75,16 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
       }
 
       // 4. Firestore 데이터 복원
-      const { childrenCount, itemsCount, debugInfo } = await restoreDataFromFirestore();
-      await debugAlert('[4/5] 데이터 복원', `children: ${childrenCount}건\nitems: ${itemsCount}건\n\n${debugInfo}`);
+      const { childrenCount, itemsCount } = await restoreDataFromFirestore();
 
       // 5. 최종 진입
       if (childrenCount > 0 || itemsCount > 0) {
-        Alert.alert(
-          '[5/5] 복원 완료 → 홈 진입',
-          `아이 ${childrenCount}건, 관심상품 ${itemsCount}건\n확인 누르면 completeOnboarding 호출`,
-          [{ text: '확인', onPress: onRestore }],
-        );
+        const parts = [`${googleResult.email}`, '이전 데이터가 복원되었습니다.'];
+        if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
+        if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
+        Alert.alert('복원 완료', parts.join('\n'), [{ text: '확인', onPress: onRestore }]);
       } else {
-        Alert.alert(
-          '[5/5] 데이터 없음 → 아이 정보 입력',
-          `recovered: ${firebaseResult.recoveredAccount}\n확인 누르면 Step 1로 이동`,
-          [{ text: '확인', onPress: onNext }],
-        );
+        onNext();
       }
     } catch (e: any) {
       Alert.alert('오류', e.message || '구글 로그인 중 오류가 발생했습니다.');

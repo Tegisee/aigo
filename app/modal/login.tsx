@@ -42,7 +42,7 @@ export default function LoginScreen() {
 
         // 4. Firestore에서 데이터 복원
         try {
-          const { childrenCount, itemsCount, debugInfo } = await restoreDataFromFirestore();
+          const { childrenCount, itemsCount } = await restoreDataFromFirestore();
 
           const parts = [`${googleResult.email}`, '구글 계정이 연동되었습니다.'];
           if (childrenCount > 0 || itemsCount > 0) {
@@ -50,12 +50,10 @@ export default function LoginScreen() {
             if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
             if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
           }
-          // 디버그: 복원 결과 상세 (production 테스트용, 안정화 후 제거)
-          parts.push(`\n[디버그]\nrecovered: ${firebaseResult.recoveredAccount}\n${debugInfo}`);
           Alert.alert('연동 완료', parts.join('\n'));
         } catch (e: any) {
           console.warn('[Login] 데이터 복원 실패:', e);
-          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.\n(복원 오류: ${e?.message || e})`);
+          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.`);
         }
       } else {
         Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
