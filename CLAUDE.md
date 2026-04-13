@@ -193,3 +193,10 @@
 - 프로젝트 경로: ~/aigo/aigo
 - 카테고리: 쇼핑/육아/유틸리티
 - 개인정보처리방침: https://dafamstore.tistory.com/11
+
+## 형제 앱
+- 아이고와 지금이야(~/jigumiya/jigumiya)는 형제 앱 관계
+- 동일 개발자, 동일 기술 스택 (React Native, Expo, Firebase)
+- 한 앱에서 해결한 문제/노하우는 다른 앱에 이식 가능
+- iOS 로컬 빌드 세팅은 지금이야 참고 (fastlane, .easignore 설정 등)
+- Android 로컬 빌드 세팅 동일하게 적용 가능
