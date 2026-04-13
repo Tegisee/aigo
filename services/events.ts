@@ -40,10 +40,10 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
     if (diff >= -0 && diff <= 7) {
       const label = day === 365 ? '돌' : `${day}일`;
       const keywords = day === 365
-        ? ['돌잔치 용품', '돌잔치 의상', '돌반지']
+        ? ['돌잔치 선물', '돌잔치 용품', '돌반지']
         : day === 100
-          ? ['백일 잔치', '백일 사진', '아기 선물']
-          : ['아기 선물', '아기 기념일', '아기 파티용품'];
+          ? ['백일 선물', '백일 잔치', '아기 선물']
+          : ['아기 기념일 선물', '아기 선물', '아기 파티용품'];
       if (diff === 0) {
         events.push({
           type: 'anniversary',
@@ -76,7 +76,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
   const age = nextBirthday.getFullYear() - birth.getFullYear();
 
   if (birthdayDiff >= 0 && birthdayDiff <= 7 && age > 1) {
-    const birthdayKeywords = ['생일 선물 아이', '생일 파티 용품', '생일 케이크'];
+    const birthdayKeywords = ['아이 생일 선물', '생일 파티 용품', '생일 케이크'];
     if (birthdayDiff === 0) {
       events.push({
         type: 'anniversary',
@@ -120,13 +120,13 @@ function getSeasonEvents(babyName: string): EventBanner[] {
       name: '어린이날',
       emoji: '🎈',
       month: 5, day: 5, leadDays: 30,
-      keywords: ['어린이날 선물', '어린이날 장난감', '키즈 선물세트'],
+      keywords: ['어린이날 선물', '어린이 선물세트', '어린이날 장난감'],
     },
     {
       name: '크리스마스',
       emoji: '🎄',
       month: 12, day: 25, leadDays: 30,
-      keywords: ['크리스마스 선물 아이', '크리스마스 장난감', '산타 선물'],
+      keywords: ['크리스마스 선물 아이', '산타 선물세트', '크리스마스 장난감'],
     },
   ];
 
@@ -248,9 +248,9 @@ export function getActiveEvents(birthDate: string | null, babyName: string, pare
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const pEntries: { label: string; emoji: string; date: string; isLunar: boolean; kw: string[] }[] = [];
-    if (parentInfo.momBirthday) pEntries.push({ label: '엄마 생일', emoji: '👩', date: parentInfo.momBirthday.date, isLunar: parentInfo.momBirthday.isLunar, kw: ['여성 선물', '엄마 선물'] });
-    if (parentInfo.dadBirthday) pEntries.push({ label: '아빠 생일', emoji: '👨', date: parentInfo.dadBirthday.date, isLunar: parentInfo.dadBirthday.isLunar, kw: ['남성 선물', '아빠 선물'] });
-    if (parentInfo.anniversary) pEntries.push({ label: '결혼기념일', emoji: '💍', date: parentInfo.anniversary, isLunar: false, kw: ['결혼기념일 선물', '커플 선물'] });
+    if (parentInfo.momBirthday) pEntries.push({ label: '엄마 생일', emoji: '👩', date: parentInfo.momBirthday.date, isLunar: parentInfo.momBirthday.isLunar, kw: ['엄마 선물', '여성 선물', '엄마 생일 선물'] });
+    if (parentInfo.dadBirthday) pEntries.push({ label: '아빠 생일', emoji: '👨', date: parentInfo.dadBirthday.date, isLunar: parentInfo.dadBirthday.isLunar, kw: ['아빠 선물', '남성 선물', '아빠 생일 선물'] });
+    if (parentInfo.anniversary) pEntries.push({ label: '결혼기념일', emoji: '💍', date: parentInfo.anniversary, isLunar: false, kw: ['결혼기념일 선물', '커플 선물', '기념일 선물세트'] });
 
     for (const e of pEntries) {
       const [, m, d] = e.date.split('-').map(Number);

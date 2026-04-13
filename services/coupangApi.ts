@@ -97,8 +97,9 @@ export async function searchProducts(
   if (!hasCoupangApiKeys()) return [];
 
   try {
-    let query = `keyword=${encodeURIComponent(keyword)}&limit=${limit}`;
-    if (minPrice) query += `&minPrice=${minPrice}`;
+    // minPrice는 API 미지원 가능성 → 여유분 조회 후 클라이언트 필터링
+    const fetchLimit = minPrice ? limit * 3 : limit;
+    const query = `keyword=${encodeURIComponent(keyword)}&limit=${fetchLimit}`;
     const authorization = generateAuthorization('GET', SEARCH_PATH, query);
 
     const res = await fetch(`${BASE_URL}${SEARCH_PATH}?${query}`, {
@@ -111,7 +112,7 @@ export async function searchProducts(
 
     const json = await res.json();
     if (json.rCode === '0' && json.data?.productData) {
-      return json.data.productData.map((p: any) => ({
+      let products = json.data.productData.map((p: any) => ({
         productId: p.productId,
         productName: p.productName,
         productPrice: p.productPrice,
@@ -120,6 +121,10 @@ export async function searchProducts(
         categoryName: p.categoryName || '',
         isRocket: p.isRocket || false,
       }));
+      if (minPrice) {
+        products = products.filter((p: CoupangProduct) => p.productPrice >= minPrice);
+      }
+      return products.slice(0, limit);
     }
     return [];
   } catch (e) {
