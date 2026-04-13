@@ -128,6 +128,12 @@ function getSeasonEvents(babyName: string): EventBanner[] {
       month: 12, day: 25, leadDays: 30,
       keywords: ['크리스마스 선물 아이', '산타 선물세트', '크리스마스 장난감'],
     },
+    {
+      name: '핼러윈',
+      emoji: '🎃',
+      month: 10, day: 31, leadDays: 14,
+      keywords: ['핼러윈 코스튬 아이', '핼러윈 장난감', '핼러윈 파티용품'],
+    },
   ];
 
   // 음력 명절은 매년 날짜가 다르므로 근사값 사용 (향후 라이브러리 연동)
@@ -201,6 +207,20 @@ function getParentEvents(): EventBanner[] {
       month: 5, day: 8, leadDays: 7,
       subtitle: '부모님께 감사한 마음을 전하세요',
       keywords: ['어버이날 선물', '부모님 선물', '안마기 선물'],
+    },
+    {
+      name: '발렌타인데이',
+      emoji: '💝',
+      month: 2, day: 14, leadDays: 14,
+      subtitle: '사랑하는 사람에게 마음을 전하세요',
+      keywords: ['발렌타인 선물', '커플 선물', '초콜릿 선물세트'],
+    },
+    {
+      name: '화이트데이',
+      emoji: '🤍',
+      month: 3, day: 14, leadDays: 14,
+      subtitle: '달콤한 답례 선물을 준비하세요',
+      keywords: ['화이트데이 선물', '커플 선물', '사탕 선물세트'],
     },
     {
       name: '부부의 날',
