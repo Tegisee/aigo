@@ -19,22 +19,27 @@ import { hasCoupangApiKeys, generateDeepLink } from '../../services/coupangApi';
 
 export default function WishlistScreen() {
   const router = useRouter();
-  const { trackedItems, babyBirthDate, babyName, children, selectedChildId, selectChild } = useAppStore();
+  const { trackedItems, babyBirthDate, babyName, children } = useAppStore();
 
-  const displayName = babyName || '우리 아이';
-  const babyMonths = babyBirthDate ? (() => {
-    const birth = new Date(babyBirthDate);
+  const [selectedCategory, setSelectedCategory] = useState<BabyCategory | null>(null);
+  const [filterChildId, setFilterChildId] = useState<string | null>(null);
+
+  // 필터된 아이 기준으로 월령/카테고리 계산 (홈 selectedChildId와 독립)
+  const filterChild = filterChildId ? children.find((c) => c.id === filterChildId) : null;
+  const activeBirthDate = filterChild?.birthDate || babyBirthDate;
+  const activeName = filterChild?.name || babyName || '우리 아이';
+  const displayName = activeName;
+  const babyMonths = activeBirthDate ? (() => {
+    const birth = new Date(activeBirthDate);
     const now = new Date();
     return (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth());
   })() : null;
   const categories = getCategoriesByMonth(babyMonths);
-  const [selectedCategory, setSelectedCategory] = useState<BabyCategory | null>(null);
-  const [filterChildId, setFilterChildId] = useState<string | null>(null);
 
-  // 홈에서 아이 전환 시 카테고리만 초기화 (아이 필터는 유지)
+  // 아이 필터 변경 시 카테고리 초기화
   useEffect(() => {
     setSelectedCategory(null);
-  }, [selectedChildId]);
+  }, [filterChildId]);
 
   const childFilteredItems = filterChildId
     ? trackedItems.filter((item) => item.childId === filterChildId)
