@@ -176,19 +176,18 @@ export default function HomeScreen() {
     }
     setLoadingEvent(index);
 
-    // 1순위: 쿠팡 파트너스 API (기념일 유형별 최소 가격 필터, 키워드 순차 시도)
+    // 1순위: 쿠팡 파트너스 API (기념일 유형별 최소 가격 필터)
     if (hasCoupangApiKeys()) {
-      const minPrice = event.type === 'parent' ? 100000 : 50000;
-      for (const keyword of event.keywords!) {
-        try {
-          const products = await searchProducts(keyword, 5, minPrice);
-          if (products.length > 0) {
-            setEventProducts((prev) => ({ ...prev, [index]: products }));
-            setLoadingEvent(null);
-            return;
-          }
-        } catch {}
-      }
+      try {
+        const keyword = event.keywords[0];
+        const minPrice = event.type === 'parent' ? 100000 : 50000;
+        const products = await searchProducts(keyword, 5, minPrice);
+        if (products.length > 0) {
+          setEventProducts((prev) => ({ ...prev, [index]: products }));
+          setLoadingEvent(null);
+          return;
+        }
+      } catch {}
     }
 
     // 2순위: shared_products에서 키워드 관련 카테고리 조회
