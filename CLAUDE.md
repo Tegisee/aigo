@@ -50,13 +50,13 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.4 (vc22) 내부 테스트 중 (2026-04-12)
+## 현재 상태: v1.0.4 (vc41) 비공개 테스트 준비 (2026-04-13)
 
 ### Google Play
 - 스토어: https://play.google.com/store/apps/details?id=com.aigo.app
 - GitHub: https://github.com/Tegisee/aigo (Private)
-- 현재 버전: 1.0.4 (버전 코드 22)
-- 비공개 테스트: v1.0.4 내부 테스트 중
+- 현재 버전: 1.0.4 (버전 코드 41)
+- 비공개 테스트: v1.0.4 빌드 제출 준비 중
 - 테스터 그룹: aigo_app@googlegroups.com
 - 상세: docs/014_구글플레이셋팅.md
 
@@ -135,30 +135,30 @@
 ### v1.0.4 vc13 테스트 결과 (04-11)
 **✅ 정상 확인**: BUG-31(온보딩 레이아웃), BUG-32(필수 입력), BUG-24(음력 D-Day)
 
-### v1.0.4 vc22 진행 상태 (04-12)
-**✅ 완료**
-- BUG-12, BUG-23, BUG-30, BUG-33, BUG-34, BUG-35, ENV-1 완료
+### v1.0.4 vc22 완료 (04-12)
+- ✅ BUG-12, BUG-23, BUG-30, BUG-33, BUG-34, BUG-35, ENV-1 완료
 
-**🔧 진행 중**
-- ENV-2: Firestore에 데이터 있는데 복원 시 0건 나옴
-  - handleGoogleStart 단계별 Alert 추가했는데 Alert이 안 뜸
-  - 앱 시작 시 자동 auth 복원 경로가 따로 있는 것으로 추정
-  - _layout.tsx onAuthStateChanged 또는 checkFreshInstall 확인 필요
+### v1.0.4 vc41 완료 (04-13)
+- ✅ ENV-2: 구글 로그인 데이터 복원 — clearLocalData Firebase Auth 키 보존 + 자동 복원 흐름 수정
+- ✅ BUG-38: 다자녀 접종/검진 데이터 독립 관리 (childId::key prefix)
+- ✅ BUG-40: 관심상품 탭 아이별 월령 카테고리 독립 (홈 selectedChildId와 분리)
+- ✅ 공유상품 성별 필터링 (SharedProduct gender 필드 + fetchPopularByCategory 필터)
+- ✅ 기념일 추천 상품 수정 (shared_products fallback 제거, 쿠팡 API 전용)
+- ✅ 발렌타인데이/화이트데이/핼러윈 기념일 추가
+- ✅ 기념일 키워드 선물 중심 재배치
+- ✅ 디버그 Alert 전체 제거 (OnboardingScreen, login.tsx, settings.tsx)
 
 ### 남은 TODO
-
-**🔴 P0 — 진행 중**
-- **ENV-2**: 구글 로그인 데이터 복원 — Alert 미표시 원인 분석 필요 (자동 auth 복원 경로 확인)
 
 **🟡 P1 — UX 버그**
 - **BUG-36**: 접종 리스트 등록 후 나중에 체크 기능
 - **BUG-37**: 월령별 추천 카테고리 복수선택 해제 안 됨
-- **BUG-38**: ✅ 다자녀 접종/검진 데이터 공유 → childId::key prefix로 아이별 독립 관리
+- **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (재현 조건 파악 필요)
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
 
-**다음 단계**: ENV-2 Alert 미표시 원인 분석 → 수정 → 로컬 빌드 → 비공개 테스트 제출
+**다음 단계**: 비공개 테스트 빌드 제출
 
 ### EAS 빌드 크레딧
 - 현재: 100% 소진 (리셋: 2026-04-21)
@@ -215,3 +215,4 @@
 
 ## 현재 빌드 이력
 - v1.0.4 vc26 (2026-04-13) - 재설치 시 구글 로그인 데이터 복원 개선
+- v1.0.4 vc41 (2026-04-13) - ENV-2/BUG-38/BUG-40 수정, 성별 필터, 기념일 개선, 디버그 제거
