@@ -132,7 +132,8 @@ export async function registerForPushNotifications(): Promise<string | null> {
       await savePushToken(token);
       debug.push('S5: Firestore 저장 OK');
     } catch (e: any) {
-      debug.push(`S5: Firestore 저장 실패 — ${e?.message}`);
+      debug.push(`S5: Firestore 저장 실패 — ${e?.message}, 재시도 예약`);
+      retryTokenSave(token, 1, debug);
     }
   } else {
     debug.push('S5: uid 없음 — 재시도 예약');
@@ -143,10 +144,10 @@ export async function registerForPushNotifications(): Promise<string | null> {
   return token;
 }
 
-/** uid가 확보될 때까지 토큰 저장 재시도 (최대 3회) */
+/** uid가 확보될 때까지 토큰 저장 재시도 (최대 5회, 2s/4s/6s/8s/10s = 최대 30초) */
 function retryTokenSave(token: string, attempt: number, debug: string[]) {
-  if (attempt > 3) {
-    debug.push('S5: 재시도 3회 실패');
+  if (attempt > 5) {
+    debug.push('S5: 재시도 5회 실패');
     savePushDebug(debug.join('\n'));
     return;
   }

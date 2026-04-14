@@ -202,8 +202,12 @@ export default function RootLayout() {
     migrateStorageKey();
 
     (async () => {
-      await signInAnonymously();
-      await registerForPushNotifications();
+      const uid = await signInAnonymously();
+      if (uid) {
+        await registerForPushNotifications();
+      } else {
+        console.warn('[Layout] uid 확보 실패 — 푸시 토큰 등록 스킵');
+      }
       // 로컬 데이터 Firestore 초기 동기화
       const { trackedItems } = useAppStore.getState();
       if (trackedItems.length > 0) {
