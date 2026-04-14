@@ -56,7 +56,11 @@ export async function searchProducts(
   });
 
   const json = await res.json();
+  console.log(`  [API] 응답: status=${res.status} rCode=${json.rCode} rMessage=${json.rMessage || ''} productData=${json.data?.productData?.length ?? 'null'}`);
   if (json.rCode === '0' && json.data?.productData) {
+    for (const p of json.data.productData) {
+      console.log(`  [API] raw: productId=${p.productId} vendorItemId=${p.vendorItemId ?? 'N/A'} itemId=${p.itemId ?? 'N/A'} price=${p.productPrice} name="${(p.productName || '').slice(0, 40)}" url=${(p.productUrl || '').slice(0, 80)}`);
+    }
     return json.data.productData.map((p: any) => ({
       productId: p.productId,
       productName: p.productName,
@@ -97,42 +101,32 @@ export async function fetchCurrentPrice(
 
     if (products.length === 0) continue;
 
-    // 1순위: productId 정확 매칭
-    const exactMatches = products.filter((p) => String(p.productId) === productId);
-    if (exactMatches.length > 0) {
-      let best = exactMatches[0];
-      if (exactMatches.length > 1 && currentPrice > 0) {
-        best = exactMatches.reduce((a, b) =>
-          Math.abs(a.productPrice - currentPrice) <= Math.abs(b.productPrice - currentPrice) ? a : b
-        );
-      }
-
-      if (currentPrice > 0) {
-        const changeRate = Math.abs(best.productPrice - currentPrice) / currentPrice;
-        if (changeRate > 0.3) {
-          console.log(`  [API] 가격 변동 ${(changeRate * 100).toFixed(0)}% 초과 → 스킵`);
-          return null;
-        }
-      }
-
-      return { price: best.productPrice, image: best.productImage, name: best.productName };
+    // productId 정확 매칭
+    // 근접 매칭 제거 (2026-04-14): 다른 상품 오매칭 위험. 지금이야와 동일하게 복원
+    const matches = products.filter((p) => String(p.productId) === productId);
+    if (matches.length === 0) {
+      console.log(`  [API] productId=${productId} 매칭 실패 (${products.length}개 중 일치 없음)`);
+      continue;
     }
 
-    console.log(`  [API] productId=${productId} 정확 매칭 실패 → 가격 근접 매칭 시도`);
-
-    // 2순위: productId 매칭 실패 시 가격 근접 상품으로 fallback
-    if (currentPrice > 0 && products.length > 0) {
-      const closest = products.reduce((a, b) =>
+    let best = matches[0];
+    if (matches.length > 1 && currentPrice > 0) {
+      best = matches.reduce((a, b) =>
         Math.abs(a.productPrice - currentPrice) <= Math.abs(b.productPrice - currentPrice) ? a : b
       );
-      const changeRate = Math.abs(closest.productPrice - currentPrice) / currentPrice;
-      // 10% 이내 가격 차이면 같은 상품으로 간주
-      if (changeRate <= 0.1) {
-        console.log(`  [API] 가격 근접 매칭: ${closest.productName.slice(0, 30)} (${closest.productPrice}원, 차이 ${(changeRate * 100).toFixed(1)}%)`);
-        return { price: closest.productPrice, image: closest.productImage, name: closest.productName };
-      }
-      console.log(`  [API] 가격 근접 매칭도 실패 (최소 차이 ${(changeRate * 100).toFixed(1)}%)`);
+      console.log(`  [API] productId 매칭 ${matches.length}개 → 현재가(${currentPrice})에 가장 가까운 ${best.productPrice}원 선택`);
     }
+
+    if (currentPrice > 0) {
+      const changeRate = Math.abs(best.productPrice - currentPrice) / currentPrice;
+      if (changeRate > 0.3) {
+        console.log(`  [API] productId 매칭 but 가격 변동 ${(changeRate * 100).toFixed(0)}% 초과 → 스킵 (${currentPrice}→${best.productPrice})`);
+        return null;
+      }
+    }
+
+    console.log(`  [API] productId 정확 매칭: "${best.productName.slice(0, 40)}" → ${best.productPrice}원`);
+    return { price: best.productPrice, image: best.productImage, name: best.productName };
   }
 
   return null;
