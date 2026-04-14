@@ -41,3 +41,6 @@ yarn-error.*
 /ios
 /android
 scripts/price-checker/firebase-service-account.json
+
+# debug snapshot
+inspect-output/
