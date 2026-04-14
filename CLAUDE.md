@@ -148,6 +148,14 @@
 - ✅ 기념일 키워드 선물 중심 재배치
 - ✅ 디버그 Alert 전체 제거 (OnboardingScreen, login.tsx, settings.tsx)
 
+### v1.0.4 vc42 완료 (04-14)
+- ✅ 근접 매칭 fallback 제거 (coupang-api.ts) — 다른 상품 오매칭 거짓 알림 차단
+- ✅ API 디버그 로그 추가 (coupang-api.ts) — productId 불일치 원인 추적 가능
+- ✅ inspect-output submodule 참조 제거 + gitignore — Actions exit code 128 해결
+- ✅ FCM 토큰 갱신 로직 보강 — uid 확보 후 등록 + 재시도 5회 확대 + Firestore 저장 실패 재시도
+- ✅ 스크래핑 전환 검토 → 쿠팡 GitHub Actions IP 차단 확인 → 파트너스 API 유지 결정
+- ✅ 파트너스 API 구조적 한계 확인: productId 기반 조회 불가, 매칭률 57% (7개 중 4개)
+
 ### 남은 TODO
 
 **🟡 P1 — UX 버그**
@@ -158,7 +166,7 @@
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
 
-**다음 단계**: 비공개 테스트 빌드 제출
+**다음 단계**: v1.0.4 vc42 비공개 테스트 제출 → 알림 수신 테스트
 
 ### EAS 빌드 크레딧
 - 현재: 100% 소진 (리셋: 2026-04-21)
@@ -216,3 +224,4 @@
 ## 현재 빌드 이력
 - v1.0.4 vc26 (2026-04-13) - 재설치 시 구글 로그인 데이터 복원 개선
 - v1.0.4 vc41 (2026-04-13) - ENV-2/BUG-38/BUG-40 수정, 성별 필터, 기념일 개선, 디버그 제거
+- v1.0.4 vc42 (2026-04-14) - 근접 매칭 제거, API 디버그 로그, 토큰 갱신 보강, submodule 정리
