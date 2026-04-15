@@ -225,3 +225,15 @@
 - v1.0.4 vc26 (2026-04-13) - 재설치 시 구글 로그인 데이터 복원 개선
 - v1.0.4 vc41 (2026-04-13) - ENV-2/BUG-38/BUG-40 수정, 성별 필터, 기념일 개선, 디버그 제거
 - v1.0.4 vc42 (2026-04-14) - 근접 매칭 제거, API 디버그 로그, 토큰 갱신 보강, submodule 정리
+
+## iOS WebView 쿠팡 튕김 현상 (형제앱 지금이야 해결 내용)
+- 증상: iOS WebView에서 쿠팡 URL 로드 시 Universal Link로 인해 쿠팡 앱으로 튕기는 현상
+- 원인: link.coupang.com 단축 URL → 리다이렉트 → coupang:// 딥링크 트리거
+- 해결책:
+  1. onShouldStartLoadWithRequest에서 coupang://, coupangapp:// 차단
+  2. allowsBackForwardNavigationGestures={false} 설정
+  3. WebView에 html prop으로 HTML 직접 전달 (URL 탐색 없음)
+  4. BLOCK_DEEPLINK_JS에 coupangapp:// 추가
+- 결과: 2~3회 튕김 → 1회로 감소 (1회는 iOS 시스템 레벨이라 완전 차단 불가)
+- 추가 시도 가능: expo-web-browser(SFSafariViewController) 사용 시 튕김 없으나 JS 인젝션 불가 → 스크래핑 구조 변경 필요
+- 참고 파일: 지금이야 CoupangScraper.tsx, add-item.tsx
