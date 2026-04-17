@@ -110,9 +110,10 @@ async function cleanupInvalidUsers(invalidTokens: string[]) {
     if (!token || !invalidTokens.includes(token)) continue;
 
     console.log(`[Cleanup] 만료 토큰 제거: ${userDoc.id}`);
+    // 토큰만 삭제 — notificationEnabled는 유저 설정이므로 봇이 덮어쓰지 않음
+    // (재설치/기기 변경 후 앱 재실행 시 savePushToken이 새 토큰 + notificationEnabled:true 복원)
     await userDoc.ref.update({
       expoPushToken: FieldValue.delete(),
-      notificationEnabled: false,
     });
   }
 }
