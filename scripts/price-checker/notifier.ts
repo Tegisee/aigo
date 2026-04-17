@@ -225,7 +225,8 @@ export async function sendSmartNotifications(
           receiptStatusCount[receipt.status] =
             (receiptStatusCount[receipt.status] || 0) + 1;
           if (receipt.status === 'error') {
-            const code = receipt.details?.error ?? '(no error code)';
+            // expo-server-sdk 타입에 MismatchSenderId가 포함 안 된 버전 대응
+            const code: string = (receipt.details?.error as string | undefined) ?? '(no error code)';
             receiptErrorCount[code] = (receiptErrorCount[code] || 0) + 1;
             const token = idToToken.get(receiptId);
             console.log(
