@@ -96,22 +96,34 @@ export async function sendSmartNotifications(
 
   const invalidTokens: string[] = [];
 
-  const messages: ExpoPushMessage[] = targets
-    .filter((t) => Expo.isExpoPushToken(t.token))
-    .map((t) => {
-      const { title, body } = buildMessage(t);
-      return {
-        to: t.token,
-        sound: 'default' as const,
-        title,
-        body,
-        data: {
-          itemId: t.itemId,
-          screen: t.alertType === 'vaccine_overdue' ? 'babyinfo' : 'detail',
-          alertType: t.alertType,
-        },
-      };
-    });
+  const validTargets = targets.filter((t) => Expo.isExpoPushToken(t.token));
+  const messages: ExpoPushMessage[] = validTargets.map((t) => {
+    const { title, body } = buildMessage(t);
+    return {
+      to: t.token,
+      sound: 'default' as const,
+      title,
+      body,
+      data: {
+        itemId: t.itemId,
+        screen: t.alertType === 'vaccine_overdue' ? 'babyinfo' : 'detail',
+        alertType: t.alertType,
+      },
+    };
+  });
+
+  // [DEBUG] 입력 통계
+  const invalidFormatCount = targets.length - messages.length;
+  console.log(
+    `[Push][DEBUG] 입력: 전체 ${targets.length}건, 유효 ${messages.length}건, 형식오류 ${invalidFormatCount}건`,
+  );
+  if (invalidFormatCount > 0) {
+    const invalidFormatTokens = targets
+      .filter((t) => !Expo.isExpoPushToken(t.token))
+      .slice(0, 5)
+      .map((t) => t.token?.slice(0, 30) || '(null)');
+    console.log('[Push][DEBUG] 형식오류 토큰 샘플:', invalidFormatTokens);
+  }
 
   const chunks = expo.chunkPushNotifications(messages);
   const tickets: ExpoPushTicket[] = [];
@@ -126,18 +138,131 @@ export async function sendSmartNotifications(
     }
   }
 
-  tickets.forEach((ticket, i) => {
-    if (ticket.status === 'error') {
-      const token = messages[i]?.to as string;
-      if (
-        ticket.details?.error === 'DeviceNotRegistered' ||
-        ticket.details?.error === 'InvalidCredentials'
-      ) {
-        console.log('[Push] 만료 토큰:', token?.slice(0, 30));
-        if (token) invalidTokens.push(token);
-      }
+  // [DEBUG] ticket status/error 집계
+  const statusCount: Record<string, number> = {};
+  const errorCount: Record<string, number> = {};
+  const receiptIds: string[] = [];
+  tickets.forEach((ticket) => {
+    statusCount[ticket.status] = (statusCount[ticket.status] || 0) + 1;
+    if (ticket.status === 'ok') {
+      receiptIds.push(ticket.id);
+    } else if (ticket.status === 'error') {
+      const code = ticket.details?.error ?? '(no error code)';
+      errorCount[code] = (errorCount[code] || 0) + 1;
     }
   });
+  console.log('[Push][DEBUG] ticket status 집계:', JSON.stringify(statusCount));
+  if (Object.keys(errorCount).length > 0) {
+    console.log('[Push][DEBUG] ticket error 집계:', JSON.stringify(errorCount));
+  }
+
+  // [DEBUG] error ticket raw 전체 출력 (최대 10건)
+  const errorTickets = tickets
+    .map((ticket, i) => ({ ticket, i }))
+    .filter(({ ticket }) => ticket.status === 'error');
+  errorTickets.slice(0, 10).forEach(({ ticket, i }) => {
+    const token = messages[i]?.to as string;
+    if (ticket.status === 'error') {
+      console.log(
+        `[Push][DEBUG] error ticket #${i}:`,
+        JSON.stringify({
+          token: token ? token.slice(0, 30) + '...' : '(none)',
+          message: ticket.message,
+          details: ticket.details,
+        }),
+      );
+    }
+  });
+  if (errorTickets.length > 10) {
+    console.log(`[Push][DEBUG] ... error ticket 추가 ${errorTickets.length - 10}건 생략`);
+  }
+
+  // [DEBUG] 성공 ticket 1건 샘플 (receipt id 확인용)
+  const firstOk = tickets.find((t) => t.status === 'ok');
+  if (firstOk && firstOk.status === 'ok') {
+    console.log('[Push][DEBUG] 성공 ticket 샘플 — receiptId:', firstOk.id);
+  }
+
+  // ── 만료 토큰 판정 ──
+  tickets.forEach((ticket, i) => {
+    if (ticket.status !== 'error') return;
+    const token = messages[i]?.to as string;
+    const code = ticket.details?.error;
+
+    if (code === 'DeviceNotRegistered' || code === 'InvalidCredentials') {
+      console.log('[Push] 만료 토큰:', token?.slice(0, 30), `(code=${code})`);
+      if (token) invalidTokens.push(token);
+    } else {
+      // 만료 판정 제외된 기타 에러 — 추후 정책 재검토 필요
+      console.log(
+        '[Push][DEBUG] 판정 제외 에러:',
+        token?.slice(0, 30),
+        `(code=${code ?? 'unknown'}, message="${ticket.message}")`,
+      );
+    }
+  });
+
+  // ── Receipt 조회 (FCM/APNs 실제 전달 결과) ──
+  // ticket은 Expo 서버 큐 진입 성공만 확인. 실제 기기 전달은 receipt로 확인해야 함.
+  // Expo 권장: 15분 후 조회이지만 GitHub Actions 단발 실행이라 즉시 조회 시도 (일부만 잡힘)
+  if (receiptIds.length > 0) {
+    try {
+      const receiptChunks = expo.chunkPushNotificationReceiptIds(receiptIds);
+      const receiptStatusCount: Record<string, number> = {};
+      const receiptErrorCount: Record<string, number> = {};
+
+      // ticket id → token 매핑 (id로 역추적)
+      const idToToken = new Map<string, string>();
+      tickets.forEach((ticket, i) => {
+        if (ticket.status === 'ok') {
+          idToToken.set(ticket.id, messages[i]?.to as string);
+        }
+      });
+
+      for (const chunk of receiptChunks) {
+        const receipts = await expo.getPushNotificationReceiptsAsync(chunk);
+        for (const [receiptId, receipt] of Object.entries(receipts)) {
+          receiptStatusCount[receipt.status] =
+            (receiptStatusCount[receipt.status] || 0) + 1;
+          if (receipt.status === 'error') {
+            const code = receipt.details?.error ?? '(no error code)';
+            receiptErrorCount[code] = (receiptErrorCount[code] || 0) + 1;
+            const token = idToToken.get(receiptId);
+            console.log(
+              `[Push][DEBUG] receipt error:`,
+              JSON.stringify({
+                token: token ? token.slice(0, 30) + '...' : '(unknown)',
+                message: receipt.message,
+                details: receipt.details,
+              }),
+            );
+            if (
+              token &&
+              (code === 'DeviceNotRegistered' ||
+                code === 'InvalidCredentials' ||
+                code === 'MismatchSenderId')
+            ) {
+              console.log('[Push] 만료 토큰 (receipt):', token.slice(0, 30), `(code=${code})`);
+              invalidTokens.push(token);
+            }
+          }
+        }
+      }
+      console.log(
+        '[Push][DEBUG] receipt status 집계:',
+        JSON.stringify(receiptStatusCount),
+        '조회된 receipt:',
+        Object.values(receiptStatusCount).reduce((a, b) => a + b, 0),
+        '/',
+        receiptIds.length,
+      );
+      if (Object.keys(receiptErrorCount).length > 0) {
+        console.log('[Push][DEBUG] receipt error 집계:', JSON.stringify(receiptErrorCount));
+      }
+    } catch (e) {
+      console.error('[Push][DEBUG] receipt 조회 실패:', e);
+    }
+  }
 
   return invalidTokens;
 }
