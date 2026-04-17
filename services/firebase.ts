@@ -95,6 +95,36 @@ export function getCurrentUid(): string | null {
   return auth?.currentUser?.uid ?? null;
 }
 
+/**
+ * uid가 확정될 때까지 대기 (최대 timeoutMs).
+ * linkGoogleAccount 직후처럼 onAuthStateChanged 비동기 반영 지연을 방어.
+ * 이미 uid가 있으면 즉시 반환.
+ */
+export async function waitForUid(timeoutMs = 2000): Promise<string | null> {
+  const immediate = getCurrentUid();
+  if (immediate) return immediate;
+  if (!auth) return null;
+
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const finish = (uid: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(uid);
+    };
+    const unsub = onAuthStateChanged(auth!, (user) => {
+      if (user?.uid) {
+        unsub();
+        finish(user.uid);
+      }
+    });
+    setTimeout(() => {
+      unsub();
+      finish(getCurrentUid());
+    }, timeoutMs);
+  });
+}
+
 export interface LinkGoogleResult {
   success: boolean;
   error?: string;

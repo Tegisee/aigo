@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { theme } from '../../constants/theme';
 import { useAppStore, type BabyGender, type Child, type ParentInfo } from '../../store/useAppStore';
 import DatePickerButton from '../../components/DatePickerButton';
+import { getRestoreDebugInfo } from '../../services/restore';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -356,6 +357,21 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.versionText}>{appVersion}</Text>
           </View>
+          <View style={styles.divider} />
+          <TouchableOpacity
+            style={styles.row}
+            onPress={async () => {
+              const info = await getRestoreDebugInfo();
+              Alert.alert('복원 디버그', info);
+            }}
+            activeOpacity={0.6}
+          >
+            <View style={styles.rowLeft}>
+              <Ionicons name="bug-outline" size={20} color={theme.subtext} />
+              <Text style={styles.label}>복원 디버그</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
         </View>
 
         {/* 데이터 */}
