@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Switch,
   Modal,
+  ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -427,7 +428,11 @@ export default function AddItemModal() {
 
         {/* ── 2단계: 현재가 표시 + 목표가 입력 ── */}
         {step === 'target' && (
-          <>
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
             {scraped && (
               <View style={styles.previewCard}>
                 <Text style={styles.previewName} numberOfLines={2}>{scraped.title}</Text>
@@ -545,7 +550,7 @@ export default function AddItemModal() {
                 )}
               </TouchableOpacity>
             </View>
-          </>
+          </ScrollView>
         )}
       </KeyboardAvoidingView>
 
@@ -611,6 +616,11 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: 'center',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingBottom: 20,
   },
   title: {
     fontSize: 24,

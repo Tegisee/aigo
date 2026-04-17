@@ -204,11 +204,12 @@ function StepBabyInfo({ onNext }: { onNext: () => void }) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.step}
+      style={[styles.step, styles.babyInfoStep]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
     >
       <ScrollView
+        style={styles.stepScrollView}
         contentContainerStyle={styles.stepScroll}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -563,6 +564,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 30,
     paddingBottom: 40,
+  },
+  // ── BabyInfo 스텝 전용 (ScrollView 터치 영역 확장용) ──
+  babyInfoStep: {
+    paddingHorizontal: 0,
+  },
+  stepScrollView: {
+    flex: 1,
+    width: '100%',
   },
   iconCircle: {
     width: 100,

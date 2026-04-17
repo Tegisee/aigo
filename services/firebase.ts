@@ -173,7 +173,7 @@ export async function savePushToken(token: string): Promise<void> {
   try {
     await setDoc(
       doc(db!,'users', uid),
-      { expoPushToken: token, lastActiveAt: new Date().toISOString() },
+      { expoPushToken: token, notificationEnabled: true, lastActiveAt: new Date().toISOString() },
       { merge: true },
     );
     console.log('[Firebase] Push Token 저장 완료:', token?.slice(0, 30));

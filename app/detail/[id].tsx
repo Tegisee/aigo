@@ -194,9 +194,10 @@ export default function DetailScreen() {
     const mentText = ment ? ment.replace(/\{name\}/g, babyName) : '';
     const mentLine = mentText ? `${mentText}\n\n` : '';
     const message = `${mentLine}${item.productName}\n${drop}\n\n${shareUrl}\n\n이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.`;
-    try {
-      await Share.share({ message });
-    } catch {}
+    // iOS는 Modal dismiss 애니메이션(~250ms) 동안 다른 시트를 띄우면 무시됨
+    setTimeout(() => {
+      Share.share({ message }).catch(() => {});
+    }, Platform.OS === 'ios' ? 300 : 0);
   };
 
   const handleDelete = () => {
