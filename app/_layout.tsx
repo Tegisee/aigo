@@ -9,6 +9,7 @@ import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { theme } from '../constants/theme';
 import { initCoupangApi } from '../services/config';
 import { signInAnonymously, syncLocalToFirestore } from '../services/firebase';
+import { backfillSettingsToFirestore } from '../services/restore';
 import {
   registerForPushNotifications,
   getItemIdFromNotification,
@@ -213,6 +214,10 @@ export default function RootLayout() {
       if (trackedItems.length > 0) {
         syncLocalToFirestore(trackedItems);
       }
+      // 설정 필드 backfill — uid 타이밍 이슈로 Firestore 저장 실패한 children/parentInfo 등 복구
+      backfillSettingsToFirestore().catch((e) => {
+        console.warn('[Layout] backfill 실패:', e);
+      });
     })();
 
     // 알림 클릭 리스너

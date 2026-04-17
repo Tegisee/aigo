@@ -234,18 +234,9 @@ export async function updateNotificationEnabled(
 export async function updateUserSettings(
   data: Record<string, any>,
 ): Promise<void> {
-  let uid = getCurrentUid();
-
-  // uid 없으면 signInAnonymously 대기 후 재시도 (온보딩 타이밍 이슈 방지)
-  if (!uid && auth) {
-    try {
-      const user = await new Promise<User | null>((resolve) => {
-        const unsub = onAuthStateChanged(auth!, (u) => { unsub(); resolve(u); });
-        setTimeout(() => resolve(null), 3000); // 3초 타임아웃
-      });
-      uid = user?.uid ?? null;
-    } catch {}
-  }
+  // waitForUid: onAuthStateChanged 기반 uid 확정 대기
+  // 기존 자체 구현은 첫 emit이 null이면 즉시 종료되어 signInAnonymously 전 호출 시 skip되는 버그가 있었음
+  const uid = await waitForUid(3000);
 
   if (!uid || !db) {
     console.warn('[Firebase] 유저 설정 저장 스킵 — uid 없음. keys:', Object.keys(data).join(','));

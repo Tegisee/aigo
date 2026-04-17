@@ -9,6 +9,7 @@ import {
   fetchItemsFromFirestore,
   getCurrentUid,
   waitForUid,
+  updateUserSettings,
 } from './firebase';
 
 const RESTORE_DEBUG_KEY = 'aigo-restore-debug';
@@ -136,4 +137,76 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
   const debugInfo = debugLines.join('\n');
   await saveRestoreDebug(debugInfo);
   return { childrenCount, itemsCount: items.length, debugInfo };
+}
+
+/**
+ * Zustand(로컬)에는 있는데 Firestore root 문서에 없는 필드를 재push.
+ * uid 타이밍 이슈로 Zustand만 저장되고 Firestore 저장이 skip된 상태를 복구.
+ * 앱 시작(signInAnonymously 후) + 로그인 완료(restore 후) 시점에서 호출.
+ */
+export async function backfillSettingsToFirestore(): Promise<void> {
+  const uid = await waitForUid(3000);
+  if (!uid) {
+    console.log('[Backfill] uid 확보 실패 — 스킵');
+    return;
+  }
+
+  const state = useAppStore.getState();
+  const settings = await fetchUserSettings().catch((e) => {
+    console.warn('[Backfill] settings 조회 실패:', e);
+    return null;
+  });
+
+  const fields: Record<string, any> = {};
+
+  // children 배열 — 로컬엔 있는데 Firestore엔 없거나 비어있음
+  const remoteChildrenEmpty = !settings?.children || settings.children.length === 0;
+  if (state.children.length > 0 && remoteChildrenEmpty) {
+    fields.children = state.children;
+    fields.selectedChildId = state.selectedChildId;
+  }
+
+  // 단일 아이 레거시 필드
+  if (state.babyName && !settings?.babyName) {
+    fields.babyName = state.babyName;
+    fields.babyGender = state.babyGender;
+    fields.babyBirthDate = state.babyBirthDate;
+  }
+
+  // parentInfo (map)
+  const localParentHasData =
+    state.parentInfo && Object.keys(state.parentInfo).length > 0;
+  const remoteParentEmpty =
+    !settings?.parentInfo || Object.keys(settings.parentInfo).length === 0;
+  if (localParentHasData && remoteParentEmpty) {
+    fields.parentInfo = state.parentInfo;
+  }
+
+  // 접종/검진 기록
+  if (Object.keys(state.vaccinationRecords).length > 0 && !settings?.vaccinationRecords) {
+    fields.vaccinationRecords = state.vaccinationRecords;
+    fields.vaccinationHospitals = state.vaccinationHospitals;
+  }
+  if (Object.keys(state.checkupRecords).length > 0 && !settings?.checkupRecords) {
+    fields.checkupRecords = state.checkupRecords;
+    fields.checkupHospitals = state.checkupHospitals;
+  }
+
+  if (Object.keys(fields).length > 0) {
+    console.log('[Backfill] 로컬→Firestore 누락 필드 push:', Object.keys(fields).join(','));
+    try {
+      await updateUserSettings(fields);
+      const info = `[Backfill] pushed: ${Object.keys(fields).join(',')}`;
+      const prev = await AsyncStorage.getItem(RESTORE_DEBUG_KEY);
+      const timestamp = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+      await AsyncStorage.setItem(
+        RESTORE_DEBUG_KEY,
+        `${prev ?? ''}\n[${timestamp}] ${info}`.trim(),
+      );
+    } catch (e) {
+      console.warn('[Backfill] push 실패:', e);
+    }
+  } else {
+    console.log('[Backfill] 누락 필드 없음 — skip');
+  }
 }
