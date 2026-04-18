@@ -124,6 +124,11 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
             await appendRestoreDebugLine(
               `[Onboarding] handleAnonymousStart — signInAnonymously uid=${uid ?? 'null'}`,
             );
+            // _layout subscribeAuthState는 hasSeenOnboarding=false 가드로 skip되므로
+            // 익명 경로에서 push token 등록을 직접 호출 (merge:true라 이후 중복 안전)
+            if (uid) {
+              registerForPushNotifications().catch(() => {});
+            }
             onNext();
           },
         },

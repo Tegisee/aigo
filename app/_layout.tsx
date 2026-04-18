@@ -242,9 +242,13 @@ export default function RootLayout() {
     if (!installChecked) return;
     migrateStorageKey();
 
-    // uid 확정 시점마다 post-signin 작업 1회 실행 (세션 복원, Google 로그인, 익명 진입 모두 커버)
-    // - 온보딩 미완료 신규 유저는 사용자가 Google/익명 선택 후에 fire
-    // - 기존 사용자는 signInAnonymously의 세션 복원 시 fire
+    // uid 확정 시점마다 post-signin 작업 1회 실행 — 단, **온보딩 진행 중에는 skip**.
+    // 이유: Google 로그인 중 signInWithCredential 직후 이 콜백이 fire되면 restore보다 먼저
+    //   savePushToken/backfill이 users/{uid}를 merge:true로 write → 관찰된 read-after-write
+    //   race로 restore가 방금 쓴 필드만 읽는 증상 재현.
+    //   OnboardingScreen.handleGoogleStart / handleAnonymousStart가 restore-first 순서를
+    //   직접 관리하고 push 등록도 자체 호출하므로, 온보딩 동안 이 callback은 no-op.
+    //   온보딩 완료 후 앱 재시작 시 세션 복원 → 이 callback fire → 정상 post-signin.
     let lastProcessedUid: string | null = null;
     const unsubAuth = subscribeAuthState(async (uid, info) => {
       if (!uid) {
@@ -253,9 +257,18 @@ export default function RootLayout() {
       }
       if (lastProcessedUid === uid) return;
       lastProcessedUid = uid;
+
+      const hasSeenOnboarding = useAppStore.getState().hasSeenOnboarding;
       await appendRestoreDebugLine(
-        `[Layout] auth 확정 — uid=${uid}, anon=${info?.isAnonymous}, providers=${JSON.stringify(info?.providers ?? [])}`,
+        `[Layout] auth 확정 — uid=${uid}, anon=${info?.isAnonymous}, providers=${JSON.stringify(info?.providers ?? [])}, hasSeenOnboarding=${hasSeenOnboarding}`,
       );
+      if (!hasSeenOnboarding) {
+        await appendRestoreDebugLine(
+          '[Layout] 온보딩 진행 중 — post-signin 작업 skip (OnboardingScreen이 제어)',
+        );
+        return;
+      }
+
       try {
         await registerForPushNotifications();
       } catch (e) {
