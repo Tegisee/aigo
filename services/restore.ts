@@ -37,6 +37,18 @@ export async function getRestoreDebugInfo(): Promise<string> {
   }
 }
 
+/** 설치/복원 공용 — 외부에서 한 줄씩 디버그 로그를 누적 기록 */
+export async function appendRestoreDebugLine(line: string): Promise<void> {
+  try {
+    const ts = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const prev = await AsyncStorage.getItem(RESTORE_DEBUG_KEY);
+    await AsyncStorage.setItem(
+      RESTORE_DEBUG_KEY,
+      `${prev ?? ''}\n[${ts}] ${line}`.trim(),
+    );
+  } catch {}
+}
+
 /** Firestore에서 유저 설정 + 관심상품을 복원하여 Zustand에 반영 */
 export async function restoreDataFromFirestore(): Promise<RestoreResult> {
   const debugLines: string[] = [];

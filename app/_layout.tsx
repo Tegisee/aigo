@@ -9,7 +9,7 @@ import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { theme } from '../constants/theme';
 import { initCoupangApi } from '../services/config';
 import { signInAnonymously, syncLocalToFirestore, updateUserSettings } from '../services/firebase';
-import { backfillSettingsToFirestore } from '../services/restore';
+import { backfillSettingsToFirestore, appendRestoreDebugLine } from '../services/restore';
 import {
   registerForPushNotifications,
   getItemIdFromNotification,
@@ -109,56 +109,100 @@ function buildBackfillSnapshot(
  *    Firestore에 저장 안 됐던 children/parentInfo를 이 시점에 저장하고 clear)
  */
 async function checkFreshInstall() {
+  appendRestoreDebugLine('[Install] checkFreshInstall 시작');
+
   // 1. Zustand persist가 AsyncStorage에서 복원 완료될 때까지 대기
   await waitForHydration();
+  appendRestoreDebugLine('[Install] hydration 완료');
 
   const state = useAppStore.getState();
   let markerValid = false;
+  let markerValue: string | null = null;
 
   // 2. SecureStore 마커 확인
   try {
-    const marker = await SecureStore.getItemAsync(INSTALL_MARKER_KEY);
-    markerValid = !!marker;
-  } catch {
-    // Keystore 키 소실 = 재설치 증거
-    console.log('[Install] SecureStore 읽기 실패 — Keystore 키 소실');
+    markerValue = await SecureStore.getItemAsync(INSTALL_MARKER_KEY);
+    markerValid = !!markerValue;
+  } catch (e: any) {
+    console.log('[Install] SecureStore 읽기 실패 — Keystore 키 소실:', e?.message);
+    appendRestoreDebugLine(`[Install] SecureStore 읽기 실패: ${e?.message ?? e}`);
     markerValid = false;
   }
 
-  // 3. 판단: 마커 없음 + 온보딩 완료 상태 = 백업 데이터가 복원된 재설치
-  if (!markerValid && state.hasSeenOnboarding) {
-    console.log('[Install] 재설치 감지');
+  // 2-1. 각 조건값 명시 로깅
+  const hasSeenOnboarding = state.hasSeenOnboarding;
+  const shouldReset = !markerValid && hasSeenOnboarding;
+  const conditionLog = `markerValid=${markerValid}${
+    markerValue ? `(${markerValue.slice(0, 19)})` : ''
+  }, hasSeenOnboarding=${hasSeenOnboarding}, → reset=${shouldReset}`;
+  console.log('[Install] 조건:', conditionLog);
+  appendRestoreDebugLine(`[Install] ${conditionLog}`);
 
-    // 3-a. 사전 백필: clearLocalData 이전에 Zustand 데이터를 Firestore에 push
-    //      (Firebase Auth persistence가 살아있으면 기존 uid로 복귀 → 원래 계정에 저장됨)
+  // 3. 판단: 마커 없음 + 온보딩 완료 상태 = 백업 데이터가 복원된 재설치
+  if (shouldReset) {
+    console.log('[Install] 재설치 감지');
+    appendRestoreDebugLine('[Install] 재설치 감지 — 사전 백필 시도');
+
+    // 3-a. 사전 백필
     try {
       const snapshot = buildBackfillSnapshot(state);
-      if (Object.keys(snapshot).length > 0) {
-        console.log('[Install] 사전 백필 스냅샷:', Object.keys(snapshot).join(','));
+      const snapshotKeys = Object.keys(snapshot);
+      const snapshotSummary = {
+        keys: snapshotKeys.join(',') || '(empty)',
+        childrenLen: (snapshot.children as any[] | undefined)?.length ?? 0,
+        babyName: snapshot.babyName ?? '(none)',
+        parentInfoKeys: snapshot.parentInfo
+          ? Object.keys(snapshot.parentInfo).length
+          : 0,
+        vaccineRecordsKeys: snapshot.vaccinationRecords
+          ? Object.keys(snapshot.vaccinationRecords).length
+          : 0,
+        checkupRecordsKeys: snapshot.checkupRecords
+          ? Object.keys(snapshot.checkupRecords).length
+          : 0,
+      };
+      console.log('[Install] snapshot:', snapshotSummary);
+      appendRestoreDebugLine(`[Install] snapshot: ${JSON.stringify(snapshotSummary)}`);
+
+      if (snapshotKeys.length > 0) {
+        appendRestoreDebugLine('[Install] signInAnonymously 호출');
         const uid = await signInAnonymously();
+        appendRestoreDebugLine(`[Install] signInAnonymously 결과 uid=${uid ?? 'null'}`);
+
         if (uid) {
+          appendRestoreDebugLine(`[Install] updateUserSettings 호출 (uid=${uid}, keys=${snapshotKeys.join(',')})`);
           await updateUserSettings(snapshot);
-          console.log('[Install] 사전 백필 완료 — uid:', uid, 'keys:', Object.keys(snapshot).join(','));
+          console.log('[Install] 사전 백필 완료 — uid:', uid, 'keys:', snapshotKeys.join(','));
+          appendRestoreDebugLine(`[Install] ✅ 사전 백필 완료 — Firestore push 성공`);
         } else {
           console.warn('[Install] 사전 백필 스킵 — uid 확보 실패 (Auth persistence 미복원)');
+          appendRestoreDebugLine('[Install] ❌ 사전 백필 스킵 — uid 확보 실패');
         }
       } else {
         console.log('[Install] 사전 백필 불필요 — Zustand 유효 데이터 없음');
+        appendRestoreDebugLine('[Install] 사전 백필 불필요 (snapshot 비어있음)');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('[Install] 사전 백필 실패:', e);
+      appendRestoreDebugLine(`[Install] ❌ 사전 백필 예외: ${e?.message ?? e}`);
     }
 
     // 3-b. 로컬 데이터 초기화
     console.log('[Install] 백업 데이터 초기화');
+    appendRestoreDebugLine('[Install] clearLocalData 호출');
     await clearLocalData();
+    appendRestoreDebugLine('[Install] clearLocalData 완료');
+  } else {
+    appendRestoreDebugLine('[Install] 재설치 아님 — 초기화 스킵');
   }
 
   // 4. 마커 (재)저장
   try {
     await SecureStore.setItemAsync(INSTALL_MARKER_KEY, new Date().toISOString());
-  } catch (e) {
+    appendRestoreDebugLine('[Install] SecureStore 마커 저장 완료');
+  } catch (e: any) {
     console.warn('[Install] SecureStore 마커 저장 실패:', e);
+    appendRestoreDebugLine(`[Install] ❌ 마커 저장 실패: ${e?.message ?? e}`);
   }
 }
 
