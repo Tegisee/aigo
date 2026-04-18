@@ -197,6 +197,19 @@
   - Android: `~/aigo/builds/android/`
   - iOS: `~/aigo/builds/ios/`
 
+## 빌드 파일 관리 규칙
+- **Android AAB**: `~/aigo/builds/android/aigo-v{버전}-vc{버전코드}.aab`
+  - 예: `aigo-v1.0.4-vc49.aab`
+- **iOS IPA**: `~/aigo/builds/ios/aigo-v{버전}-vc{버전코드}.ipa`
+  - 예: `aigo-v1.0.4-vc49.ipa`
+- 빌드 완료 후 **반드시** 위 규칙으로 파일명 변경 후 해당 폴더로 이동
+  - Android: `mv ~/aigo/aigo/build-[타임스탬프].aab ~/aigo/builds/android/aigo-v1.0.4-vc{N}.aab`
+  - iOS: `mv ~/aigo/aigo/build-[타임스탬프].ipa ~/aigo/builds/ios/aigo-v1.0.4-vc{N}.ipa`
+- **빌드 로그**:
+  - Android: `~/aigo/builds/android/build-log-android.txt`
+  - iOS: `~/aigo/builds/ios/build-log-ios.txt`
+  - `tee` 옵션으로 실시간 기록 (예: `eas build ... 2>&1 | tee ~/aigo/builds/android/build-log-android.txt`)
+
 ## 앱 기본 정보
 - 앱 이름: 아이고 (AIGO)
 - 번들 ID: com.aigo.app
