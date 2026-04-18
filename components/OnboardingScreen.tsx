@@ -70,29 +70,32 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
         return;
       }
 
-      // 3. 비익명 uid 확정 대기 (auth state 반영 지연 방어, 외부 보강)
-      const preSetLinkedUid = getCurrentUid();
+      // 3. 비익명 uid 확정 대기 (auth state 반영 지연 방어)
+      const preRestoreUid = getCurrentUid();
       await appendRestoreDebugLine(
-        `[Onboarding] pre-setLinked uid=${preSetLinkedUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
+        `[Onboarding] pre-restore uid=${preRestoreUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
       );
       const confirmedUid = await waitForNonAnonymousUid(5000);
       await appendRestoreDebugLine(
         `[Onboarding] waitForNonAnonymous 결과 uid=${confirmedUid ?? 'null'}`,
       );
 
-      setLinked('google');
-
-      // push token 항상 등록 (setDoc merge:true라 _layout onAuthStateChanged와 중복돼도 안전)
-      registerForPushNotifications().catch(() => {});
-
-      // 4. Firestore 데이터 복원
+      // 4. ★ Firestore 데이터 복원을 먼저 실행 (setLinked/savePushToken 쓰기 전에)
+      //    — setDoc merge:true가 원칙상 기존 필드를 보존해야 하지만,
+      //      실제 관찰상 쓰기 직후 getDocFromServer가 방금 쓴 필드만 반환하는 증상이 있어
+      //      **read-before-write** 순서로 변경해 서버 원본 상태를 먼저 확정
       const { childrenCount, itemsCount } = await restoreDataFromFirestore();
       await appendRestoreDebugLine(
         `[Onboarding] restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}`,
       );
 
-      // 5. 최종 진입 — childrenCount 또는 itemsCount > 0 이면 복원 완료로 간주
-      // (recoveredAccount 플래그와 무관하게 서버 데이터 유무로 판정)
+      // 5. 복원 이후 setLinked (isLinked, linkedProvider 필드 업데이트 — merge:true)
+      setLinked('google');
+
+      // 6. push token 등록 (onAuthStateChanged와 중복돼도 setDoc merge:true라 안전)
+      registerForPushNotifications().catch(() => {});
+
+      // 7. 분기 — childrenCount/itemsCount > 0 이면 복원 완료로 간주
       if (childrenCount > 0 || itemsCount > 0) {
         const parts = [`${googleResult.email}`, '이전 데이터가 복원되었습니다.'];
         if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);

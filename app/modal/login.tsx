@@ -37,36 +37,45 @@ export default function LoginScreen() {
       // 2. Firebase에 연동 (익명 → 구글 merge 또는 기존 계정 복구)
       const firebaseResult = await linkGoogleAccount(googleResult.idToken);
       if (firebaseResult.success) {
-        // setLinked 직전 uid 확정 대기 (auth state A→B 전환 지연 방어)
-        const preSetLinkedUid = getCurrentUid();
+        // 비익명 uid 확정 대기
+        const preRestoreUid = getCurrentUid();
         await appendRestoreDebugLine(
-          `[Login] pre-setLinked uid=${preSetLinkedUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
+          `[Login] pre-restore uid=${preRestoreUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
         );
         const confirmedUid = await waitForNonAnonymousUid(5000);
         await appendRestoreDebugLine(
           `[Login] waitForNonAnonymous 결과 uid=${confirmedUid ?? 'null'}`,
         );
 
-        setLinked('google');
-
-        // push token 항상 등록 (recoveredAccount 무관, setDoc merge:true라 중복 안전)
-        registerForPushNotifications().catch(() => {});
-
-        // 4. Firestore에서 데이터 복원
+        // 3. ★ Firestore 복원을 먼저 실행 (setLinked/savePushToken 쓰기 전)
+        //    — read-before-write 순서로 서버 원본 상태 확정
+        let childrenCount = 0;
+        let itemsCount = 0;
         try {
-          const { childrenCount, itemsCount } = await restoreDataFromFirestore();
-
-          const parts = [`${googleResult.email}`, '구글 계정이 연동되었습니다.'];
-          if (childrenCount > 0 || itemsCount > 0) {
-            parts.push(`\n이전 데이터 복원 완료`);
-            if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
-            if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
-          }
-          Alert.alert('연동 완료', parts.join('\n'));
+          const result = await restoreDataFromFirestore();
+          childrenCount = result.childrenCount;
+          itemsCount = result.itemsCount;
+          await appendRestoreDebugLine(
+            `[Login] restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}`,
+          );
         } catch (e: any) {
           console.warn('[Login] 데이터 복원 실패:', e);
-          Alert.alert('연동 완료', `${googleResult.email}\n구글 계정이 연동되었습니다.`);
         }
+
+        // 4. 복원 이후 setLinked
+        setLinked('google');
+
+        // 5. push token (onAuthStateChanged와 중복돼도 merge:true라 안전)
+        registerForPushNotifications().catch(() => {});
+
+        // 6. 결과 알림
+        const parts = [`${googleResult.email}`, '구글 계정이 연동되었습니다.'];
+        if (childrenCount > 0 || itemsCount > 0) {
+          parts.push(`\n이전 데이터 복원 완료`);
+          if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
+          if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
+        }
+        Alert.alert('연동 완료', parts.join('\n'));
       } else {
         Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
       }
