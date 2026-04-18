@@ -16,6 +16,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   deleteDoc,
   updateDoc,
@@ -250,13 +251,16 @@ export async function updateUserSettings(
   }
 }
 
-/** Firestore에서 유저 설정 복원 (구글 로그인 데이터 복구용) */
+/** Firestore에서 유저 설정 복원 (구글 로그인 데이터 복구용)
+ *  getDocFromServer로 클라이언트 캐시를 우회해 항상 서버 원본을 읽음.
+ *  (재설치 직후 오래된 캐시가 children 누락된 구버전 문서를 반환하는 이슈 회피)
+ */
 export async function fetchUserSettings(): Promise<Record<string, any> | null> {
   const uid = getCurrentUid();
   if (!uid || !db) return null;
 
   try {
-    const snap = await getDoc(doc(db!, 'users', uid));
+    const snap = await getDocFromServer(doc(db!, 'users', uid));
     if (snap.exists()) {
       return snap.data();
     }
