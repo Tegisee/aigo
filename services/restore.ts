@@ -37,10 +37,15 @@ async function saveRestoreDebug(info: string) {
   } catch {}
 }
 
-/** 설정 화면에서 호출 — 최근 복원 로그 반환 */
+/** 설정 화면에서 호출 — 최근 복원 로그 반환 (Alert 가독성을 위해 최근 2000자만) */
+const DEBUG_DISPLAY_MAX = 2000;
 export async function getRestoreDebugInfo(): Promise<string> {
   try {
-    return (await AsyncStorage.getItem(RESTORE_DEBUG_KEY)) || '디버그 정보 없음';
+    const raw = (await AsyncStorage.getItem(RESTORE_DEBUG_KEY)) || '';
+    if (!raw) return '디버그 정보 없음';
+    if (raw.length <= DEBUG_DISPLAY_MAX) return raw;
+    const omitted = raw.length - DEBUG_DISPLAY_MAX;
+    return `…(앞부분 ${omitted}자 생략)…\n${raw.slice(-DEBUG_DISPLAY_MAX)}`;
   } catch {
     return '읽기 실패';
   }
@@ -93,12 +98,19 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
 
   debugLines.push(`settings: ${settings ? Object.keys(settings).join(',') : 'null'}`);
   debugLines.push(`items: ${items.length}건`);
-  if (settings?.children) {
-    console.log('[Restore] children 발견:', settings.children.length, '건 —', settings.children.map((c: any) => c.name));
-    debugLines.push(`children: ${JSON.stringify(settings.children.map((c: any) => c.name))}`);
+  // children 필드 진단 (배열 vs 맵 vs undefined 구분)
+  const rawChildren = settings?.children;
+  debugLines.push(
+    `children.field: isArray=${Array.isArray(rawChildren)}, ` +
+    `length=${Array.isArray(rawChildren) ? rawChildren.length : 'n/a'}, ` +
+    `type=${typeof rawChildren}`,
+  );
+  if (Array.isArray(rawChildren) && rawChildren.length > 0) {
+    console.log('[Restore] children 발견:', rawChildren.length, '건 —', rawChildren.map((c: any) => c?.name));
+    debugLines.push(`children.names: ${JSON.stringify(rawChildren.map((c: any) => c?.name))}`);
   } else {
-    console.log('[Restore] children 없음');
-    debugLines.push('children: (없음)');
+    console.log('[Restore] children 없음 또는 빈 배열');
+    debugLines.push('children.names: (없음/빈배열)');
   }
   if (settings?.babyName) debugLines.push(`babyName: ${settings.babyName}`);
   if (settings?.parentInfo) {

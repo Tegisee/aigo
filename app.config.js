@@ -27,7 +27,7 @@ export default {
       },
     },
     android: {
-      versionCode: 55,
+      versionCode: 56,
       package: "com.aigo.app",
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       adaptiveIcon: {

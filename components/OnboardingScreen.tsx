@@ -87,8 +87,12 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
 
       // 4. Firestore 데이터 복원
       const { childrenCount, itemsCount } = await restoreDataFromFirestore();
+      await appendRestoreDebugLine(
+        `[Onboarding] restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}`,
+      );
 
-      // 5. 최종 진입
+      // 5. 최종 진입 — childrenCount 또는 itemsCount > 0 이면 복원 완료로 간주
+      // (recoveredAccount 플래그와 무관하게 서버 데이터 유무로 판정)
       if (childrenCount > 0 || itemsCount > 0) {
         const parts = [`${googleResult.email}`, '이전 데이터가 복원되었습니다.'];
         if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);

@@ -49,11 +49,8 @@ export default function LoginScreen() {
 
         setLinked('google');
 
-        // 3. uid가 변경된 경우 (재설치 → 기존 계정 복구) push token 재등록
-        if (firebaseResult.recoveredAccount) {
-          console.log('[Login] 계정 복구 감지 — push token 재등록');
-          registerForPushNotifications().catch(() => {});
-        }
+        // push token 항상 등록 (recoveredAccount 무관, setDoc merge:true라 중복 안전)
+        registerForPushNotifications().catch(() => {});
 
         // 4. Firestore에서 데이터 복원
         try {
