@@ -8,7 +8,7 @@ import * as Notifications from 'expo-notifications';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { theme } from '../constants/theme';
 import { initCoupangApi } from '../services/config';
-import { signInAnonymously, syncLocalToFirestore, updateUserSettings } from '../services/firebase';
+import { signInAnonymously, syncLocalToFirestore } from '../services/firebase';
 import { backfillSettingsToFirestore, appendRestoreDebugLine } from '../services/restore';
 import {
   registerForPushNotifications,
@@ -66,37 +66,6 @@ async function clearLocalData() {
 }
 
 /**
- * Zustand 상태에서 Firestore root 문서로 push 가능한 필드 스냅샷 생성.
- * 비어 있는 필드는 제외 — Firestore 기존 값 덮어쓰기 방지.
- */
-function buildBackfillSnapshot(
-  state: ReturnType<typeof useAppStore.getState>,
-): Record<string, any> {
-  const snapshot: Record<string, any> = {};
-  if (state.children.length > 0) {
-    snapshot.children = state.children;
-    snapshot.selectedChildId = state.selectedChildId;
-  }
-  if (state.babyName) {
-    snapshot.babyName = state.babyName;
-    snapshot.babyGender = state.babyGender;
-    snapshot.babyBirthDate = state.babyBirthDate;
-  }
-  if (state.parentInfo && Object.keys(state.parentInfo).length > 0) {
-    snapshot.parentInfo = state.parentInfo;
-  }
-  if (Object.keys(state.vaccinationRecords).length > 0) {
-    snapshot.vaccinationRecords = state.vaccinationRecords;
-    snapshot.vaccinationHospitals = state.vaccinationHospitals;
-  }
-  if (Object.keys(state.checkupRecords).length > 0) {
-    snapshot.checkupRecords = state.checkupRecords;
-    snapshot.checkupHospitals = state.checkupHospitals;
-  }
-  return snapshot;
-}
-
-/**
  * 재설치 감지 로직
  *
  * 핵심 원리:
@@ -104,9 +73,6 @@ function buildBackfillSnapshot(
  *   Keystore 키는 복원하지 않으므로 SecureStore 읽기가 실패하거나 null 반환
  * - SecureStore 읽기 실패 + hasSeenOnboarding=true → 재설치 확정
  * - 반드시 Zustand rehydration 완료 후 판단해야 올바른 상태를 확인 가능
- * - ENV-2 대응: clearLocalData 전에 Zustand → Firestore 사전 백필
- *   (Firebase Auth persistence가 auto-backup으로 복원되면 기존 uid 복귀 가능 →
- *    Firestore에 저장 안 됐던 children/parentInfo를 이 시점에 저장하고 clear)
  */
 async function checkFreshInstall() {
   appendRestoreDebugLine('[Install] checkFreshInstall 시작');
@@ -129,7 +95,7 @@ async function checkFreshInstall() {
     markerValid = false;
   }
 
-  // 2-1. 각 조건값 명시 로깅
+  // 2-1. 각 조건값 명시 로깅 (회귀 진단용)
   const hasSeenOnboarding = state.hasSeenOnboarding;
   const shouldReset = !markerValid && hasSeenOnboarding;
   const conditionLog = `markerValid=${markerValid}${
@@ -140,56 +106,8 @@ async function checkFreshInstall() {
 
   // 3. 판단: 마커 없음 + 온보딩 완료 상태 = 백업 데이터가 복원된 재설치
   if (shouldReset) {
-    console.log('[Install] 재설치 감지');
-    appendRestoreDebugLine('[Install] 재설치 감지 — 사전 백필 시도');
-
-    // 3-a. 사전 백필
-    try {
-      const snapshot = buildBackfillSnapshot(state);
-      const snapshotKeys = Object.keys(snapshot);
-      const snapshotSummary = {
-        keys: snapshotKeys.join(',') || '(empty)',
-        childrenLen: (snapshot.children as any[] | undefined)?.length ?? 0,
-        babyName: snapshot.babyName ?? '(none)',
-        parentInfoKeys: snapshot.parentInfo
-          ? Object.keys(snapshot.parentInfo).length
-          : 0,
-        vaccineRecordsKeys: snapshot.vaccinationRecords
-          ? Object.keys(snapshot.vaccinationRecords).length
-          : 0,
-        checkupRecordsKeys: snapshot.checkupRecords
-          ? Object.keys(snapshot.checkupRecords).length
-          : 0,
-      };
-      console.log('[Install] snapshot:', snapshotSummary);
-      appendRestoreDebugLine(`[Install] snapshot: ${JSON.stringify(snapshotSummary)}`);
-
-      if (snapshotKeys.length > 0) {
-        appendRestoreDebugLine('[Install] signInAnonymously 호출');
-        const uid = await signInAnonymously();
-        appendRestoreDebugLine(`[Install] signInAnonymously 결과 uid=${uid ?? 'null'}`);
-
-        if (uid) {
-          appendRestoreDebugLine(`[Install] updateUserSettings 호출 (uid=${uid}, keys=${snapshotKeys.join(',')})`);
-          await updateUserSettings(snapshot);
-          console.log('[Install] 사전 백필 완료 — uid:', uid, 'keys:', snapshotKeys.join(','));
-          appendRestoreDebugLine(`[Install] ✅ 사전 백필 완료 — Firestore push 성공`);
-        } else {
-          console.warn('[Install] 사전 백필 스킵 — uid 확보 실패 (Auth persistence 미복원)');
-          appendRestoreDebugLine('[Install] ❌ 사전 백필 스킵 — uid 확보 실패');
-        }
-      } else {
-        console.log('[Install] 사전 백필 불필요 — Zustand 유효 데이터 없음');
-        appendRestoreDebugLine('[Install] 사전 백필 불필요 (snapshot 비어있음)');
-      }
-    } catch (e: any) {
-      console.warn('[Install] 사전 백필 실패:', e);
-      appendRestoreDebugLine(`[Install] ❌ 사전 백필 예외: ${e?.message ?? e}`);
-    }
-
-    // 3-b. 로컬 데이터 초기화
-    console.log('[Install] 백업 데이터 초기화');
-    appendRestoreDebugLine('[Install] clearLocalData 호출');
+    console.log('[Install] 재설치 감지 — 백업 데이터 초기화');
+    appendRestoreDebugLine('[Install] 재설치 감지 — clearLocalData 호출');
     await clearLocalData();
     appendRestoreDebugLine('[Install] clearLocalData 완료');
   } else {
