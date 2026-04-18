@@ -76,7 +76,9 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
   }
 
   // ── Step 2: settings / items 분리 조회 (silent fail 제거) ──
-  const settings = await fetchUserSettings().catch((e: any) => {
+  // fetchUserSettings 내부 [FetchSettings] 로그를 debugLines에 직접 수집
+  // (AsyncStorage append race / Alert.alert 문자 제한 우회)
+  const settings = await fetchUserSettings((line) => debugLines.push(line)).catch((e: any) => {
     const msg = `settings fetch 실패: ${e?.code ?? ''} ${e?.message ?? e}`;
     console.error('[Restore]', msg);
     debugLines.push(msg);
