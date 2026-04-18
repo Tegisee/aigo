@@ -357,21 +357,25 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.versionText}>{appVersion}</Text>
           </View>
-          <View style={styles.divider} />
-          <TouchableOpacity
-            style={styles.row}
-            onPress={async () => {
-              const info = await getRestoreDebugInfo();
-              Alert.alert('복원 디버그', info);
-            }}
-            activeOpacity={0.6}
-          >
-            <View style={styles.rowLeft}>
-              <Ionicons name="bug-outline" size={20} color={theme.subtext} />
-              <Text style={styles.label}>복원 디버그</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
-          </TouchableOpacity>
+          {__DEV__ && (
+            <>
+              <View style={styles.divider} />
+              <TouchableOpacity
+                style={styles.row}
+                onPress={async () => {
+                  const info = await getRestoreDebugInfo();
+                  Alert.alert('복원 디버그', info);
+                }}
+                activeOpacity={0.6}
+              >
+                <View style={styles.rowLeft}>
+                  <Ionicons name="bug-outline" size={20} color={theme.subtext} />
+                  <Text style={styles.label}>복원 디버그</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* 데이터 */}
