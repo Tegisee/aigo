@@ -248,19 +248,32 @@ export function getAuthState(): { isAnonymous: boolean; provider: string | null;
 export async function savePushToken(token: string): Promise<void> {
   const uid = getCurrentUid();
   if (!uid || !db) {
-    console.warn('[Firebase] Push Token 저장 스킵 — uid:', uid, 'db:', !!db);
+    const skipLog = `[SavePushToken] SKIP — uid=${uid ?? 'null'}, db=${!!db}`;
+    console.warn(skipLog);
+    await appendFirebaseDebug(skipLog).catch(() => {});
     return;
   }
 
   try {
+    const cur = auth?.currentUser;
+    const preLog =
+      `[SavePushToken] 쓰기 시작 — uid=${uid}, ` +
+      `isAnonymous=${cur?.isAnonymous}, providers=${JSON.stringify(cur?.providerData?.map((p) => p.providerId) ?? [])}`;
+    console.log(preLog);
+    await appendFirebaseDebug(preLog).catch(() => {});
+
     await setDoc(
       doc(db!,'users', uid),
       { expoPushToken: token, notificationEnabled: true, lastActiveAt: new Date().toISOString() },
       { merge: true },
     );
-    console.log('[Firebase] Push Token 저장 완료:', token?.slice(0, 30));
-  } catch (e) {
-    console.warn('[Firebase] Push Token 저장 실패:', e);
+    const doneLog = `[SavePushToken] 완료 — uid=${uid}, token=${token?.slice(0, 20)}…`;
+    console.log(doneLog);
+    await appendFirebaseDebug(doneLog).catch(() => {});
+  } catch (e: any) {
+    const errLog = `[SavePushToken] 실패 — uid=${uid}, err=${e?.code ?? ''} ${e?.message ?? e}`;
+    console.warn(errLog);
+    await appendFirebaseDebug(errLog).catch(() => {});
   }
 }
 
@@ -287,18 +300,33 @@ export async function updateUserSettings(
   data: Record<string, any>,
 ): Promise<void> {
   // waitForUid: onAuthStateChanged 기반 uid 확정 대기
-  // 기존 자체 구현은 첫 emit이 null이면 즉시 종료되어 signInAnonymously 전 호출 시 skip되는 버그가 있었음
   const uid = await waitForUid(3000);
 
   if (!uid || !db) {
-    console.warn('[Firebase] 유저 설정 저장 스킵 — uid 없음. keys:', Object.keys(data).join(','));
+    const skipLog = `[UpdateUserSettings] SKIP — uid=${uid ?? 'null'}, db=${!!db}, keys=${Object.keys(data).join(',')}`;
+    console.warn(skipLog);
+    await appendFirebaseDebug(skipLog).catch(() => {});
     return;
   }
 
   try {
+    const cur = auth?.currentUser;
+    const preLog =
+      `[UpdateUserSettings] 쓰기 시작 — uid=${uid}, ` +
+      `isAnonymous=${cur?.isAnonymous}, providers=${JSON.stringify(cur?.providerData?.map((p) => p.providerId) ?? [])}, ` +
+      `keys=${Object.keys(data).join(',')}`;
+    console.log(preLog);
+    await appendFirebaseDebug(preLog).catch(() => {});
+
     await setDoc(doc(db!,'users', uid), data, { merge: true });
-  } catch (e) {
-    console.warn('[Firebase] 유저 설정 저장 실패:', e);
+
+    const doneLog = `[UpdateUserSettings] 완료 — uid=${uid}, keys=${Object.keys(data).join(',')}`;
+    console.log(doneLog);
+    await appendFirebaseDebug(doneLog).catch(() => {});
+  } catch (e: any) {
+    const errLog = `[UpdateUserSettings] 실패 — uid=${uid}, err=${e?.code ?? ''} ${e?.message ?? e}`;
+    console.warn(errLog);
+    await appendFirebaseDebug(errLog).catch(() => {});
   }
 }
 
