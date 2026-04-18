@@ -161,6 +161,32 @@ export async function waitForNonAnonymousUid(
 }
 
 /**
+ * auth의 **초기 상태** 반환 (onAuthStateChanged의 첫 fire를 await).
+ * - null: 세션 없음 (fresh install, 세션 만료 등)
+ * - 객체: firebase:authUser:* 에서 복원된 기존 세션
+ * 용도: _layout 시작 시점에 "익명 uid를 만들지 말지" 결정할 때 사용.
+ */
+export async function getInitialAuthUser(): Promise<{
+  uid: string;
+  isAnonymous: boolean;
+  providers: string[];
+} | null> {
+  if (!auth) return null;
+  const user = await new Promise<User | null>((resolve) => {
+    const unsub = onAuthStateChanged(auth!, (u) => {
+      unsub();
+      resolve(u);
+    });
+  });
+  if (!user) return null;
+  return {
+    uid: user.uid,
+    isAnonymous: user.isAnonymous,
+    providers: user.providerData?.map((p) => p.providerId) ?? [],
+  };
+}
+
+/**
  * auth 상태 변화 구독 — onAuthStateChanged의 얇은 래퍼.
  * auth 인스턴스를 외부에 노출하지 않기 위한 helper.
  * 최초 구독 시 현재 상태로도 한 번 fire됨 (Firebase SDK 규약).

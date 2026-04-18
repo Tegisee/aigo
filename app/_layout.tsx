@@ -8,7 +8,7 @@ import * as Notifications from 'expo-notifications';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { theme } from '../constants/theme';
 import { initCoupangApi } from '../services/config';
-import { signInAnonymously, syncLocalToFirestore, subscribeAuthState } from '../services/firebase';
+import { syncLocalToFirestore, subscribeAuthState, getInitialAuthUser } from '../services/firebase';
 import { backfillSettingsToFirestore, appendRestoreDebugLine } from '../services/restore';
 import {
   registerForPushNotifications,
@@ -121,6 +121,27 @@ async function checkFreshInstall() {
   } catch (e: any) {
     console.warn('[Install] SecureStore 마커 저장 실패:', e);
     appendRestoreDebugLine(`[Install] ❌ 마커 저장 실패: ${e?.message ?? e}`);
+  }
+
+  // 5. auth 초기 세션 확정 대기 후 방어 리셋
+  // Android 12+ device-to-device transfer / Play "Restore on Install" 등으로
+  // allowBackup:false를 우회해 AsyncStorage(hasSeenOnboarding 포함)가 복원되더라도
+  // firebase:authUser:*는 함께 오지 않는 경우가 있음 → "온보딩 완료자인데 세션 없음"
+  // 상태에서 holme 렌더 시 유저가 갇힘. OnboardingScreen으로 재진입 유도.
+  try {
+    const initial = await getInitialAuthUser();
+    const authLog = `[Install] 초기 auth — uid=${initial?.uid ?? 'null'}, anon=${initial?.isAnonymous ?? 'n/a'}, providers=${JSON.stringify(initial?.providers ?? [])}`;
+    console.log(authLog);
+    appendRestoreDebugLine(authLog);
+
+    if (!initial && useAppStore.getState().hasSeenOnboarding) {
+      console.log('[Install] 세션 없음 + hasSeenOnboarding=true → 강제 리셋');
+      appendRestoreDebugLine('[Install] 세션 없음 + hasSeenOnboarding=true → 강제 리셋 (leak 방어)');
+      useAppStore.setState({ hasSeenOnboarding: false });
+    }
+  } catch (e: any) {
+    console.warn('[Install] 초기 auth 확인 실패:', e);
+    appendRestoreDebugLine(`[Install] 초기 auth 확인 실패: ${e?.message ?? e}`);
   }
 }
 
@@ -249,20 +270,10 @@ export default function RootLayout() {
       });
     });
 
-    // 온보딩 완료자만 세션 복원/익명 fallback (신규 유저는 OnboardingScreen 선택 대기)
-    (async () => {
-      const hasSeenOnboarding = useAppStore.getState().hasSeenOnboarding;
-      if (hasSeenOnboarding) {
-        const uid = await signInAnonymously();
-        await appendRestoreDebugLine(
-          `[Layout] 온보딩 완료자 — signInAnonymously 결과 uid=${uid ?? 'null'}`,
-        );
-      } else {
-        await appendRestoreDebugLine(
-          '[Layout] 온보딩 미완료 — signInAnonymously 스킵, 사용자 선택 대기',
-        );
-      }
-    })();
+    // signInAnonymously 호출 제거:
+    //   - 세션이 있으면 subscribeAuthState가 자동 fire → post-signin 작업 실행
+    //   - 세션이 없으면 OnboardingScreen에서 사용자 선택(handleGoogleStart/handleAnonymousStart)
+    //     시에만 signIn 실행 → 익명 uid 고아 생성을 원천 차단
 
     // 알림 클릭 리스너
     notifListenerRef.current =
