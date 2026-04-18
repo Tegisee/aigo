@@ -20,11 +20,20 @@ export interface RestoreResult {
   debugInfo: string;
 }
 
-/** 복원 디버그 로그 저장 (production 진단용) */
+/**
+ * 복원 디버그 로그 저장 — append 방식.
+ * 기존 덮어쓰기 버전은 fetchUserSettings 내부 appendFirebaseDebug 기록([FetchSettings] 로그)까지
+ * 모두 날려버려 진단 불가였으므로 prev를 보존한 뒤 뒤에 블록 추가.
+ */
 async function saveRestoreDebug(info: string) {
   try {
     const timestamp = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-    await AsyncStorage.setItem(RESTORE_DEBUG_KEY, `[${timestamp}]\n${info}`);
+    const prev = await AsyncStorage.getItem(RESTORE_DEBUG_KEY);
+    const block = `===== [${timestamp}] restore 결과 =====\n${info}`;
+    await AsyncStorage.setItem(
+      RESTORE_DEBUG_KEY,
+      `${prev ?? ''}\n\n${block}`.trim(),
+    );
   } catch {}
 }
 
