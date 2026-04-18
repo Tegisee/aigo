@@ -251,22 +251,69 @@ export async function updateUserSettings(
   }
 }
 
+/** AsyncStorage(aigo-restore-debug) 키에 한 줄 누적 — restore.ts와 동일 키 공유 */
+async function appendFirebaseDebug(line: string) {
+  try {
+    const ts = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    const prev = await AsyncStorage.getItem('aigo-restore-debug');
+    await AsyncStorage.setItem(
+      'aigo-restore-debug',
+      `${prev ?? ''}\n[${ts}] ${line}`.trim(),
+    );
+  } catch {}
+}
+
 /** Firestore에서 유저 설정 복원 (구글 로그인 데이터 복구용)
  *  getDocFromServer로 클라이언트 캐시를 우회해 항상 서버 원본을 읽음.
- *  (재설치 직후 오래된 캐시가 children 누락된 구버전 문서를 반환하는 이슈 회피)
+ *  상세 디버그: uid, snap.exists, keys 목록을 AsyncStorage에 기록.
  */
 export async function fetchUserSettings(): Promise<Record<string, any> | null> {
   const uid = getCurrentUid();
-  if (!uid || !db) return null;
+  const dbOk = !!db;
+  const projectId = (db as any)?._databaseId?.projectId
+    ?? (app as any)?.options?.projectId
+    ?? '(unknown)';
+  const databaseId = (db as any)?._databaseId?.database ?? '(default)';
+
+  const preLog =
+    `[FetchSettings] uid=${uid ?? 'null'}, db=${dbOk ? 'ok' : 'null'}, ` +
+    `project=${projectId}, database=${databaseId}`;
+  console.log(preLog);
+  await appendFirebaseDebug(preLog);
+
+  if (!uid || !db) {
+    await appendFirebaseDebug('[FetchSettings] ABORT — uid 또는 db 없음');
+    return null;
+  }
 
   try {
     const snap = await getDocFromServer(doc(db!, 'users', uid));
+    const existsLog = `[FetchSettings] snap.exists=${snap.exists()}, fromCache=${snap.metadata.fromCache}, hasPendingWrites=${snap.metadata.hasPendingWrites}`;
+    console.log(existsLog);
+    await appendFirebaseDebug(existsLog);
+
     if (snap.exists()) {
-      return snap.data();
+      const data = snap.data();
+      const keys = Object.keys(data).sort();
+      const keysLog = `[FetchSettings] keys(${keys.length}): ${keys.join(',')}`;
+      console.log(keysLog);
+      await appendFirebaseDebug(keysLog);
+      // children/parentInfo 값 유무도 축약 기록
+      const detailLog =
+        `[FetchSettings] detail: children=${Array.isArray(data.children) ? 'array[' + data.children.length + ']' : typeof data.children}, ` +
+        `parentInfo=${data.parentInfo && typeof data.parentInfo === 'object' ? 'obj(' + Object.keys(data.parentInfo).length + 'keys)' : typeof data.parentInfo}, ` +
+        `babyName=${data.babyName ?? '(none)'}`;
+      console.log(detailLog);
+      await appendFirebaseDebug(detailLog);
+      return data;
     }
+
+    await appendFirebaseDebug('[FetchSettings] 문서 없음 (exists=false)');
     return null;
-  } catch (e) {
+  } catch (e: any) {
+    const errLog = `[FetchSettings] 오류: code=${e?.code ?? '(none)'}, message=${e?.message ?? String(e)}`;
     console.warn('[Firebase] 유저 설정 조회 실패:', e);
+    await appendFirebaseDebug(errLog);
     return null;
   }
 }
