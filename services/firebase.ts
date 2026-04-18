@@ -126,6 +126,40 @@ export async function waitForUid(timeoutMs = 2000): Promise<string | null> {
   });
 }
 
+/**
+ * auth.currentUser가 **비익명(Google 등 영구 프로바이더)** 으로 전환될 때까지 대기.
+ * signInWithCredential 직후 auth state 반영이 마이크로태스크/persistence writing 지연으로
+ * 늦어지면, 후속 write(updateUserSettings 등)가 익명 A uid로 가버리는 회귀를 방어.
+ * 이미 비익명이면 즉시 반환, 아니면 onAuthStateChanged로 대기, 타임아웃 시 현재 상태로 finalize.
+ */
+export async function waitForNonAnonymousUid(
+  timeoutMs = 5000,
+): Promise<string | null> {
+  if (!auth) return null;
+  const cur = auth.currentUser;
+  if (cur?.uid && !cur.isAnonymous) return cur.uid;
+
+  return new Promise<string | null>((resolve) => {
+    let settled = false;
+    const finish = (uid: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(uid);
+    };
+    const unsub = onAuthStateChanged(auth!, (user) => {
+      if (user?.uid && !user.isAnonymous) {
+        unsub();
+        finish(user.uid);
+      }
+    });
+    setTimeout(() => {
+      unsub();
+      const c = auth?.currentUser;
+      finish(c && c.uid && !c.isAnonymous ? c.uid : null);
+    }, timeoutMs);
+  });
+}
+
 export interface LinkGoogleResult {
   success: boolean;
   error?: string;
@@ -166,6 +200,23 @@ export async function linkGoogleAccount(idToken: string): Promise<LinkGoogleResu
         const credential = GoogleAuthProvider.credential(idToken);
         const result = await signInWithCredential(auth!, credential);
         const newUid = result.user.uid;
+
+        // [Login] post-link 진단 로그 — auth.currentUser 실제 전환 상태 기록
+        const cur = auth!.currentUser;
+        const providers = cur?.providerData?.map((p) => p.providerId) ?? [];
+        const postLinkLog =
+          `[Login] post-link uid=${cur?.uid ?? 'null'}, ` +
+          `isAnonymous=${cur?.isAnonymous ?? 'null'}, ` +
+          `providers=${JSON.stringify(providers)}`;
+        console.log(postLinkLog);
+        await appendFirebaseDebug(postLinkLog);
+
+        // non-anonymous 전환 명시 대기 (auth state 반영 지연 방어)
+        const confirmedUid = await waitForNonAnonymousUid(5000);
+        const confirmLog = `[Login] non-anon confirmed uid=${confirmedUid ?? 'null'}`;
+        console.log(confirmLog);
+        await appendFirebaseDebug(confirmLog);
+
         console.log('[Firebase] 기존 구글 계정으로 로그인 성공 (데이터 복구):', prevUid, '→', newUid);
         return { success: true, recoveredAccount: true };
       } catch (fallbackError: any) {
@@ -305,6 +356,17 @@ export async function fetchUserSettings(): Promise<Record<string, any> | null> {
         `babyName=${data.babyName ?? '(none)'}`;
       console.log(detailLog);
       await appendFirebaseDebug(detailLog);
+      // snap.data() raw JSON 덤프 — Object.keys vs 실제 직렬화 불일치 여부까지 잡기 위함
+      try {
+        const raw = JSON.stringify(data);
+        const rawLog =
+          `[FetchSettings] raw(${raw.length}chars): ` +
+          `${raw.slice(0, 2000)}${raw.length > 2000 ? '…(truncated)' : ''}`;
+        console.log(rawLog);
+        await appendFirebaseDebug(rawLog);
+      } catch (jsonErr: any) {
+        await appendFirebaseDebug(`[FetchSettings] raw JSON 실패: ${jsonErr?.message ?? jsonErr}`);
+      }
       return data;
     }
 

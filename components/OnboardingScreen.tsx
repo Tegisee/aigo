@@ -19,9 +19,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../constants/theme';
 import { useAppStore } from '../store/useAppStore';
 import { signInWithGoogle } from '../services/googleAuth';
-import { signInAnonymously, linkGoogleAccount } from '../services/firebase';
+import {
+  signInAnonymously,
+  linkGoogleAccount,
+  getCurrentUid,
+  waitForNonAnonymousUid,
+} from '../services/firebase';
 import { registerForPushNotifications } from '../services/notifications';
-import { restoreDataFromFirestore } from '../services/restore';
+import { restoreDataFromFirestore, appendRestoreDebugLine } from '../services/restore';
 import DatePickerButton from './DatePickerButton';
 
 const { width } = Dimensions.get('window');
@@ -67,6 +72,17 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
         setLoading(false);
         return;
       }
+
+      // setLinked 직전 uid 확정 대기 (auth state A→B 전환 지연 방어)
+      const preSetLinkedUid = getCurrentUid();
+      await appendRestoreDebugLine(
+        `[Onboarding] pre-setLinked uid=${preSetLinkedUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
+      );
+      const confirmedUid = await waitForNonAnonymousUid(5000);
+      await appendRestoreDebugLine(
+        `[Onboarding] waitForNonAnonymous 결과 uid=${confirmedUid ?? 'null'}`,
+      );
+
       setLinked('google');
 
       // push token 재등록

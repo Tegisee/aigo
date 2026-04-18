@@ -5,10 +5,15 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
-import { getAuthState, linkGoogleAccount } from '../../services/firebase';
+import {
+  getAuthState,
+  linkGoogleAccount,
+  getCurrentUid,
+  waitForNonAnonymousUid,
+} from '../../services/firebase';
 import { registerForPushNotifications } from '../../services/notifications';
 import { signInWithGoogle } from '../../services/googleAuth';
-import { restoreDataFromFirestore } from '../../services/restore';
+import { restoreDataFromFirestore, appendRestoreDebugLine } from '../../services/restore';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -32,6 +37,16 @@ export default function LoginScreen() {
       // 2. Firebase에 연동 (익명 → 구글 merge 또는 기존 계정 복구)
       const firebaseResult = await linkGoogleAccount(googleResult.idToken);
       if (firebaseResult.success) {
+        // setLinked 직전 uid 확정 대기 (auth state A→B 전환 지연 방어)
+        const preSetLinkedUid = getCurrentUid();
+        await appendRestoreDebugLine(
+          `[Login] pre-setLinked uid=${preSetLinkedUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
+        );
+        const confirmedUid = await waitForNonAnonymousUid(5000);
+        await appendRestoreDebugLine(
+          `[Login] waitForNonAnonymous 결과 uid=${confirmedUid ?? 'null'}`,
+        );
+
         setLinked('google');
 
         // 3. uid가 변경된 경우 (재설치 → 기존 계정 복구) push token 재등록
