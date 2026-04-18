@@ -8,7 +8,7 @@ import * as Notifications from 'expo-notifications';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { theme } from '../constants/theme';
 import { initCoupangApi } from '../services/config';
-import { signInAnonymously, syncLocalToFirestore } from '../services/firebase';
+import { signInAnonymously, syncLocalToFirestore, subscribeAuthState } from '../services/firebase';
 import { backfillSettingsToFirestore, appendRestoreDebugLine } from '../services/restore';
 import {
   registerForPushNotifications,
@@ -221,22 +221,47 @@ export default function RootLayout() {
     if (!installChecked) return;
     migrateStorageKey();
 
-    (async () => {
-      const uid = await signInAnonymously();
-      if (uid) {
-        await registerForPushNotifications();
-      } else {
-        console.warn('[Layout] uid 확보 실패 — 푸시 토큰 등록 스킵');
+    // uid 확정 시점마다 post-signin 작업 1회 실행 (세션 복원, Google 로그인, 익명 진입 모두 커버)
+    // - 온보딩 미완료 신규 유저는 사용자가 Google/익명 선택 후에 fire
+    // - 기존 사용자는 signInAnonymously의 세션 복원 시 fire
+    let lastProcessedUid: string | null = null;
+    const unsubAuth = subscribeAuthState(async (uid, info) => {
+      if (!uid) {
+        lastProcessedUid = null;
+        return;
       }
-      // 로컬 데이터 Firestore 초기 동기화
+      if (lastProcessedUid === uid) return;
+      lastProcessedUid = uid;
+      await appendRestoreDebugLine(
+        `[Layout] auth 확정 — uid=${uid}, anon=${info?.isAnonymous}, providers=${JSON.stringify(info?.providers ?? [])}`,
+      );
+      try {
+        await registerForPushNotifications();
+      } catch (e) {
+        console.warn('[Layout] 푸시 등록 실패:', e);
+      }
       const { trackedItems } = useAppStore.getState();
       if (trackedItems.length > 0) {
         syncLocalToFirestore(trackedItems);
       }
-      // 설정 필드 backfill — uid 타이밍 이슈로 Firestore 저장 실패한 children/parentInfo 등 복구
       backfillSettingsToFirestore().catch((e) => {
         console.warn('[Layout] backfill 실패:', e);
       });
+    });
+
+    // 온보딩 완료자만 세션 복원/익명 fallback (신규 유저는 OnboardingScreen 선택 대기)
+    (async () => {
+      const hasSeenOnboarding = useAppStore.getState().hasSeenOnboarding;
+      if (hasSeenOnboarding) {
+        const uid = await signInAnonymously();
+        await appendRestoreDebugLine(
+          `[Layout] 온보딩 완료자 — signInAnonymously 결과 uid=${uid ?? 'null'}`,
+        );
+      } else {
+        await appendRestoreDebugLine(
+          '[Layout] 온보딩 미완료 — signInAnonymously 스킵, 사용자 선택 대기',
+        );
+      }
     })();
 
     // 알림 클릭 리스너
@@ -257,6 +282,7 @@ export default function RootLayout() {
     });
 
     return () => {
+      unsubAuth();
       notifListenerRef.current?.remove();
     };
   }, [installChecked]);

@@ -52,10 +52,7 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
   const handleGoogleStart = async () => {
     setLoading(true);
     try {
-      // 1. 익명 로그인 보장
-      await signInAnonymously();
-
-      // 2. Google Sign-In
+      // 1. Google Sign-In (익명 선행 없음 — 구글 uid로 바로 시작해 익명 고아 방지)
       const googleResult = await signInWithGoogle();
       if ('error' in googleResult) {
         if (googleResult.error !== '로그인이 취소되었습니다.') {
@@ -65,7 +62,7 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
         return;
       }
 
-      // 3. Firebase 연동
+      // 2. Firebase auth — currentUser=null이면 signInWithCredential 직행 (linkGoogleAccount else 분기)
       const firebaseResult = await linkGoogleAccount(googleResult.idToken);
       if (!firebaseResult.success) {
         Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
@@ -73,7 +70,7 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
         return;
       }
 
-      // setLinked 직전 uid 확정 대기 (auth state A→B 전환 지연 방어)
+      // 3. 비익명 uid 확정 대기 (auth state 반영 지연 방어, 외부 보강)
       const preSetLinkedUid = getCurrentUid();
       await appendRestoreDebugLine(
         `[Onboarding] pre-setLinked uid=${preSetLinkedUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
@@ -85,10 +82,8 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
 
       setLinked('google');
 
-      // push token 재등록
-      if (firebaseResult.recoveredAccount) {
-        registerForPushNotifications().catch(() => {});
-      }
+      // push token 항상 등록 (setDoc merge:true라 _layout onAuthStateChanged와 중복돼도 안전)
+      registerForPushNotifications().catch(() => {});
 
       // 4. Firestore 데이터 복원
       const { childrenCount, itemsCount } = await restoreDataFromFirestore();
@@ -114,7 +109,17 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
       '구글 계정으로 시작하지 않으면 앱 재설치 시 데이터가 복원되지 않습니다.\n\n익명으로 계속하시겠습니까?',
       [
         { text: '취소', style: 'cancel' },
-        { text: '익명으로 시작', onPress: onNext },
+        {
+          text: '익명으로 시작',
+          onPress: async () => {
+            // 사용자 명시적 동의 시에만 익명 uid 생성
+            const uid = await signInAnonymously();
+            await appendRestoreDebugLine(
+              `[Onboarding] handleAnonymousStart — signInAnonymously uid=${uid ?? 'null'}`,
+            );
+            onNext();
+          },
+        },
       ],
     );
   };

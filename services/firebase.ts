@@ -160,6 +160,33 @@ export async function waitForNonAnonymousUid(
   });
 }
 
+/**
+ * auth 상태 변화 구독 — onAuthStateChanged의 얇은 래퍼.
+ * auth 인스턴스를 외부에 노출하지 않기 위한 helper.
+ * 최초 구독 시 현재 상태로도 한 번 fire됨 (Firebase SDK 규약).
+ */
+export function subscribeAuthState(
+  callback: (
+    uid: string | null,
+    info?: { isAnonymous: boolean; providers: string[] },
+  ) => void,
+): () => void {
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
+  return onAuthStateChanged(auth, (user) => {
+    if (!user) {
+      callback(null);
+      return;
+    }
+    callback(user.uid, {
+      isAnonymous: user.isAnonymous,
+      providers: user.providerData?.map((p) => p.providerId) ?? [],
+    });
+  });
+}
+
 export interface LinkGoogleResult {
   success: boolean;
   error?: string;
@@ -186,11 +213,26 @@ export async function linkGoogleAccount(idToken: string): Promise<LinkGoogleResu
       // 이미 로그인된 상태
       return { success: true, recoveredAccount: false };
     } else {
-      // 로그인 안 된 상태 → 구글로 직접 로그인
+      // 로그인 안 된 상태 → 구글로 직접 로그인 (신규 유저 / 온보딩 경로)
       const result = await signInWithCredential(auth, credential);
       const newUid = result.user.uid;
+
+      // post-signin 진단 로그 + 비익명 확정 대기 (fallback 분기와 동일 패턴)
+      const cur = auth!.currentUser;
+      const providers = cur?.providerData?.map((p) => p.providerId) ?? [];
+      const postLinkLog =
+        `[Login] direct-signIn uid=${cur?.uid ?? 'null'}, ` +
+        `isAnonymous=${cur?.isAnonymous ?? 'null'}, ` +
+        `providers=${JSON.stringify(providers)}`;
+      console.log(postLinkLog);
+      await appendFirebaseDebug(postLinkLog).catch(() => {});
+
+      const confirmedUid = await waitForNonAnonymousUid(5000);
+      await appendFirebaseDebug(`[Login] non-anon confirmed uid=${confirmedUid ?? 'null'}`).catch(() => {});
+
       console.log('[Firebase] 구글 직접 로그인 성공:', newUid);
-      return { success: true, recoveredAccount: prevUid !== newUid };
+      // prevUid가 undefined면 순수 신규 → recoveredAccount=false
+      return { success: true, recoveredAccount: !!prevUid && prevUid !== newUid };
     }
   } catch (e: any) {
     if (e.code === 'auth/credential-already-in-use') {
