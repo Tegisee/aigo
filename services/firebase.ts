@@ -7,8 +7,12 @@ import {
   linkWithCredential,
   GoogleAuthProvider,
   signInWithCredential,
+  reauthenticateWithCredential,
+  deleteUser,
+  signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 // @ts-ignore — RN-specific export in @firebase/auth/dist/rn
 import { getReactNativePersistence } from '@firebase/auth/dist/rn/index.js';
 import {
@@ -54,6 +58,7 @@ const isFirebaseConfigured = !firebaseConfig.apiKey.startsWith('TODO');
 let app: ReturnType<typeof initializeApp> | null = null;
 let auth: ReturnType<typeof initializeAuth> | null = null;
 let db: ReturnType<typeof getFirestore> | null = null;
+let functions: ReturnType<typeof getFunctions> | null = null;
 
 if (isFirebaseConfigured) {
   app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
@@ -61,8 +66,43 @@ if (isFirebaseConfigured) {
     persistence: getReactNativePersistence(AsyncStorage),
   });
   db = getFirestore(app);
+  functions = getFunctions(app, 'asia-northeast3');
 } else {
   console.warn('[Firebase] 설정 미완료 — TODO placeholder 감지. Firestore/Auth 비활성화.');
+}
+
+// ─── Cloud Functions Callable ───
+
+export type ResolveAffiliateResult =
+  | { ok: true; shortenUrl: string; originalUrl: string }
+  | { ok: false; error: string; detail?: string };
+
+/**
+ * Cloud Functions `resolveAndGenerateAffiliateUrl` 호출.
+ * 서버가 link.coupang.com → vp URL resolve + /deeplink API 호출까지 일괄 처리.
+ * 네트워크/배포 오류 시 { ok: false, error: 'callable_error' } 반환 — 예외는 내부 흡수.
+ */
+export async function callResolveAffiliate(
+  sharedUrl: string,
+): Promise<ResolveAffiliateResult> {
+  if (!functions) {
+    return { ok: false, error: 'callable_error', detail: 'functions not initialized' };
+  }
+  try {
+    const callable = httpsCallable<
+      { sharedUrl: string },
+      ResolveAffiliateResult
+    >(functions, 'resolveAndGenerateAffiliateUrl');
+    const { data } = await callable({ sharedUrl });
+    return data;
+  } catch (e) {
+    console.warn('[Functions] resolveAffiliate 실패:', e);
+    return {
+      ok: false,
+      error: 'callable_error',
+      detail: e instanceof Error ? e.message : String(e),
+    };
+  }
 }
 
 /** Anonymous Auth 로그인 (자동) — 기존 세션(구글 포함) 복원 우선, 없을 때만 익명 생성 */
@@ -656,6 +696,101 @@ export async function fetchPopularByCategory(
   } catch (e) {
     console.warn('[Firebase] 카테고리별 인기 상품 조회 실패:', e);
     return [];
+  }
+}
+
+// ─── 계정 삭제 ───
+
+export type DeleteAccountErrorCode =
+  | 'not_configured'
+  | 'no_user'
+  | 'reauth_cancelled'
+  | 'reauth_failed'
+  | 'network'
+  | 'unknown';
+
+export interface DeleteAccountResult {
+  success: boolean;
+  errorCode?: DeleteAccountErrorCode;
+  errorMessage?: string;
+}
+
+/** users/{uid} 하위 서브컬렉션을 모두 삭제 (현재는 items 컬렉션만 존재) */
+async function deleteUserSubcollections(uid: string): Promise<void> {
+  if (!db) return;
+  const subcollections = ['items'] as const;
+  for (const name of subcollections) {
+    const snap = await getDocs(collection(db!, 'users', uid, name));
+    if (snap.empty) continue;
+    const batch = writeBatch(db!);
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
+
+/**
+ * 계정 삭제
+ * 1. (구글 계정인 경우) reauthenticateWithCredential로 재인증
+ * 2. Firestore users/{uid} 하위 컬렉션 삭제 (items 등)
+ * 3. Firestore users/{uid} 문서 삭제
+ * 4. Firebase Auth 계정 삭제 (deleteUser)
+ * 5. Google Sign-In 세션 로그아웃 (호출자 측)
+ */
+export async function deleteAccount(
+  googleIdToken?: string,
+): Promise<DeleteAccountResult> {
+  if (!auth || !db) {
+    return { success: false, errorCode: 'not_configured', errorMessage: 'Firebase 미초기화' };
+  }
+
+  const user = auth.currentUser;
+  if (!user) {
+    return { success: false, errorCode: 'no_user', errorMessage: '로그인된 계정이 없습니다.' };
+  }
+
+  const uid = user.uid;
+  const isGoogle = user.providerData.some((p) => p.providerId === 'google.com');
+
+  try {
+    // 1. 구글 계정이면 재인증 (최근 로그인 요구 대응)
+    if (isGoogle) {
+      if (!googleIdToken) {
+        return { success: false, errorCode: 'reauth_cancelled', errorMessage: '재인증이 필요합니다.' };
+      }
+      try {
+        const credential = GoogleAuthProvider.credential(googleIdToken);
+        await reauthenticateWithCredential(user, credential);
+      } catch (e: any) {
+        console.warn('[DeleteAccount] 재인증 실패:', e);
+        return { success: false, errorCode: 'reauth_failed', errorMessage: e?.message ?? '재인증 실패' };
+      }
+    }
+
+    // 2. 하위 컬렉션 삭제
+    await deleteUserSubcollections(uid);
+
+    // 3. users/{uid} 문서 삭제
+    await deleteDoc(doc(db!, 'users', uid)).catch((e) => {
+      console.warn('[DeleteAccount] users 문서 삭제 실패(무시):', e);
+    });
+
+    // 4. Auth 계정 삭제
+    await deleteUser(user);
+
+    // 5. 혹시 남아있을 세션 로그아웃
+    await firebaseSignOut(auth).catch(() => {});
+
+    return { success: true };
+  } catch (e: any) {
+    const code = e?.code ?? '';
+    if (code === 'auth/network-request-failed') {
+      return { success: false, errorCode: 'network', errorMessage: '네트워크 연결을 확인해주세요.' };
+    }
+    if (code === 'auth/requires-recent-login') {
+      return { success: false, errorCode: 'reauth_failed', errorMessage: '재로그인이 필요합니다.' };
+    }
+    console.warn('[DeleteAccount] 실패:', e);
+    return { success: false, errorCode: 'unknown', errorMessage: e?.message ?? '알 수 없는 오류' };
   }
 }
 
