@@ -239,6 +239,33 @@
 - v1.0.4 vc26 (2026-04-13) - 재설치 시 구글 로그인 데이터 복원 개선
 - v1.0.4 vc41 (2026-04-13) - ENV-2/BUG-38/BUG-40 수정, 성별 필터, 기념일 개선, 디버그 제거
 - v1.0.4 vc42 (2026-04-14) - 근접 매칭 제거, API 디버그 로그, 토큰 갱신 보강, submodule 정리
+- v1.0.5 vc62 (2026-04-20) - 로컬 빌드 완료, AQ-3/AQ-4 수정 후 vc63 재빌드 예정 (vc62 폐기)
+
+## 2026-04-21 작업 이력
+
+### Firebase Cloud Functions 배포 (AQ-4 해결, 커밋 0b27a4f)
+- **추가**: `functions/src/index.ts` — `resolveAndGenerateAffiliateUrl` (onCall, asia-northeast3)
+  - link.coupang.com 단축 URL → redirect chain → www.coupang.com/vp/products/... resolve
+  - HMAC 인증으로 /deeplink API 호출 → shortenUrl 반환
+- **Secret 등록 (aigo-a)**: COUPANG_ACCESS_KEY versions/1, COUPANG_SECRET_KEY versions/1
+- **배포 완료**: Successful update operation
+- **클라이언트 연동**:
+  - `services/firebase.ts`: `getFunctions`/`httpsCallable` + `callResolveAffiliate(sharedUrl)` wrapper
+  - `app/modal/add-item.tsx`: handleNext/handleSave 재시도 모두 Functions 우선 → client fallback
+- **출처**: 지금이야 Resolver 작업 이식 (72e5792/5970bcd/d64d750)
+
+### 쿠팡 Rate Limit 긴급 대응 (커밋 23033de)
+- 분당 50회 초과 2회 누적 (3회 시 계정 이용 제한)
+  - 1회차: 2026-04-20 21:53:48 자동 해제 완료
+  - 2회차: 2026-04-22 07:21 KST 자동 해제 예정
+- 아이고·지금이야 두 앱 모두 cron 비활성화 완료
+- 아이고는 추적 상품 0개라 API 호출 기여 없음 확인 (지금이야 단독 원인 추정)
+- **cron 재활성화 보류**: 04-22 07:21 해제 + 두 앱 합산 호출량 재검토 후 결정
+
+### 미완료 항목
+- app.config.js + settings.tsx + firebase.ts (v1.0.5 계정 삭제 기능) 별도 커밋 대기
+- cron 재활성화 (04-22 07:21 이후 모니터링 후 결정)
+- iOS 심사용 빌드 미진행 (계정 삭제 커밋 완료 후 진행)
 
 ## iOS WebView 쿠팡 튕김 현상 (형제앱 지금이야 해결 내용)
 - 증상: iOS WebView에서 쿠팡 URL 로드 시 Universal Link로 인해 쿠팡 앱으로 튕기는 현상

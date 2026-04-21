@@ -54,8 +54,38 @@ users/
 | Anonymous Auth | 기기 식별, Firestore 접근 권한 |
 | Firestore | 상품 데이터 원격 백업, 가격 체크 봇 연동 |
 | FCM (V1) | 가격 알림 / 재구매 알림 푸시 |
+| Cloud Functions | 쿠팡 제휴 딥링크 생성 (asia-northeast3) |
+
+## Cloud Functions
+
+### resolveAndGenerateAffiliateUrl (onCall, asia-northeast3)
+- **역할**: link.coupang.com 단축 URL → redirect chain resolve → www.coupang.com/vp/products/... 확보 → HMAC 인증 + /deeplink API 호출 → shortenUrl 반환
+- **추가 이유**: 클라이언트가 link.coupang.com 단축 URL을 그대로 /deeplink API에 넘기면 파트너스 실적이 집계되지 않음 → 서버에서 vp URL로 resolve한 후 제휴 링크 생성
+- **호출 경로**: `services/firebase.ts` → `callResolveAffiliate(sharedUrl)` wrapper (예외 내부 흡수, 실패 시 client fetch + generateDeepLink fallback)
+- **배포 완료**: 2026-04-21 커밋 0b27a4f
+
+### Secrets (Firebase Secret Manager)
+| 이름 | 용도 | 현재 버전 |
+|------|------|----------|
+| `COUPANG_ACCESS_KEY` | 쿠팡 파트너스 Access Key | versions/1 |
+| `COUPANG_SECRET_KEY` | 쿠팡 파트너스 Secret Key | versions/1 |
+
+### 등록/배포 명령
+```bash
+cd ~/aigo/aigo
+firebase use aigo-a
+firebase functions:secrets:set COUPANG_ACCESS_KEY
+firebase functions:secrets:set COUPANG_SECRET_KEY
+firebase deploy --only functions --project aigo-a
+```
+
+### 관련 파일
+- `functions/src/index.ts` — Functions 본체 (HMAC 서명 + redirect chain + deeplink)
+- `functions/package.json` — Node 22, firebase-functions ^6.1.1
+- `firebase.json` / `.firebaserc` — default=aigo-a
 
 ## 지금이야와의 관계
 - **별도 Firebase 프로젝트** 사용 (데이터 격리)
 - 쿠팡 파트너스 계정은 공유 가능
-- 코드 구조 동일 (firebase.ts 그대로 재사용)
+- 코드 구조 동일 (firebase.ts, functions/src/index.ts 그대로 재사용)
+- Functions 코드는 지금이야(72e5792) 이식, HMAC 인증부 무수정
