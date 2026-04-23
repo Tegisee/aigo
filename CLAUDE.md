@@ -264,8 +264,33 @@
 
 ### 미완료 항목
 - app.config.js + settings.tsx + firebase.ts (v1.0.5 계정 삭제 기능) 별도 커밋 대기
-- cron 재활성화 (04-22 07:21 이후 모니터링 후 결정)
 - iOS 심사용 빌드 미진행 (계정 삭제 커밋 완료 후 진행)
+
+## 2026-04-24 작업 이력
+
+### Firebase Functions resolveAndGenerateAffiliateUrl 추가 및 배포
+- **프로젝트**: jigumiya + aigo-a 두 앱 모두 배포 완료
+- **Secrets 등록 완료**: COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY
+- **기능**: link.coupang.com 단축 URL → vp URL resolve → HMAC 서명 /deeplink API 호출
+
+### 쿠팡 Cron 재활성화
+- 스케줄: 07/09/11/13/16/19 KST (총 6회/일)
+- 지금이야와 시간대 분리하여 분당 50회 Rate Limit 여유 확보
+
+### 남은 작업 (우선순위 순)
+
+**🔴 P0 — Functions 버그 수정 이식 (지금이야에서 발견)**
+- 지금이야 커밋 참고: e69d05e (functions/src/index.ts)
+- **버그 1**: link.coupang.com/a/... 단축 URL이 200 HTML 반환
+  - HTML 내 `redirectWebUrl` hex-escape 파싱으로 vp URL 추출 필요
+- **버그 2**: COUPANG_ACCESS_KEY/SECRET_KEY Secret 값 말미 개행문자(\n) 포함
+  - `.trim()` 방어 처리 필요
+
+**🟠 P1 — 알림 버그 수정**
+- Android/iOS 수동 실행 테스트에서 알림 미수신 확인됨
+
+**🟡 P2 — 프로덕션 출시**
+- Google Play 14일 베타 충족 확인 후 진행
 
 ## iOS WebView 쿠팡 튕김 현상 (형제앱 지금이야 해결 내용)
 - 증상: iOS WebView에서 쿠팡 URL 로드 시 Universal Link로 인해 쿠팡 앱으로 튕기는 현상
