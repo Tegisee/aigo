@@ -1,17 +1,16 @@
 name: Price Check Bot
 
 on:
-  # 긴급 중단 (2026-04-21): 형제 앱 지금이야에서 파트너스 API 시간당 한도 2회 초과 확인.
-  # 동일 API 키 공유 중이라 아이고 cron도 즉시 정지. 3회 초과 시 파트너스 이용 제한.
-  # Rate Limit 해제 시각: 2026-04-22 07:21 KST 이후.
-  # 재개 조건: 지금이야 docs/010 Rate Limit 재확인 + 018 Functions Resolver 배포 후 검토.
-  # schedule:
-  #   - cron: '0 21 * * *'   # 06:00 KST
-  #   - cron: '0 0 * * *'    # 09:00 KST
-  #   - cron: '0 3 * * *'    # 12:00 KST
-  #   - cron: '0 6 * * *'    # 15:00 KST
-  #   - cron: '0 9 * * *'    # 18:00 KST
-  #   - cron: '0 12 * * *'   # 21:00 KST
+  # 재활성화 (2026-04-23): 지금이야 018 Functions Resolver 배포 + Secret trim/HTML 파싱 버그 수정 완료.
+  # 비활성 이력: 2026-04-21 Rate Limit 2회 초과 → 2026-04-22 07:21 KST 자연 해제.
+  # 지금이야와 시간대 분리 (아이고: 07/09/11/13/16/19 ↔ 지금이야: 08/12/20)
+  schedule:
+    - cron: '0 22 * * *'   # 07:00 KST
+    - cron: '0 0 * * *'    # 09:00 KST
+    - cron: '0 2 * * *'    # 11:00 KST
+    - cron: '0 4 * * *'    # 13:00 KST
+    - cron: '0 7 * * *'    # 16:00 KST
+    - cron: '0 10 * * *'   # 19:00 KST
   workflow_dispatch:
     inputs:
       force_night_run:
