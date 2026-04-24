@@ -1,16 +1,16 @@
 name: Price Check Bot
 
 on:
-  # 재활성화 (2026-04-23): 지금이야 018 Functions Resolver 배포 + Secret trim/HTML 파싱 버그 수정 완료.
-  # 비활성 이력: 2026-04-21 Rate Limit 2회 초과 → 2026-04-22 07:21 KST 자연 해제.
-  # 지금이야와 시간대 분리 (아이고: 07/09/11/13/16/19 ↔ 지금이야: 08/12/20)
-  schedule:
-    - cron: '0 22 * * *'   # 07:00 KST
-    - cron: '0 0 * * *'    # 09:00 KST
-    - cron: '0 2 * * *'    # 11:00 KST
-    - cron: '0 4 * * *'    # 13:00 KST
-    - cron: '0 7 * * *'    # 16:00 KST
-    - cron: '0 10 * * *'   # 19:00 KST
+  # 비활성화 (2026-04-24): 지금이야 쪽 과호출 의심 → Rate Limit 재발 방지 위해 아이고도 동시 차단.
+  # 재활성화 이력: 2026-04-23 (지금이야 018 Resolver 배포 후).
+  # 이전 비활성 이력: 2026-04-21 Rate Limit 2회 초과 → 2026-04-22 자연 해제.
+  # schedule:
+  #   - cron: '0 22 * * *'   # 07:00 KST
+  #   - cron: '0 0 * * *'    # 09:00 KST
+  #   - cron: '0 2 * * *'    # 11:00 KST
+  #   - cron: '0 4 * * *'    # 13:00 KST
+  #   - cron: '0 7 * * *'    # 16:00 KST
+  #   - cron: '0 10 * * *'   # 19:00 KST
   workflow_dispatch:
     inputs:
       force_night_run:
