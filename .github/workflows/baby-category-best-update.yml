@@ -1,0 +1,49 @@
+name: Baby Category Best Update
+
+on:
+  # 비활성 상태로 신설 (2026-04-26): cron 재활성화 보류 정책 유지.
+  # 재활성화 시 권장: 04:00 KST (지금이야 02:00 category-best-updater와 분리)
+  # schedule:
+  #   - cron: '0 19 * * *'   # 04:00 KST
+  workflow_dispatch:
+    inputs:
+      sleep_ms:
+        description: '카테고리 사이 sleep (ms, 기본 60000)'
+        required: false
+        type: string
+        default: '60000'
+      limit:
+        description: '카테고리당 가져올 상품 수 (기본 50)'
+        required: false
+        type: string
+        default: '50'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        working-directory: scripts/baby-category-best-updater
+        run: npm install
+
+      - name: Build TypeScript
+        working-directory: scripts/baby-category-best-updater
+        run: npx tsc
+
+      - name: Run baby category best updater
+        working-directory: scripts/baby-category-best-updater
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+          SLEEP_BETWEEN_CATEGORIES_MS: ${{ github.event.inputs.sleep_ms }}
+          PRODUCTS_PER_CATEGORY: ${{ github.event.inputs.limit }}
+        run: node dist/index.js

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -17,15 +16,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { getCategoriesByMonth, type BabyCategory } from '../../types';
-import { fetchGoldbox, searchProducts, hasCoupangApiKeys, generateDeepLink, type GoldboxProduct, type CoupangProduct } from '../../services/coupangApi';
-import { fetchPopularByCategory, type SharedProduct } from '../../services/firebase';
+import { hasCoupangApiKeys, generateDeepLink, type CoupangProduct } from '../../services/coupangApi';
+import { fetchPopularByCategory, fetchBabyCategoryBest, type SharedProduct } from '../../services/firebase';
 import { getAppShareMessage } from '../../services/config';
 import { getActiveEvents, type EventBanner } from '../../services/events';
 
 export default function HomeScreen() {
   const { trackedItems, syncFromFirestore, babyBirthDate, babyName, babyGender, children, selectedChildId, selectChild, parentInfo } = useAppStore();
   const appStateRef = useRef(AppState.currentState);
-  const [goldbox, setGoldbox] = useState<GoldboxProduct[]>([]);
   const [categoryProducts, setCategoryProducts] = useState<Record<string, CoupangProduct[]>>({});
   const [loadingCategory, setLoadingCategory] = useState<string | null>(null);
   const [eventProducts, setEventProducts] = useState<Record<number, CoupangProduct[]>>({});
@@ -60,21 +58,6 @@ export default function HomeScreen() {
       }
       appStateRef.current = nextState;
     });
-
-    // 골드박스 로드 (필터링 없이 그대로 노출)
-    AsyncStorage.getItem('goldbox-cache').then((cached) => {
-      if (cached) {
-        try { setGoldbox(JSON.parse(cached)); } catch {}
-      }
-    });
-    if (hasCoupangApiKeys()) {
-      fetchGoldbox('goldbox').then((data) => {
-        if (data.length > 0) {
-          setGoldbox(data);
-          AsyncStorage.setItem('goldbox-cache', JSON.stringify(data)).catch(() => {});
-        }
-      }).catch(() => {});
-    }
 
     return () => sub.remove();
   }, [syncFromFirestore]);
@@ -128,40 +111,26 @@ export default function HomeScreen() {
         return;
       }
 
-      // 쿠팡 파트너스 API 검색으로 보충
-      if (hasCoupangApiKeys()) {
-        const consumable = /기저귀|분유|물티슈|수유용품|이유식|유아식|스킨케어/.test(cat);
-        const clothing = /의류|신발|장난감|가구|도서|학용품/.test(cat);
-
-        let keyword = '';
-        if (consumable) {
-          // 소모품: "아기/유아 {카테고리}"
-          const prefix = babyMonths !== null && babyMonths < 12 ? '아기' : '유아';
-          keyword = `${prefix} ${cat}`;
-        } else if (clothing && babyGender && babyGender !== 'unknown') {
-          // 의류/신발/장난감: "남아/여아 아동 {카테고리}"
-          const genderWord = babyGender === 'male' ? '남아' : '여아';
-          keyword = `${genderWord} 아동 ${cat}`;
-        } else {
-          // 기본: "월령 {카테고리}"
-          const ageKeyword = babyInfo ? `${babyInfo.ageText} ` : '';
-          keyword = `${ageKeyword}${cat}`;
-        }
-
-        try {
-          const products = await searchProducts(keyword, 10);
-          // shared_products + API 결과 합치기 (중복 제거)
-          const sharedIds = new Set(sharedMapped.map((p) => p.productId));
-          const apiOnly = products.filter((p) => !sharedIds.has(p.productId));
-          const combined = [...sharedMapped, ...apiOnly].slice(0, 10);
-          setCategoryProducts((prev) => ({ ...prev, [cat]: combined }));
-        } catch {
-          // API 실패 시 shared_products만이라도 표시
-          setCategoryProducts((prev) => ({ ...prev, [cat]: sharedMapped.length > 0 ? sharedMapped : [] }));
-        }
-      } else {
-        // API 키 없음 → shared_products만 표시
-        setCategoryProducts((prev) => ({ ...prev, [cat]: sharedMapped.length > 0 ? sharedMapped : [] }));
+      // 부족하면 category_best_baby (cron 적재) 1 read로 보충
+      try {
+        const best = await fetchBabyCategoryBest(cat as BabyCategory, 10, babyGender);
+        const sharedIds = new Set(sharedMapped.map((p) => p.productId));
+        const bestMapped: CoupangProduct[] = best
+          .filter((p) => !sharedIds.has(parseInt(p.productId) || 0))
+          .map((p) => ({
+            productId: parseInt(p.productId) || 0,
+            productName: p.productName,
+            productPrice: p.productPrice,
+            productImage: p.productImage,
+            productUrl: p.productUrl,
+            categoryName: cat,
+            isRocket: p.isRocket,
+          }));
+        const combined = [...sharedMapped, ...bestMapped].slice(0, 10);
+        setCategoryProducts((prev) => ({ ...prev, [cat]: combined }));
+      } catch {
+        // Firestore 실패 시 shared_products만이라도 표시
+        setCategoryProducts((prev) => ({ ...prev, [cat]: sharedMapped }));
       }
       setLoadingCategory(null);
     }, 300);
@@ -175,21 +144,8 @@ export default function HomeScreen() {
       return;
     }
     setLoadingEvent(index);
-
-    // 쿠팡 파트너스 API
-    if (hasCoupangApiKeys()) {
-      try {
-        const keyword = event.keywords[0];
-        const products = await searchProducts(keyword, 5);
-        if (products.length > 0) {
-          setEventProducts((prev) => ({ ...prev, [index]: products }));
-          setLoadingEvent(null);
-          return;
-        }
-      } catch {}
-    }
-
-    // 쿠팡 API 결과 없음
+    // 이벤트 추천: 쿠팡 직접 검색 의존 제거 (Firebase category_best_baby 전환).
+    // 키워드 → 카테고리 매핑 미정. 추후 Phase 3 에서 카테고리 추천으로 일원화 예정.
     setEventProducts((prev) => ({ ...prev, [index]: [] }));
     setLoadingEvent(null);
   }, [eventProducts]);
@@ -213,27 +169,6 @@ export default function HomeScreen() {
     // 3순위: 웹 브라우저
     Linking.openURL('https://www.coupang.com');
   };
-
-  const renderGoldboxItem = (product: GoldboxProduct) => (
-    <TouchableOpacity
-      key={product.productId}
-      style={styles.goldboxCard}
-      onPress={() => Linking.openURL(product.productUrl)}
-      activeOpacity={0.8}
-    >
-      {product.productImage ? (
-        <Image source={{ uri: product.productImage }} style={styles.goldboxImage} />
-      ) : (
-        <View style={[styles.goldboxImage, styles.goldboxImagePlaceholder]}>
-          <Ionicons name="bag-outline" size={16} color={theme.subtext} />
-        </View>
-      )}
-      <View style={styles.goldboxInfo}>
-        <Text style={styles.goldboxName} numberOfLines={1}>{product.productName}</Text>
-        <Text style={styles.goldboxPrice}>{product.productPrice.toLocaleString()}원</Text>
-      </View>
-    </TouchableOpacity>
-  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -426,23 +361,6 @@ export default function HomeScreen() {
             </View>
           ))}
         </View>
-
-        {/* 골드박스 */}
-        {goldbox.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.goldboxHeader}>
-              <Ionicons name="flash" size={14} color="#FFD700" />
-              <Text style={styles.sectionTitle}>오늘의 특가</Text>
-            </View>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.goldboxScroll}
-            >
-              {goldbox.map(renderGoldboxItem)}
-            </ScrollView>
-          </View>
-        )}
 
         {/* 파트너스 안내 */}
         <Text style={styles.affiliateText}>

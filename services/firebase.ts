@@ -34,7 +34,13 @@ import {
 } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import type { TrackedItem, SharedProduct, BabyCategory } from '../types';
+import type {
+  TrackedItem,
+  SharedProduct,
+  BabyCategory,
+  CategoryBestBaby,
+} from '../types';
+import { CATEGORY_TO_SLUG } from '../types';
 export type { SharedProduct };
 
 const firebaseConfig = {
@@ -692,6 +698,66 @@ export async function fetchPopularByCategory(
     return results.slice(0, count);
   } catch (e) {
     console.warn('[Firebase] 카테고리별 인기 상품 조회 실패:', e);
+    return [];
+  }
+}
+
+// ─── Category Best (Baby) ─── cron이 적재한 카테고리 베스트셀러 read
+
+export interface BabyBestProduct {
+  productId: string;
+  productName: string;
+  productPrice: number;
+  productImage: string;
+  productUrl: string;
+  isRocket: boolean;
+}
+
+/**
+ * BabyCategory → category_best_baby/{slug} 1회 read.
+ * cron(scripts/baby-category-best-updater)이 적재한 베스트셀러 목록 반환.
+ *
+ * 성별 필터링: 의류/신발/장난감 등 한정. productName 키워드로 휴리스틱 매칭.
+ * 결과 부족하면 호출자가 fetchPopularByCategory로 보충 가능.
+ *
+ * 미적재 카테고리(예: '기타') 또는 cron 미실행 상태 → 빈 배열 반환.
+ */
+export async function fetchBabyCategoryBest(
+  category: BabyCategory,
+  count: number = 10,
+  gender?: 'male' | 'female' | 'unknown',
+): Promise<BabyBestProduct[]> {
+  if (!db) return [];
+
+  const slug = CATEGORY_TO_SLUG[category];
+  if (!slug) return [];
+
+  try {
+    const snap = await getDoc(doc(db!, 'category_best_baby', slug));
+    if (!snap.exists()) return [];
+
+    const data = snap.data() as CategoryBestBaby;
+    let products = Array.isArray(data.products) ? [...data.products] : [];
+
+    // 성별 필터링 — 의류/신발/장난감만 적용 (다른 카테고리는 노op)
+    const genderFilterable = ['의류', '신발', '장난감'].includes(category);
+    if (genderFilterable && gender && gender !== 'unknown') {
+      const opposite = gender === 'male'
+        ? /(여아|걸|girl|공주|핑크|레이스|치마|드레스)/i
+        : /(남아|보이|boy|왕자|블루|네이비|로봇|공룡|자동차)/i;
+      products = products.filter((p) => !opposite.test(p.productName));
+    }
+
+    return products.slice(0, count).map((p) => ({
+      productId: String(p.productId),
+      productName: p.productName,
+      productPrice: Number(p.productPrice) || 0,
+      productImage: p.productImage,
+      productUrl: p.productUrl,
+      isRocket: !!p.isRocket,
+    }));
+  } catch (e) {
+    console.warn('[Firebase] category_best_baby 조회 실패:', e);
     return [];
   }
 }

@@ -14,6 +14,13 @@ service cloud.firestore {
             .hasOnly(['trackerCount', 'purchaseCount']);
     }
 
+    // 카테고리 베스트 (cron 적재): 인증 사용자 읽기 전용
+    // 쓰기는 Admin SDK (scripts/baby-category-best-updater) — rules 무관
+    match /category_best_baby/{slug} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // 유저 문서: 본인만 읽기/쓰기
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;

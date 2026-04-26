@@ -72,6 +72,54 @@ export function classifyCategory(productName: string): BabyCategory {
   return '기타';
 }
 
+/**
+ * BabyCategory → category_best_baby Firestore doc slug.
+ * scripts/baby-category-best-updater/baby-categories.ts 와 sync 유지 필수.
+ * '기타'는 검색 의미 없어 매핑 없음.
+ */
+export const CATEGORY_TO_SLUG: Partial<Record<BabyCategory, string>> = {
+  '기저귀': 'diaper',
+  '분유': 'formula',
+  '물티슈': 'wipes',
+  '수유용품': 'feeding',
+  '속싸개/배냇저고리': 'swaddle',
+  '신생아 스킨케어': 'newborn-skin',
+  '이유식/이유식도구': 'baby-food',
+  '보행기/점퍼루': 'walker',
+  '유아식': 'toddler-food',
+  '안전용품': 'safety',
+  '의류': 'clothing',
+  '신발': 'shoes',
+  '장난감': 'toys',
+  '유모차/카시트': 'stroller',
+  '유아 도서/학습': 'toddler-books',
+  '생활용품': 'daily',
+  '가구': 'furniture',
+  '학습교구': 'learning',
+  '도서': 'books',
+  '스포츠용품': 'sports',
+  '학용품': 'stationery',
+  '책가방': 'backpack',
+  '전자기기': 'electronics',
+};
+
+/** category_best_baby/{slug} 문서 형태 (cron 적재) */
+export interface CategoryBestBaby {
+  category: BabyCategory;
+  slug: string;
+  keyword: string;
+  displayOrder: number;
+  updatedAt: number;
+  products: Array<{
+    productId: string;
+    productName: string;
+    productPrice: number;
+    productImage: string;
+    productUrl: string;
+    isRocket: boolean;
+  }>;
+}
+
 export interface SharedProduct {
   productId: string;
   productName: string;
