@@ -3,21 +3,21 @@
 <plist version="1.0">
 <dict>
 	<key>CLIENT_ID</key>
-	<string>531153481988-2oqqn3p913bc23tdbk1c72b2ta1k1331.apps.googleusercontent.com</string>
+	<string>250441543259-k7jd885sq5mm4chp23m4emrph8q9g8ir.apps.googleusercontent.com</string>
 	<key>REVERSED_CLIENT_ID</key>
-	<string>com.googleusercontent.apps.531153481988-2oqqn3p913bc23tdbk1c72b2ta1k1331</string>
+	<string>com.googleusercontent.apps.250441543259-k7jd885sq5mm4chp23m4emrph8q9g8ir</string>
 	<key>API_KEY</key>
-	<string>AIzaSyBxqzg-00EHHbEGfx0uiYRhWTuc1HKvc7A</string>
+	<string>AIzaSyAMGMGrOJw1TqdytZqB_Y0-roiYRyKQ5Ho</string>
 	<key>GCM_SENDER_ID</key>
-	<string>531153481988</string>
+	<string>250441543259</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.aigo.app</string>
 	<key>PROJECT_ID</key>
-	<string>aigo-a</string>
+	<string>jigumiya</string>
 	<key>STORAGE_BUCKET</key>
-	<string>aigo-a.firebasestorage.app</string>
+	<string>jigumiya.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -29,6 +29,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:531153481988:ios:fb45cb0a904e218b186051</string>
+	<string>1:250441543259:ios:deadd077a127951c05197e</string>
 </dict>
 </plist>

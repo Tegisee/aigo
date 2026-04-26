@@ -38,17 +38,14 @@ import type { TrackedItem, SharedProduct, BabyCategory } from '../types';
 export type { SharedProduct };
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyA0QT1Fg7vT1C-qDemN-g1zMCy6rlNZC4Q',
-  authDomain: 'aigo-a.firebaseapp.com',
-  projectId: 'aigo-a',
-  storageBucket: 'aigo-a.firebasestorage.app',
-  messagingSenderId: '531153481988',
+  apiKey: 'AIzaSyAMGMGrOJw1TqdytZqB_Y0-roiYRyKQ5Ho',
+  authDomain: 'jigumiya.firebaseapp.com',
+  projectId: 'jigumiya',
+  storageBucket: 'jigumiya.firebasestorage.app',
+  messagingSenderId: '250441543259',
   appId: Platform.OS === 'android'
-    ? '1:531153481988:android:c8755d32917fa072186051'
-    : Platform.OS === 'ios'
-      ? '1:531153481988:ios:fb45cb0a904e218b186051'
-      : '1:531153481988:web:975f641749d8f1e3186051',
-  measurementId: 'G-TXFXMGMCCT',
+    ? '1:250441543259:android:9faddd4ff858f49605197e'
+    : '1:250441543259:ios:deadd077a127951c05197e',
 };
 
 /** Firebase 설정이 완료되었는지 확인 */

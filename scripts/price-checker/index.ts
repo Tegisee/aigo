@@ -6,7 +6,7 @@ import {
   type SmartPushTarget,
 } from './notifier.js';
 
-// Firebase Admin 초기화 (aigo-a 프로젝트)
+// Firebase Admin 초기화 (jigumiya 프로젝트)
 const serviceAccount = JSON.parse(
   process.env.FIREBASE_SERVICE_ACCOUNT_KEY || '{}',
 );

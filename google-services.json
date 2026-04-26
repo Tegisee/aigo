@@ -1,34 +1,77 @@
 {
   "project_info": {
-    "project_number": "531153481988",
-    "project_id": "aigo-a",
-    "storage_bucket": "aigo-a.firebasestorage.app"
+    "project_number": "250441543259",
+    "project_id": "jigumiya",
+    "storage_bucket": "jigumiya.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:531153481988:android:c8755d32917fa072186051",
+        "mobilesdk_app_id": "1:250441543259:android:9faddd4ff858f49605197e",
         "android_client_info": {
           "package_name": "com.aigo.app"
         }
       },
       "oauth_client": [
         {
-          "client_id": "531153481988-n3aqkhtnr9ajuldgroi7b51ntrhobc6k.apps.googleusercontent.com",
+          "client_id": "250441543259-i9f0jqbl1g2vcbja49hja9u7epmq7vuq.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBqx5aHUTbknxQT1HT3Pr524gwC6wkEnVY"
+          "current_key": "AIzaSyCzfSfGjk8tK4LQ2_lIx7LHtm2_VRGAV5U"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "531153481988-n3aqkhtnr9ajuldgroi7b51ntrhobc6k.apps.googleusercontent.com",
+              "client_id": "250441543259-i9f0jqbl1g2vcbja49hja9u7epmq7vuq.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "250441543259-k7e4h0c5jqfic790mh3iicerqho2mjdb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.jigumiya.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:250441543259:android:28d985603a4f995905197e",
+        "android_client_info": {
+          "package_name": "com.jigumiya.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "250441543259-i9f0jqbl1g2vcbja49hja9u7epmq7vuq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCzfSfGjk8tK4LQ2_lIx7LHtm2_VRGAV5U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "250441543259-i9f0jqbl1g2vcbja49hja9u7epmq7vuq.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "250441543259-k7e4h0c5jqfic790mh3iicerqho2mjdb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.jigumiya.app"
+              }
             }
           ]
         }

@@ -5,7 +5,7 @@
 
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
-const WEB_CLIENT_ID = '531153481988-n3aqkhtnr9ajuldgroi7b51ntrhobc6k.apps.googleusercontent.com';
+const WEB_CLIENT_ID = '250441543259-i9f0jqbl1g2vcbja49hja9u7epmq7vuq.apps.googleusercontent.com';
 
 let isConfigured = false;
 
