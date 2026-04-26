@@ -51,7 +51,12 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.4 (vc41) 비공개 테스트 준비 (2026-04-13)
+## 현재 상태: v1.0.5 vc63 로컬 빌드 완료 (2026-04-26)
+- Firebase 프로젝트 jigumiya 통합 완료 (자매 앱과 백엔드 일원화)
+- Android AAB: ~/aigo/builds/android/aigo-v1.0.5-vc63.aab
+- 다음 작업: Firestore Rules/Functions 배포, GitHub Actions Secret 갱신, Play Console 업로드
+
+## 이전 상태: v1.0.4 (vc41) 비공개 테스트 준비 (2026-04-13)
 
 ### Google Play
 - 스토어: https://play.google.com/store/apps/details?id=com.aigo.app
@@ -240,6 +245,57 @@
 - v1.0.4 vc41 (2026-04-13) - ENV-2/BUG-38/BUG-40 수정, 성별 필터, 기념일 개선, 디버그 제거
 - v1.0.4 vc42 (2026-04-14) - 근접 매칭 제거, API 디버그 로그, 토큰 갱신 보강, submodule 정리
 - v1.0.5 vc62 (2026-04-20) - 로컬 빌드 완료, AQ-3/AQ-4 수정 후 vc63 재빌드 예정 (vc62 폐기)
+- v1.0.5 vc63 (2026-04-26) - Firebase jigumiya 통합 + 계정 삭제 + price-checker 캐시 + BabyCategory cron + 쿠팡 직접 호출 제거
+
+## 2026-04-26 작업 이력
+
+### Firebase 프로젝트 통합 aigo-a → jigumiya (커밋 0fdc5e3)
+- **목적**: 자매 앱과 백엔드 일원화 → Functions/Secrets/category_best 캐시 공유
+- **교체**: google-services.json + GoogleService-Info.plist (jigumiya, com.aigo.app)
+- **클라이언트**: services/firebase.ts firebaseConfig + .firebaserc + firebase.json (firestore rules) + services/googleAuth.ts WEB_CLIENT_ID
+- **iOS OAuth**: plist의 CLIENT_ID 자동 인식 (별도 코드 불필요)
+- **잔여 외부 작업**:
+  - Functions 재배포: `firebase deploy --only functions --project jigumiya`
+  - Firestore Rules 배포: `firebase deploy --only firestore:rules --project jigumiya`
+  - GitHub Actions Secret 갱신: FIREBASE_SERVICE_ACCOUNT_KEY → jigumiya 서비스 계정
+  - EAS Secret GOOGLE_SERVICES_JSON 점검 (확인 결과 없음)
+
+### 계정 삭제 기능 (v1.0.5 vc62, 커밋 10617f8)
+- 설정 화면 계정 삭제 메뉴: 구글 재인증 → Firestore/Auth 정리 → 로컬 초기화 → 온보딩 복귀
+
+### price-checker category_best 캐시 도입 (커밋 e8dcc72)
+- **신규**: scripts/price-checker/category-best-cache.ts (지금이야 모듈 이식, MAX_AGE_MS 6h)
+- **index.ts**: cron 시작 시 캐시 선로드 → productId 매칭 시 fetchCurrentPrice 스킵
+- **신뢰성 가드**: isCacheStablePrice (30% 변동 초과 시 폴백)
+- **Sleep 절약**: 캐시 hit 시 1s 생략
+- **통계 로그**: cache hit / API call / 절감률 (%)
+- **효과**: jigumiya 통합으로 지금이야 02:00 KST 적재분 공유 → 분당 50회 rate-limit 여유 ↑
+
+### BabyCategory 베스트셀러 cron + 쿠팡 직접 호출 제거 (커밋 df32df7)
+- **신규 cron**: scripts/baby-category-best-updater/ (BabyCategory 23개 키워드 매핑)
+  - search API 1콜/분 보수 운영, ~23분 소요, 429/rMessage rate-limit 즉시 중단
+  - category_best_baby/{slug} 단일 문서 덮어쓰기
+- **클라이언트**:
+  - types: CATEGORY_TO_SLUG + CategoryBestBaby 인터페이스 추가
+  - services/firebase.ts: fetchBabyCategoryBest(category, count, gender) — 의류/신발/장난감 성별 휴리스틱 필터
+  - app/(tabs)/index.tsx: searchProducts/fetchGoldbox 직접 호출 전면 제거
+    - 카테고리 보충 → fetchBabyCategoryBest
+    - 이벤트 배너 → 빈 결과 (Phase 3 분리)
+    - 골드박스 섹션 제거
+- **인프라**:
+  - .github/workflows/baby-category-best-update.yml (schedule 주석, workflow_dispatch 가능)
+  - firestore.rules: category_best_baby read 허용
+- **목적**: 쿠팡 API 분당 50회 한도 압박 해소 (클라이언트 read 0콜)
+- **첫 적재 미실행**: cron 비활성 상태 유지, 수동 workflow_dispatch로 첫 적재 후 자동화 검토
+
+### v1.0.5 vc63 Android 로컬 빌드 성공 (BUILD SUCCESSFUL 1m 47s)
+- 산출물: ~/aigo/builds/android/aigo-v1.0.5-vc63.aab
+- versionCode 자동 증가 (eas.json: appVersionSource:remote + autoIncrement)
+- iOS 로컬 빌드: 사용자 보류
+
+### Phase 3로 분리한 항목
+- **이벤트 배너 추천 상품**: 14개 이벤트(기념일/시즌/부모) 키워드 적재 방식 미정 (옵션 B 범용 키워드 / C 별도 cron 후보). 현재 클릭 시 빈 결과
+- **price_drops 컬렉션 기록**: 지금이야 패턴 미이식 (필요 시 도입)
 
 ## 2026-04-21 작업 이력
 
