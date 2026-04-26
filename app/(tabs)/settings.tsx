@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, Switch, TouchableOpacity, Alert, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, Switch, TouchableOpacity, Alert, Modal, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
@@ -9,6 +9,8 @@ import { theme } from '../../constants/theme';
 import { useAppStore, type BabyGender, type Child, type ParentInfo } from '../../store/useAppStore';
 import DatePickerButton from '../../components/DatePickerButton';
 import { getRestoreDebugInfo } from '../../services/restore';
+import { deleteAccount, getAuthState } from '../../services/firebase';
+import { signInWithGoogle, signOutGoogle } from '../../services/googleAuth';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -127,6 +129,73 @@ export default function SettingsScreen() {
           text: '삭제',
           style: 'destructive',
           onPress: () => removeChild(child.id),
+        },
+      ],
+    );
+  };
+
+  const [deleting, setDeleting] = useState(false);
+
+  const performDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const authState = getAuthState();
+      let googleIdToken: string | undefined;
+
+      // 구글 계정이면 재인증을 위해 idToken 획득
+      if (authState.provider === 'google') {
+        const googleResult = await signInWithGoogle();
+        if ('error' in googleResult) {
+          setDeleting(false);
+          if (googleResult.error !== '로그인이 취소되었습니다.') {
+            Alert.alert('재인증 실패', googleResult.error);
+          }
+          return;
+        }
+        googleIdToken = googleResult.idToken;
+      }
+
+      const result = await deleteAccount(googleIdToken);
+
+      if (!result.success) {
+        setDeleting(false);
+        const message =
+          result.errorCode === 'network'
+            ? '네트워크 연결을 확인한 뒤 다시 시도해주세요.'
+            : result.errorCode === 'reauth_failed'
+              ? '재인증에 실패했습니다. 다시 로그인 후 시도해주세요.'
+              : result.errorMessage || '계정 삭제 중 오류가 발생했습니다.';
+        Alert.alert('계정 삭제 실패', message);
+        return;
+      }
+
+      // 구글 세션 정리
+      await signOutGoogle().catch(() => {});
+
+      // 로컬 데이터 초기화 (hasSeenOnboarding도 리셋 → 온보딩 화면으로 이동)
+      await resetAllData();
+      useAppStore.setState({ hasSeenOnboarding: false });
+
+      setDeleting(false);
+      Alert.alert('삭제 완료', '계정과 모든 데이터가 삭제되었습니다.');
+    } catch (e: any) {
+      setDeleting(false);
+      Alert.alert('계정 삭제 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
+    }
+  };
+
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '계정 삭제',
+      '계정을 삭제하면 모든 데이터가 삭제됩니다. 계속하시겠습니까?',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '삭제',
+          style: 'destructive',
+          onPress: () => {
+            void performDeleteAccount();
+          },
         },
       ],
     );
@@ -391,6 +460,17 @@ export default function SettingsScreen() {
             </View>
             <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
           </TouchableOpacity>
+          <View style={styles.divider} />
+          <TouchableOpacity style={styles.row} onPress={handleDeleteAccount} activeOpacity={0.6}>
+            <View style={styles.rowLeft}>
+              <Ionicons name="person-remove-outline" size={20} color="#FF4444" />
+              <View style={styles.rowText}>
+                <Text style={[styles.label, { color: '#FF4444' }]}>계정 삭제</Text>
+                <Text style={styles.desc}>계정 및 모든 데이터 영구 삭제</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+          </TouchableOpacity>
         </View>
 
         {/* 개발자용 */}
@@ -456,6 +536,16 @@ export default function SettingsScreen() {
           이 앱은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.
         </Text>
       </ScrollView>
+
+      {/* 계정 삭제 로딩 */}
+      <Modal visible={deleting} transparent animationType="fade">
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={styles.loadingText}>계정을 삭제하는 중…</Text>
+          </View>
+        </View>
+      </Modal>
 
       {/* 아이 추가/수정 모달 */}
       <Modal visible={showChildModal} transparent animationType="fade">
@@ -802,5 +892,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
     fontWeight: '600',
+  },
+  loadingOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingBox: {
+    backgroundColor: theme.card,
+    borderRadius: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 200,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: theme.text,
+    fontWeight: '500',
   },
 });
