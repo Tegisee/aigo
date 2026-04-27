@@ -1,5 +1,11 @@
 rules_version = '2';
 
+// ─────────────────────────────────────────────────────────────
+// 이 파일은 배포용으로 사용하지 않음.
+// 배포는 ~/jigumiya/jigumiya/firestore.rules (단일 소스)에서 진행.
+// 본 파일은 참조용으로만 존재 — 실제 운영 규칙은 jigumiya 레포 확인.
+// ─────────────────────────────────────────────────────────────
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
