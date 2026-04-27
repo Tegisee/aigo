@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Platform, InteractionManager, Alert } from 'react-native';
+import { Platform, InteractionManager, Alert, Linking } from 'react-native';
+import Constants from 'expo-constants';
 import { Slot, Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,6 +11,7 @@ import { theme } from '../constants/theme';
 import { initCoupangApi } from '../services/config';
 import { syncLocalToFirestore, subscribeAuthState, getInitialAuthUser } from '../services/firebase';
 import { backfillSettingsToFirestore, appendRestoreDebugLine } from '../services/restore';
+import { checkAppVersion, snoozeUpdate, type UpdateCheckResult } from '../services/updateCheck';
 import {
   registerForPushNotifications,
   getItemIdFromNotification,
@@ -18,6 +20,47 @@ import { useAppStore } from '../store/useAppStore';
 import OnboardingScreen from '../components/OnboardingScreen';
 
 const INSTALL_MARKER_KEY = 'aigo-install-marker';
+
+/** Alert.alert 로 업데이트 안내 표시. forceUpdate=true 면 "나중에" 버튼 없음. */
+function showUpdateAlert(r: UpdateCheckResult) {
+  const versionLine = r.latestVersion
+    ? `현재 버전: ${r.currentVersion}\n최신 버전: ${r.latestVersion}`
+    : `현재 버전: ${r.currentVersion}\n필요 버전: ${r.minRequiredVersion}`;
+  const message = r.releaseNotes
+    ? `${versionLine}\n\n${r.releaseNotes}`
+    : `${versionLine}\n\n더 나은 사용 경험을 위해 최신 버전으로 업데이트해주세요.`;
+
+  const updateBtn = {
+    text: '업데이트',
+    onPress: () => {
+      Linking.openURL(r.storeUrl).catch((e) => {
+        console.warn('[Update] 스토어 열기 실패:', e);
+        Alert.alert('오류', '스토어를 열 수 없습니다. 직접 검색해주세요.');
+      });
+    },
+  };
+
+  if (r.forceUpdate) {
+    Alert.alert('업데이트 필요', message, [updateBtn], { cancelable: false });
+    return;
+  }
+
+  Alert.alert(
+    '업데이트 안내',
+    message,
+    [
+      {
+        text: '나중에',
+        style: 'cancel',
+        onPress: () => {
+          snoozeUpdate('aigo', r.minRequiredVersion).catch(() => {});
+        },
+      },
+      updateBtn,
+    ],
+    { cancelable: true },
+  );
+}
 
 /** Zustand persist rehydration 완료 대기 */
 function waitForHydration(): Promise<void> {
@@ -237,6 +280,28 @@ export default function RootLayout() {
   useEffect(() => {
     checkFreshInstall().finally(() => setInstallChecked(true));
   }, []);
+
+  // 업데이트 안내 — 첫 마운트 1회만 체크 (AppState 재체크 없음)
+  useEffect(() => {
+    if (!installChecked) return;
+    let cancelled = false;
+    checkAppVersion({
+      appKey: 'aigo',
+      currentVersion: Constants.expoConfig?.version ?? '0.0.0',
+      androidPackageName: 'com.aigo.app',
+      iosAppStoreId: undefined, // TODO: App Store 등록 후 갱신
+    })
+      .then((r) => {
+        if (cancelled || !r) return;
+        showUpdateAlert(r);
+      })
+      .catch((e) => {
+        console.warn('[Layout] 업데이트 체크 실패:', e);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [installChecked]);
 
   useEffect(() => {
     if (!installChecked) return;

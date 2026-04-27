@@ -823,6 +823,35 @@ export async function fetchEventBest(
   }
 }
 
+// ─── 앱 메타 설정 (업데이트 안내용) ───
+
+export interface AppConfigDoc {
+  minRequiredVersion?: string;
+  latestVersion?: string;
+  forceUpdate?: boolean;
+  releaseNotes?: string;
+  updatedAt?: number;
+}
+
+/**
+ * meta/config_{appKey} 문서 1회 read.
+ * Firestore Rules: meta/{docId} read public — 인증 전에도 호출 가능.
+ * 미존재 / 네트워크 실패 시 null.
+ */
+export async function fetchAppConfig(
+  appKey: string,
+): Promise<AppConfigDoc | null> {
+  if (!db) return null;
+  try {
+    const snap = await getDoc(doc(db!, 'meta', `config_${appKey}`));
+    if (!snap.exists()) return null;
+    return snap.data() as AppConfigDoc;
+  } catch (e) {
+    console.warn('[Firebase] meta/config 조회 실패:', e);
+    return null;
+  }
+}
+
 // ─── 계정 삭제 ───
 
 export type DeleteAccountErrorCode =
