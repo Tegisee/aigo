@@ -99,11 +99,16 @@ export async function sendSmartNotifications(
   const validTargets = targets.filter((t) => Expo.isExpoPushToken(t.token));
   const messages: ExpoPushMessage[] = validTargets.map((t) => {
     const { title, body } = buildMessage(t);
+    // Android 채널: 가격 + 백신 = 'price' (HIGH), 재구매 = 'repurchase' (DEFAULT)
+    // services/notifications.ts setNotificationChannelAsync 와 sync 유지
+    const channelId = t.alertType === 'repurchase' ? 'repurchase' : 'price';
     return {
       to: t.token,
       sound: 'default' as const,
       title,
       body,
+      priority: 'high' as const,
+      channelId,
       data: {
         itemId: t.itemId,
         screen: t.alertType === 'vaccine_overdue' ? 'babyinfo' : 'detail',
