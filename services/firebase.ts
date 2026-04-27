@@ -40,7 +40,7 @@ import type {
   BabyCategory,
   CategoryBestBaby,
 } from '../types';
-import { CATEGORY_TO_SLUG } from '../types';
+import { getCategorySlug } from '../types';
 export type { SharedProduct };
 
 const firebaseConfig = {
@@ -726,10 +726,11 @@ export async function fetchBabyCategoryBest(
   category: BabyCategory,
   count: number = 10,
   gender?: 'male' | 'female' | 'unknown',
+  months: number | null = null,
 ): Promise<BabyBestProduct[]> {
   if (!db) return [];
 
-  const slug = CATEGORY_TO_SLUG[category];
+  const slug = getCategorySlug(category, months);
   if (!slug) return [];
 
   try {

@@ -24,10 +24,19 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { searchProducts } from './coupang-api.js';
-import { AIGO_BABY_CATEGORIES, type BabyCategoryDef } from './baby-categories.js';
+import {
+  AIGO_BABY_CATEGORIES,
+  getCategoriesByGroup,
+  type BabyCategoryDef,
+  type CronGroup,
+} from './baby-categories.js';
 
 const SLEEP_MS = Number(process.env.SLEEP_BETWEEN_CATEGORIES_MS || 60_000);
 const LIMIT = Number(process.env.PRODUCTS_PER_CATEGORY || 50);
+/** GROUP=1|2|3|4 → 해당 그룹만 실행. 미지정 시 전체. */
+const GROUP_RAW = process.env.GROUP ? Number(process.env.GROUP) : null;
+const GROUP: CronGroup | null =
+  GROUP_RAW === 1 || GROUP_RAW === 2 || GROUP_RAW === 3 || GROUP_RAW === 4 ? GROUP_RAW : null;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -72,8 +81,10 @@ async function updateOne(
 
 async function main() {
   console.log('[BabyBest] 시작:', new Date().toISOString());
+
+  const targets = GROUP ? getCategoriesByGroup(GROUP) : AIGO_BABY_CATEGORIES;
   console.log(
-    `[BabyBest] 대상 ${AIGO_BABY_CATEGORIES.length}개, sleep=${SLEEP_MS}ms, limit=${LIMIT}`,
+    `[BabyBest] group=${GROUP ?? 'ALL'} 대상 ${targets.length}개, sleep=${SLEEP_MS}ms, limit=${LIMIT}`,
   );
 
   const serviceAccount = JSON.parse(
@@ -86,13 +97,13 @@ async function main() {
   let failed = 0;
   let totalProducts = 0;
 
-  for (let i = 0; i < AIGO_BABY_CATEGORIES.length; i++) {
-    const cat = AIGO_BABY_CATEGORIES[i]!;
+  for (let i = 0; i < targets.length; i++) {
+    const cat = targets[i]!;
     const r = await updateOne(db, cat);
 
     if (r.rateLimited) {
       console.error(
-        `[BabyBest] ⛔ rate-limited 감지 — 즉시 중단. 처리: ${i}/${AIGO_BABY_CATEGORIES.length}`,
+        `[BabyBest] ⛔ rate-limited 감지 — 즉시 중단. 처리: ${i}/${targets.length}`,
       );
       break;
     }
@@ -104,7 +115,7 @@ async function main() {
       failed += 1;
     }
 
-    if (i < AIGO_BABY_CATEGORIES.length - 1) {
+    if (i < targets.length - 1) {
       await sleep(SLEEP_MS);
     }
   }

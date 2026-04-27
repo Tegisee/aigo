@@ -113,7 +113,7 @@ export default function HomeScreen() {
 
       // 부족하면 category_best_baby (cron 적재) 1 read로 보충
       try {
-        const best = await fetchBabyCategoryBest(cat as BabyCategory, 10, babyGender);
+        const best = await fetchBabyCategoryBest(cat as BabyCategory, 10, babyGender, babyMonths);
         const sharedIds = new Set(sharedMapped.map((p) => p.productId));
         const bestMapped: CoupangProduct[] = best
           .filter((p) => !sharedIds.has(parseInt(p.productId) || 0))

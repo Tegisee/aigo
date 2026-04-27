@@ -1,0 +1,49 @@
+name: Event Best Update
+
+on:
+  # 비활성 상태로 신설: cron 재활성화 보류 정책 유지.
+  # 권장: 01:00 KST (지금이야 02:00 category-best, 04:00 price-check 와 분리)
+  # schedule:
+  #   - cron: '0 16 * * *'   # 01:00 KST
+  workflow_dispatch:
+    inputs:
+      sleep_ms:
+        description: '이벤트 사이 sleep (ms, 기본 60000)'
+        required: false
+        type: string
+        default: '60000'
+      limit:
+        description: '이벤트당 가져올 상품 수 (기본 50)'
+        required: false
+        type: string
+        default: '50'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        working-directory: scripts/event-best-updater
+        run: npm install
+
+      - name: Build TypeScript
+        working-directory: scripts/event-best-updater
+        run: npx tsc
+
+      - name: Run event best updater
+        working-directory: scripts/event-best-updater
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+          SLEEP_BETWEEN_EVENTS_MS: ${{ github.event.inputs.sleep_ms }}
+          PRODUCTS_PER_EVENT: ${{ github.event.inputs.limit }}
+        run: node dist/index.js
