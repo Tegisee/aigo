@@ -52,10 +52,19 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.5 vc63 로컬 빌드 완료 (2026-04-26)
+## 현재 상태: v1.0.5 vc66 로컬 빌드 완료 (2026-04-28)
+- Phase 3 월령 세분화 cron 적재 완료 (baby 538 상품 + event 55 상품)
+- Firestore Rules 통합 (jigumiya 단일 소스) + 배포 완료
+- 알림 버그 가설 A/C/E 3건 모두 패치 (FCM SA 교체 + channelId/priority + savePushToken retry)
+- 업데이트 알림 기능 추가 (services/updateCheck.ts + meta/config_aigo)
+- 홈 이벤트 배너 → event_best 실데이터 연동
+- Android AAB: ~/aigo/builds/android/aigo-v1.0.5-vc66.aab
+- iOS IPA: ~/aigo/builds/ios/aigo-v1.0.5-vc66.ipa
+- 다음 작업: vc66 실기기 테스트 (카테고리 베스트/알림 수신/업데이트 알림) → BUG-41 수정 → cron 활성화 → Play Console/App Store 제출
+
+## 이전 상태: v1.0.5 vc63 로컬 빌드 완료 (2026-04-26)
 - Firebase 프로젝트 jigumiya 통합 완료 (자매 앱과 백엔드 일원화)
 - Android AAB: ~/aigo/builds/android/aigo-v1.0.5-vc63.aab
-- 다음 작업: Firestore Rules/Functions 배포, GitHub Actions Secret 갱신, Play Console 업로드
 
 ## 이전 상태: v1.0.4 (vc41) 비공개 테스트 준비 (2026-04-13)
 
@@ -165,15 +174,28 @@
 
 ### 남은 TODO
 
-**🟡 P1 — UX 버그**
+**🔴 P0 — 신규 (2026-04-28 발견)**
+- **BUG-41**: 구글 로그인 후 앱 삭제 → 재설치 → 같은 계정 로그인 시 아이정보(babyName/babyBirthdate 등) 복원 실패, 온보딩 재진행됨
+  - 예상 원인: Firebase users/{uid} 에서 아이정보 복원 로직 미구현 또는 실패
+  - vc66 빌드에 미반영 — 수정 후 vc67 재빌드 예정
+
+**🟠 P1 — 알림 (vc66 패치 포함, 실기기 테스트 미완료)**
+- 가설 A/C/E 모두 vc66에 반영됨. 본인 디바이스 + 외부 테스터 검증 필요
+
+**🟡 P2 — UX 버그**
 - **BUG-36**: 접종 리스트 등록 후 나중에 체크 기능
 - **BUG-37**: 월령별 추천 카테고리 복수선택 해제 안 됨
-- **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (재현 조건 파악 필요)
+- **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (BUG-41 의 부분 사례일 가능성)
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
 
-**다음 단계**: v1.0.4 vc42 비공개 테스트 제출 → 알림 수신 테스트
+**다음 단계**:
+1. vc66 실기기 테스트 (카테고리 베스트 / 알림 수신 / 업데이트 알림)
+2. BUG-41 아이정보 복원 수정 → vc67
+3. cron 전체 활성화 (실기기 테스트 통과 후)
+4. Android Play Console 내부테스트 → 프로덕션 승급
+5. iOS App Store 심사 제출 (Apple 회신 반영)
 
 ### EAS 빌드 크레딧
 - 현재: 100% 소진 (리셋: 2026-04-21)
@@ -247,6 +269,114 @@
 - v1.0.4 vc42 (2026-04-14) - 근접 매칭 제거, API 디버그 로그, 토큰 갱신 보강, submodule 정리
 - v1.0.5 vc62 (2026-04-20) - 로컬 빌드 완료, AQ-3/AQ-4 수정 후 vc63 재빌드 예정 (vc62 폐기)
 - v1.0.5 vc63 (2026-04-26) - Firebase jigumiya 통합 + 계정 삭제 + price-checker 캐시 + BabyCategory cron + 쿠팡 직접 호출 제거
+- v1.0.5 vc66 (2026-04-28) - Phase 3 월령 세분화 + event-best-updater + 알림 버그 3건 + 업데이트 알림 + 홈 event_best 연동
+
+## 2026-04-28 작업 이력 (v1.0.5 vc66)
+
+### Phase 3 월령 세분화 + cron 골격 완성 (커밋 28b565c, a3180a7, c8d5d64)
+- **types/index.ts**: `AgeBucket` (8단계: 0-3 / 4-6 / 7-12 / 13-24 / 25-36 / 37-48 / 49-72 / 73-84) + `getAgeBucket()` + `getCategorySlug(category, months)` 함수형으로 교체 (`CATEGORY_TO_SLUG` 상수 제거)
+- **scripts/baby-category-best-updater/baby-categories.ts**: 23개 → **54개 슬러그** (그룹 1~4)
+  - 그룹 1 (01:15 KST, 16콜): toys×8 + clothing×8
+  - 그룹 2 (01:30 KST, 14콜): shoes×4 + books×5 + learning×5
+  - 그룹 3 (03:00 KST, 10콜): diaper×5 + formula×3 + wipes + feeding-0-12
+  - 그룹 4 (03:20 KST, 14콜): 단일 슬러그 (속싸개/스킨케어/이유식 등)
+- **GROUP 환경변수**: cron index.ts에 `GROUP=1|2|3|4` 추가 → 그룹별 분리 실행
+- **services/firebase.ts fetchBabyCategoryBest**: months 인자 추가 → 슬러그 동적 결정
+- **app/(tabs)/index.tsx**: babyMonths 전달
+
+### scripts/event-best-updater 신설 (커밋 28b565c)
+- **31개 이벤트 슬러그**: anniversary 19 + season 5 + parent 7
+  - anniversary: anniv-100/200/300/365/500/1000 + birthday-1~13
+  - season: children-day / christmas / halloween / newyear / chuseok
+  - parent: parents-day / valentine / whiteday / couple-day / mom-birthday / dad-birthday / wedding
+- **minPrice=30,000 KRW** (50,000에서 하향, 적재 풀 확대)
+- **coupang-api.ts**: minPrice 옵션 추가 (search API 자체 미지원 → 클라 필터)
+- **GitHub Actions yml**: 01:00 KST schedule 주석 + workflow_dispatch 가능
+- **events.ts MIN_PRICE_KRW**: 50,000 → 30,000 (커밋 a3180a7), docs sync (c8d5d64)
+
+### Firestore Rules 통합 — jigumiya 단일 소스
+- **단일 소스 위치**: `~/jigumiya/jigumiya/firestore.rules`
+- **추가 규칙**:
+  - `category_best_baby/{slug}` read O / write X
+  - `event_best/{eventSlug}` read O / write X
+  - `meta/{docId}` read public (인증 전 체크) / write false
+- **아이고 레포 firestore.rules**: 미사용 표시 헤더 추가 (커밋 81706a1)
+- **배포 방식**: `cd ~/jigumiya/jigumiya && firebase deploy --only firestore:rules --project jigumiya`
+
+### 알림 버그 3건 동시 수정
+
+**가설 A — EAS FCM V1 service account 교체 (외부 작업)**
+- 기존: aigo-a 프로젝트 SA → 마이그레이션 후 jigumiya 클라이언트와 sender ID 불일치 (MismatchSenderId 의심)
+- **조치**: EAS Android credentials 에서 FCM v1 SA를 jigumiya 프로젝트 것으로 갱신
+- 마이그레이션 후 푸시 미수신 근본 원인으로 추정
+
+**가설 C — Push 메시지 channelId + priority 추가 (커밋 d0d7535)**
+- `scripts/price-checker/notifier.ts` ExpoPushMessage 빌드 시:
+  - `priority: 'high'` (iOS APNs 즉시 전달, Android sleeping wake)
+  - `channelId`: repurchase → 'repurchase', 그 외(가격/백신) → 'price'
+- `services/notifications.ts setNotificationChannelAsync` 와 sync
+
+**가설 E — savePushToken retry 활성화 (커밋 4c9d83b)**
+- 진단: 가격 체크 봇 04-18 로그에서 `토큰없음=72/145` 발견 (절반 사용자 미저장)
+- 원인: `savePushToken: Promise<void>` 가 setDoc 실패를 catch만 하고 throw 안 함 → 호출자 try/catch 데드코드 → retry 절대 발동 안 함
+- **수정**:
+  - `savePushToken: Promise<void> → Promise<boolean>` (성공 true / 실패 false)
+  - `getLastSavePushTokenError()` export (디버그용)
+  - `notifications.ts retryTokenSave`: uid 없음 + setDoc 실패 모두 다음 attempt로 재귀 (5회, 누적 30초)
+
+### 업데이트 알림 기능 추가 (커밋 5e40eb7)
+- **services/updateCheck.ts** 신규 (재사용 가능 — 지금이야 이식 가능)
+  - `UpdateCheckConfig`: appKey + currentVersion + 패키지명 + iOS App Store ID
+  - Firestore `meta/config_{appKey}` 1회 read
+  - semver 비교 (외부 라이브러리 없이)
+  - AsyncStorage 버전별 snooze (`aigo-update-snoozed-{appKey}`)
+- **services/firebase.ts**: `fetchAppConfig(appKey)` read 함수 export
+- **app/_layout.tsx**: 첫 마운트 1회 체크 + Alert.alert 노출
+  - "업데이트" → Linking.openURL(스토어)
+  - "나중에" → snoozeUpdate (forceUpdate=true 시 버튼 없음 + cancelable=false)
+  - AppState 재체크 없음 (1회만)
+- **iOS App Store ID**: TODO (등록 후 갱신)
+
+### 홈 이벤트 배너 → event_best 연동 (커밋 48d2412)
+- **services/firebase.ts**: `fetchEventBest(slug, count)` + `EventBestProduct` 타입
+- **services/events.ts**: `EventBanner.eventSlug` 필드 + 31개 슬러그 매핑
+  - `ANNIVERSARY_DAY_SLUG`: 100/200/300/365/500/1000일 매핑
+  - 매년 생일: birthday-1 ~ birthday-13 (만 14세 이상 미적재 → undefined)
+  - season/parent: 각 객체에 slug 필드
+  - 부모 사용자 설정 (엄마/아빠/결혼): parent-mom-birthday / dad-birthday / wedding
+- **app/(tabs)/index.tsx handleEventPress**: fetchEventBest 호출, 슬러그 없는 이벤트는 빈 결과
+
+### 수동 첫 적재 완료
+- **baby GROUP 1~4**: 54 슬러그 모두 적재 → 538 상품
+- **event-best**: 31개 중 23개 성공 → 55 상품 (minPrice=30,000 통과)
+- **rate-limit 미발생** (분당 1콜 보수 운영)
+
+### Firebase Console
+- **meta/config_aigo** 초기 문서 생성:
+  - `minRequiredVersion: "1.0.5"`
+  - `forceUpdate: false`
+  - 향후 강제 업데이트 시 minRequiredVersion 상향
+
+### v1.0.5 vc64/vc66 로컬 빌드
+- **versionCode bump**: 62 → 64 → 66 (EAS remote autoIncrement sync)
+- **Android AAB**: `~/aigo/builds/android/aigo-v1.0.5-vc66.aab`
+- **iOS IPA**: `~/aigo/builds/ios/aigo-v1.0.5-vc66.ipa`
+
+### docs 갱신
+- **019_Phase3_SharedProducts.md §10 Phase 3-B 운영 정책 추가** (커밋 3e596c8)
+  - §10-1: shared_products 가격 체크 cron (04:30~01:00 KST, 분당 40회 순차)
+  - §10-2: trackerCount 합산(지금이야+아이고) 기반 정리
+  - §10-3: meta/stats.sharedProductCount 카운터
+  - §10-4: 앱 내 검색 — Firebase 내부 데이터만
+  - §10-5: 낮 보조 업데이트 제거
+- **firestore.rules / event-best minPrice docs sync** (커밋 c8d5d64)
+
+### 미해결 / 다음 작업
+- **BUG-41**: 구글 로그인 후 재설치 시 아이정보 복원 실패 → vc67 수정 예정
+- 알림 가설 A/C/E vc66 반영, 실기기 테스트 미완료
+- cron 전체 활성화는 실기기 테스트 통과 후
+
+---
 
 ## 2026-04-26 작업 이력
 
