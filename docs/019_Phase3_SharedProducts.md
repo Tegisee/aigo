@@ -21,7 +21,7 @@
 |--------|----------|----------|------|
 | `category_best/{categoryId}` | 지금이야 cron | 지금이야 + 아이고 | 쿠팡 공식 19개 categoryId 베스트셀러 |
 | `category_best_baby/{slug}` | 아이고 cron | 지금이야 + 아이고 | BabyCategory 월령별 세분화 베스트셀러 |
-| `event_best/{eventSlug}` | 아이고 cron | 지금이야 + 아이고 | 기념일/시즌/부모 31개 키워드 (minPrice 50,000원) |
+| `event_best/{eventSlug}` | 아이고 cron | 지금이야 + 아이고 | 기념일/시즌/부모 31개 키워드 (minPrice 30,000원) |
 | `shared_products/{productId}` | 양쪽 cron | 양쪽 | trackerCount/purchaseCount + 가격 이력 |
 | `price_drops/{dropId}` | 지금이야 cron | 양쪽 | 가격 하락 발생 시 기록 (dropRate, trackerCount, deepLink) |
 
@@ -38,7 +38,7 @@ category_best_baby/{slug}
 event_best/{eventSlug}
 {
   eventSlug, eventName, eventType: 'anniversary' | 'season' | 'parent',
-  keyword, minPrice: 50000,
+  keyword, minPrice: 30000,
   updatedAt: number,
   products: [...]
 }
@@ -50,7 +50,7 @@ event_best/{eventSlug}
 
 | 시각 | 작업 | 앱 | 비고 |
 |------|------|-----|------|
-| 01:00 | event-best-updater | 아이고 | 기념일 31개 키워드, minPrice=50,000 |
+| 01:00 | event-best-updater | 아이고 | 기념일 31개 키워드, minPrice=30,000 |
 | 01:15 | baby 1그룹 | 아이고 | 장난감 + 의류 (16구간) |
 | 01:30 | baby 2그룹 | 아이고 | 신발 + 도서 + 학습교구 (14구간) |
 | 02:00 | category_best | 지금이야 | 19개 categoryId, sleep 80s |
@@ -123,7 +123,7 @@ event_best/{eventSlug}
 
 ### §5-2. 적재 조건
 
-- 검색 시 `minPrice=50000` 적용 — 선물 가치 있는 상품만 적재
+- 검색 시 `minPrice=30000` 적용 — 선물 가치 있는 상품만 적재
 - 활성 기간(D-leadDays) 외에는 stale 데이터 그대로 둠 (cron이 매일 갱신)
 - 클라이언트는 `services/events.ts`의 `getActiveEvents()`로 활성 이벤트만 표시
 
@@ -147,7 +147,7 @@ event_best/{eventSlug}
 - rate-limited 감지 시 cron **즉시 중단** (다음 회차로 이월)
 
 ### §6-5. event_best 전용
-- `minPrice=50000` 파라미터 적용 (search API 자체 미지원 시 fetchLimit×3 후 클라이언트 필터)
+- `minPrice=30000` 파라미터 적용 (search API 자체 미지원 시 fetchLimit×3 후 클라이언트 필터)
 
 ---
 
@@ -171,7 +171,7 @@ event_best/{eventSlug}
 ## §8. 다음 작업 순서
 
 1. **`baby-categories.ts` 월령별 세분화 구현** — 장난감/의류/신발/도서/학습교구 8구간 + 소모품 월령별
-2. **`scripts/event-best-updater/` 신설** — 31개 기념일, `minPrice=50000`
+2. **`scripts/event-best-updater/` 신설** — 31개 기념일, `minPrice=30000`
 3. **GitHub Actions workflow 4개 yml 작성** — 01:00 / 01:15 / 01:30 / 03:00 / 03:20 KST
 4. **Firestore Rules** — `category_best_baby` + `event_best` 규칙 추가 + 배포
 5. **아이고 Play Console** — 내부 테스트 업로드 + 프로덕션 승급
