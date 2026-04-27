@@ -74,4 +74,4 @@ export const AIGO_EVENTS: EventDef[] = [
 ];
 
 /** docs §5-2: 선물 가치 있는 상품만 적재 */
-export const MIN_PRICE_KRW = 50_000;
+export const MIN_PRICE_KRW = 30_000;
