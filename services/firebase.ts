@@ -355,14 +355,22 @@ export function getAuthState(): { isAnonymous: boolean; provider: string | null;
 
 // ─── Push Token / 알림 설정 ───
 
-/** Expo Push Token 저장 */
-export async function savePushToken(token: string): Promise<void> {
+/** savePushToken 마지막 실패 사유 (디버그용 — getLastSavePushTokenError 로 조회) */
+let lastSavePushTokenError: string | null = null;
+
+/**
+ * Expo Push Token 저장.
+ * 성공 시 true, 실패(uid 없음 / db 없음 / setDoc 실패) 시 false 반환 — throw 안 함.
+ * 호출자(notifications.ts)는 false 시 retryTokenSave 발동.
+ */
+export async function savePushToken(token: string): Promise<boolean> {
   const uid = getCurrentUid();
   if (!uid || !db) {
     const skipLog = `[SavePushToken] SKIP — uid=${uid ?? 'null'}, db=${!!db}`;
     console.warn(skipLog);
     await appendFirebaseDebug(skipLog).catch(() => {});
-    return;
+    lastSavePushTokenError = skipLog;
+    return false;
   }
 
   try {
@@ -381,11 +389,20 @@ export async function savePushToken(token: string): Promise<void> {
     const doneLog = `[SavePushToken] 완료 — uid=${uid}, token=${token?.slice(0, 20)}…`;
     console.log(doneLog);
     await appendFirebaseDebug(doneLog).catch(() => {});
+    lastSavePushTokenError = null;
+    return true;
   } catch (e: any) {
     const errLog = `[SavePushToken] 실패 — uid=${uid}, err=${e?.code ?? ''} ${e?.message ?? e}`;
     console.warn(errLog);
     await appendFirebaseDebug(errLog).catch(() => {});
+    lastSavePushTokenError = errLog;
+    return false;
   }
+}
+
+/** savePushToken 마지막 실패 사유 반환. 직전 호출이 성공했거나 미호출이면 null. */
+export function getLastSavePushTokenError(): string | null {
+  return lastSavePushTokenError;
 }
 
 /** 알림 ON/OFF 설정 저장 */

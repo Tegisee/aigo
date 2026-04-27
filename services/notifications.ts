@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { savePushToken, getCurrentUid } from './firebase';
+import { savePushToken, getCurrentUid, getLastSavePushTokenError } from './firebase';
 
 const PUSH_DEBUG_KEY = 'aigo-push-debug';
 
@@ -128,11 +128,11 @@ export async function registerForPushNotifications(): Promise<string | null> {
   debug.push(`S5: uid=${uid || '(없음)'}`);
 
   if (uid) {
-    try {
-      await savePushToken(token);
+    const ok = await savePushToken(token);
+    if (ok) {
       debug.push('S5: Firestore 저장 OK');
-    } catch (e: any) {
-      debug.push(`S5: Firestore 저장 실패 — ${e?.message}, 재시도 예약`);
+    } else {
+      debug.push(`S5: 저장 실패 — ${getLastSavePushTokenError() ?? '(unknown)'}, 재시도 예약`);
       retryTokenSave(token, 1, debug);
     }
   } else {
@@ -144,7 +144,10 @@ export async function registerForPushNotifications(): Promise<string | null> {
   return token;
 }
 
-/** uid가 확보될 때까지 토큰 저장 재시도 (최대 5회, 2s/4s/6s/8s/10s = 최대 30초) */
+/**
+ * uid 확보 + setDoc 성공까지 재시도 (최대 5회, 2s/4s/6s/8s/10s = 누적 30초).
+ * uid 없으면 다음 attempt로, uid 있어도 setDoc 실패하면 다음 attempt로.
+ */
 function retryTokenSave(token: string, attempt: number, debug: string[]) {
   if (attempt > 5) {
     debug.push('S5: 재시도 5회 실패');
@@ -153,16 +156,18 @@ function retryTokenSave(token: string, attempt: number, debug: string[]) {
   }
   setTimeout(async () => {
     const uid = getCurrentUid();
-    if (uid) {
-      try {
-        await savePushToken(token);
-        debug.push(`S5: 재시도#${attempt} OK — uid=${uid}`);
-      } catch (e: any) {
-        debug.push(`S5: 재시도#${attempt} 실패 — ${e?.message}`);
-      }
+    if (!uid) {
+      debug.push(`S5: 재시도#${attempt} — uid 아직 없음`);
+      retryTokenSave(token, attempt + 1, debug);
+      return;
+    }
+    const ok = await savePushToken(token);
+    if (ok) {
+      debug.push(`S5: 재시도#${attempt} OK — uid=${uid}`);
       await savePushDebug(debug.join('\n'));
     } else {
-      debug.push(`S5: 재시도#${attempt} — uid 아직 없음`);
+      debug.push(`S5: 재시도#${attempt} 저장 실패 — ${getLastSavePushTokenError() ?? '(unknown)'}`);
+      await savePushDebug(debug.join('\n'));
       retryTokenSave(token, attempt + 1, debug);
     }
   }, 2000 * attempt);
