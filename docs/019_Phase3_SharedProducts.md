@@ -56,9 +56,11 @@ event_best/{eventSlug}
 | 02:00 | category_best | 지금이야 | 19개 categoryId, sleep 80s |
 | 03:00 | baby 3그룹 | 아이고 | 소모품: 기저귀 5구간 + 분유 3구간 + 물티슈 + 수유용품 |
 | 03:20 | baby 4그룹 | 아이고 | 나머지 BabyCategory |
-| 04:00 | price-check | 지금이야 | category_best 캐시 활용한 가격 체크 |
+| 04:30 ~ 01:00 (익일) | shared_products price-check | 통합 | 20.5h 장기 cron, 분당 최대 40회, 순번 기준 순차 (§10-1) |
 
-**시간대 분리 이유**: 분당 50회 한도 대비 동시 호출 방지 + 02:00~04:00에 모든 적재 완료 → 04:00 가격 체크 시점에 캐시 모두 신선.
+**시간대 분리 이유**: 분당 50회 한도 대비 동시 호출 방지 + 02:00~04:00에 모든 적재 완료 → 04:30 가격 체크 시작 시점에 category_best 캐시 모두 신선.
+
+**낮 보조 업데이트 없음**: rate-limited 감지 시 당일 즉시 중단이 원칙. 낮시간 재실행/추가 호출 없음 (§10-5).
 
 ---
 
@@ -180,7 +182,73 @@ event_best/{eventSlug}
 
 ---
 
-## §9. 참고
+## §10. Phase 3-B 운영 정책 (2026-04-27 확정)
+
+### §10-1. shared_products 가격 체크 cron
+
+| 항목 | 값 |
+|------|-----|
+| 실행 시간 | 매일 **04:30 ~ 01:00 KST (익일)** — 20.5시간 장기 cron |
+| 호출 속도 | **분당 최대 40회** (한도 50/분 대비 안전 마진) |
+| 처리 방식 | `shared_products` **순번 기준 순차 호출** |
+| 당일 추가 상품 | 시작 시점 snapshot 기준 → 그 이후 등록 상품은 **다음날부터** 체크 대상 |
+| rate-limited 감지 | **즉시 중단, 당일 재실행 없음** (다음날 04:30 정상 재개) |
+
+**처리량 추정**: 1230분 × 40회 = 최대 49,200건/일. 분당 호출 간 1.5초 sleep + category_best 캐시(§7)로 실제 호출량 절감.
+
+**기존 04:00 price-check 대체**: 지금이야 단독 04:00 cron → 04:30 통합 운영으로 일원화.
+
+### §10-2. trackerCount 기반 정리
+
+- `shared_products.trackerCount`는 **지금이야 + 아이고 합산** (양 앱 동일 컬렉션 공유)
+- 정리 대상: `trackerCount === 0` (양 앱 모두에서 추적 해제됨)
+- 정리 주기: §10-1 가격 체크 cron 종료 후 별도 단계 또는 주간 별도 cron
+- 정리 시 `meta/stats.sharedProductCount` 동기 감산 (§10-3)
+
+### §10-3. meta/stats 카운터 문서
+
+```
+meta/stats {
+  sharedProductCount: number,
+  ...
+}
+```
+
+- `shared_products` **추가 시**: `meta/stats.sharedProductCount` ← `increment(+1)`
+- `shared_products` **삭제 시**: `meta/stats.sharedProductCount` ← `increment(-1)`
+- 클라이언트 트랜잭션으로 add/delete + counter 동시 갱신
+- 양 앱 동일 카운터 공유 → 검색/통계용 전체 적재량 단일 진실 소스
+
+**Firestore Rules 추가 필요** (jigumiya 단일 소스 갱신 후 배포):
+```
+match /meta/{docId} {
+  allow read: if request.auth != null;
+  allow update: if request.auth != null;  // counter increment 허용
+}
+```
+
+### §10-4. 앱 내 검색 기능
+
+- **검색 대상**: Firebase 내부 데이터만 (쿠팡 API 호출 0)
+  - `category_best/{categoryId}` (지금이야 적재)
+  - `category_best_baby/{slug}` (아이고 적재)
+  - `event_best/{eventSlug}` (아이고 적재)
+  - `shared_products/{productId}` (양 앱 적재)
+- **이유**: 쿠팡 분당 50회 한도 보호 + 사용자가 추적 중이거나 cron이 적재한 상품만 노출 → 검증된 데이터
+- **없는 상품 처리**: 검색 결과 0건 시 "추적 요청" 버튼 → 사용자가 URL/키워드 제출 → 다음 cron에서 적재 후보 (Phase 3-C 기능)
+
+### §10-5. 낮 보조 업데이트 제거
+
+- 기존 안: rate-limited 시 낮시간 보조 cron으로 재시도
+- **확정**: rate-limited 감지 시 **당일 완전 중단**, 낮 재실행 없음
+- 이유:
+  1. burst 누적 시 파트너스 계정 정지 위험 (2026-04-24 사례 학습)
+  2. 다음날 04:30 정상 재개 시 신선도 충분
+  3. 단순한 운영 = 디버깅 비용 감소
+
+---
+
+## §11. 참고
 
 - 지금이야 측 동일 설계 문서: `~/jigumiya/docs/019_Phase3_SharedProducts.md`
 - 아이고 BabyCategory 정의: `types/index.ts` `BabyCategory` 타입 + `CATEGORY_TO_SLUG`
