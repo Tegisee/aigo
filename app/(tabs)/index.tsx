@@ -17,7 +17,7 @@ import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { getCategoriesByMonth, type BabyCategory } from '../../types';
 import { hasCoupangApiKeys, generateDeepLink, type CoupangProduct } from '../../services/coupangApi';
-import { fetchPopularByCategory, fetchBabyCategoryBest, type SharedProduct } from '../../services/firebase';
+import { fetchPopularByCategory, fetchBabyCategoryBest, fetchEventBest, type SharedProduct } from '../../services/firebase';
 import { getAppShareMessage } from '../../services/config';
 import { getActiveEvents, type EventBanner } from '../../services/events';
 
@@ -137,16 +137,32 @@ export default function HomeScreen() {
   };
 
   const handleEventPress = useCallback(async (event: EventBanner, index: number) => {
-    if (!event.keywords || event.keywords.length === 0) return;
     // 토글
     if (eventProducts[index]) {
       setEventProducts((prev) => { const n = { ...prev }; delete n[index]; return n; });
       return;
     }
+    if (!event.eventSlug) {
+      // 적재 슬러그 없는 이벤트(예: 1111일 등 비표준 일수) → 빈 결과
+      setEventProducts((prev) => ({ ...prev, [index]: [] }));
+      return;
+    }
     setLoadingEvent(index);
-    // 이벤트 추천: 쿠팡 직접 검색 의존 제거 (Firebase category_best_baby 전환).
-    // 키워드 → 카테고리 매핑 미정. 추후 Phase 3 에서 카테고리 추천으로 일원화 예정.
-    setEventProducts((prev) => ({ ...prev, [index]: [] }));
+    try {
+      const best = await fetchEventBest(event.eventSlug, 10);
+      const mapped: CoupangProduct[] = best.map((p) => ({
+        productId: parseInt(p.productId) || 0,
+        productName: p.productName,
+        productPrice: p.productPrice,
+        productImage: p.productImage,
+        productUrl: p.productUrl,
+        categoryName: '',
+        isRocket: p.isRocket,
+      }));
+      setEventProducts((prev) => ({ ...prev, [index]: mapped }));
+    } catch {
+      setEventProducts((prev) => ({ ...prev, [index]: [] }));
+    }
     setLoadingEvent(null);
   }, [eventProducts]);
 

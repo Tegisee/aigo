@@ -763,6 +763,49 @@ export async function fetchBabyCategoryBest(
   }
 }
 
+// ─── 이벤트 베스트 (cron 적재) ───
+
+export interface EventBestProduct {
+  productId: string;
+  productName: string;
+  productPrice: number;
+  productImage: string;
+  productUrl: string;
+  isRocket: boolean;
+}
+
+/**
+ * event_best/{eventSlug} 1회 read.
+ * cron(scripts/event-best-updater)이 minPrice=50,000 필터로 적재.
+ * 미적재 또는 미존재 슬러그 → 빈 배열.
+ */
+export async function fetchEventBest(
+  eventSlug: string,
+  count: number = 10,
+): Promise<EventBestProduct[]> {
+  if (!db) return [];
+  if (!eventSlug) return [];
+
+  try {
+    const snap = await getDoc(doc(db!, 'event_best', eventSlug));
+    if (!snap.exists()) return [];
+
+    const data = snap.data() as any;
+    const products = Array.isArray(data?.products) ? data.products : [];
+    return products.slice(0, count).map((p: any) => ({
+      productId: String(p.productId),
+      productName: p.productName,
+      productPrice: Number(p.productPrice) || 0,
+      productImage: p.productImage,
+      productUrl: p.productUrl,
+      isRocket: !!p.isRocket,
+    }));
+  } catch (e) {
+    console.warn('[Firebase] event_best 조회 실패:', e);
+    return [];
+  }
+}
+
 // ─── 계정 삭제 ───
 
 export type DeleteAccountErrorCode =

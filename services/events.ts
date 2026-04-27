@@ -21,7 +21,21 @@ export interface EventBanner {
   subtitle: string;
   daysLeft: number; // 0 = 당일, 음수 = 지남
   keywords?: string[]; // 시즌 추천 검색 키워드
+  /** event_best/{eventSlug} 문서 ID — 없으면 추천 상품 미지원 (클릭 시 빈 결과) */
+  eventSlug?: string;
 }
+
+// ─── event_best 슬러그 매핑 (scripts/event-best-updater/events.ts 와 sync) ───
+
+/** 특별 일수 → cron 적재 슬러그 (그 외 일수는 미적재 → 슬러그 없음) */
+const ANNIVERSARY_DAY_SLUG: Record<number, string> = {
+  100: 'anniv-100',
+  200: 'anniv-200',
+  300: 'anniv-300',
+  365: 'anniv-365',
+  500: 'anniv-500',
+  1000: 'anniv-1000',
+};
 
 // ─── 29번: 기념일 D-Day ───
 
@@ -44,6 +58,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
         : day === 100
           ? ['백일 선물', '백일 잔치', '아기 선물']
           : ['아기 기념일 선물', '아기 선물', '아기 파티용품'];
+      const eventSlug = ANNIVERSARY_DAY_SLUG[day];
       if (diff === 0) {
         events.push({
           type: 'anniversary',
@@ -52,6 +67,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
           subtitle: '축하해요!',
           daysLeft: 0,
           keywords,
+          eventSlug,
         });
       } else {
         events.push({
@@ -61,6 +77,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
           subtitle: `${birth.getFullYear()}.${String(birth.getMonth() + 1).padStart(2, '0')}.${String(birth.getDate()).padStart(2, '0')} 출생`,
           daysLeft: diff,
           keywords,
+          eventSlug,
         });
       }
     }
@@ -77,6 +94,8 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
 
   if (birthdayDiff >= 0 && birthdayDiff <= 7 && age > 1) {
     const birthdayKeywords = ['아이 생일 선물', '생일 파티 용품', '생일 케이크'];
+    // birthday-1 ~ birthday-13 만 cron 적재 (만 14세 이상 미적재)
+    const birthdaySlug = age >= 1 && age <= 13 ? `birthday-${age}` : undefined;
     if (birthdayDiff === 0) {
       events.push({
         type: 'anniversary',
@@ -85,6 +104,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
         subtitle: '생일 축하해요!',
         daysLeft: 0,
         keywords: birthdayKeywords,
+        eventSlug: birthdaySlug,
       });
     } else {
       events.push({
@@ -94,6 +114,7 @@ function getUpcomingAnniversaries(birthDate: string, babyName: string): EventBan
         subtitle: `${age}번째 생일`,
         daysLeft: birthdayDiff,
         keywords: birthdayKeywords,
+        eventSlug: birthdaySlug,
       });
     }
   }
@@ -115,41 +136,47 @@ function getSeasonEvents(babyName: string): EventBanner[] {
     day: number;
     leadDays: number;
     keywords: string[];
+    slug: string;
   }[] = [
     {
       name: '어린이날',
       emoji: '🎈',
       month: 5, day: 5, leadDays: 30,
       keywords: ['어린이날 선물', '어린이 선물세트', '어린이날 장난감'],
+      slug: 'season-children-day',
     },
     {
       name: '크리스마스',
       emoji: '🎄',
       month: 12, day: 25, leadDays: 30,
       keywords: ['크리스마스 선물 아이', '산타 선물세트', '크리스마스 장난감'],
+      slug: 'season-christmas',
     },
     {
       name: '핼러윈',
       emoji: '🎃',
       month: 10, day: 31, leadDays: 14,
       keywords: ['핼러윈 코스튬 아이', '핼러윈 장난감', '핼러윈 파티용품'],
+      slug: 'season-halloween',
     },
   ];
 
   // 음력 명절은 매년 날짜가 다르므로 근사값 사용 (향후 라이브러리 연동)
   // 2026년 설날: 2/17, 추석: 10/4 (예시)
-  const lunarHolidays: { name: string; emoji: string; month: number; day: number; leadDays: number; keywords: string[] }[] = [
+  const lunarHolidays: { name: string; emoji: string; month: number; day: number; leadDays: number; keywords: string[]; slug: string }[] = [
     {
       name: '설날',
       emoji: '🧧',
       month: 2, day: 17, leadDays: 14,
       keywords: ['설날 선물 아이', '세뱃돈 저금통', '한복 아기'],
+      slug: 'season-newyear',
     },
     {
       name: '추석',
       emoji: '🌕',
       month: 10, day: 4, leadDays: 14,
       keywords: ['추석 선물 아이', '송편 만들기', '한복 유아'],
+      slug: 'season-chuseok',
     },
   ];
 
@@ -168,6 +195,7 @@ function getSeasonEvents(babyName: string): EventBanner[] {
           subtitle: `${babyName}에게 특별한 하루를 선물하세요`,
           daysLeft: 0,
           keywords: s.keywords,
+          eventSlug: s.slug,
         });
       } else {
         events.push({
@@ -177,6 +205,7 @@ function getSeasonEvents(babyName: string): EventBanner[] {
           subtitle: `${babyName} 선물 미리 준비하세요`,
           daysLeft: diff,
           keywords: s.keywords,
+          eventSlug: s.slug,
         });
       }
     }
@@ -200,6 +229,7 @@ function getParentEvents(): EventBanner[] {
     leadDays: number;
     subtitle: string;
     keywords: string[];
+    slug: string;
   }[] = [
     {
       name: '어버이날',
@@ -207,6 +237,7 @@ function getParentEvents(): EventBanner[] {
       month: 5, day: 8, leadDays: 7,
       subtitle: '부모님께 감사한 마음을 전하세요',
       keywords: ['어버이날 선물', '부모님 선물', '안마기 선물'],
+      slug: 'parent-parents-day',
     },
     {
       name: '발렌타인데이',
@@ -214,6 +245,7 @@ function getParentEvents(): EventBanner[] {
       month: 2, day: 14, leadDays: 14,
       subtitle: '사랑하는 사람에게 마음을 전하세요',
       keywords: ['발렌타인 선물', '커플 선물', '초콜릿 선물세트'],
+      slug: 'parent-valentine',
     },
     {
       name: '화이트데이',
@@ -221,6 +253,7 @@ function getParentEvents(): EventBanner[] {
       month: 3, day: 14, leadDays: 14,
       subtitle: '달콤한 답례 선물을 준비하세요',
       keywords: ['화이트데이 선물', '커플 선물', '사탕 선물세트'],
+      slug: 'parent-whiteday',
     },
     {
       name: '부부의 날',
@@ -228,6 +261,7 @@ function getParentEvents(): EventBanner[] {
       month: 5, day: 21, leadDays: 7,
       subtitle: '열심히 육아하는 나에게 선물을',
       keywords: ['부부 선물', '육아맘 선물', '셀프 선물'],
+      slug: 'parent-couple-day',
     },
   ];
 
@@ -243,6 +277,7 @@ function getParentEvents(): EventBanner[] {
         subtitle: p.subtitle,
         daysLeft: diff,
         keywords: p.keywords,
+        eventSlug: p.slug,
       });
     }
   }
@@ -267,10 +302,10 @@ export function getActiveEvents(birthDate: string | null, babyName: string, pare
   if (parentInfo) {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const pEntries: { label: string; emoji: string; date: string; isLunar: boolean; kw: string[] }[] = [];
-    if (parentInfo.momBirthday) pEntries.push({ label: '엄마 생일', emoji: '👩', date: parentInfo.momBirthday.date, isLunar: parentInfo.momBirthday.isLunar, kw: ['엄마 선물', '여성 선물', '엄마 생일 선물'] });
-    if (parentInfo.dadBirthday) pEntries.push({ label: '아빠 생일', emoji: '👨', date: parentInfo.dadBirthday.date, isLunar: parentInfo.dadBirthday.isLunar, kw: ['아빠 선물', '남성 선물', '아빠 생일 선물'] });
-    if (parentInfo.anniversary) pEntries.push({ label: '결혼기념일', emoji: '💍', date: parentInfo.anniversary, isLunar: false, kw: ['결혼기념일 선물', '커플 선물', '기념일 선물세트'] });
+    const pEntries: { label: string; emoji: string; date: string; isLunar: boolean; kw: string[]; slug: string }[] = [];
+    if (parentInfo.momBirthday) pEntries.push({ label: '엄마 생일', emoji: '👩', date: parentInfo.momBirthday.date, isLunar: parentInfo.momBirthday.isLunar, kw: ['엄마 선물', '여성 선물', '엄마 생일 선물'], slug: 'parent-mom-birthday' });
+    if (parentInfo.dadBirthday) pEntries.push({ label: '아빠 생일', emoji: '👨', date: parentInfo.dadBirthday.date, isLunar: parentInfo.dadBirthday.isLunar, kw: ['아빠 선물', '남성 선물', '아빠 생일 선물'], slug: 'parent-dad-birthday' });
+    if (parentInfo.anniversary) pEntries.push({ label: '결혼기념일', emoji: '💍', date: parentInfo.anniversary, isLunar: false, kw: ['결혼기념일 선물', '커플 선물', '기념일 선물세트'], slug: 'parent-wedding' });
 
     for (const e of pEntries) {
       const [, m, d] = e.date.split('-').map(Number);
@@ -297,6 +332,7 @@ export function getActiveEvents(birthDate: string | null, babyName: string, pare
           subtitle: diff === 0 ? '축하해요!' : '선물 준비하셨나요?',
           daysLeft: diff,
           keywords: e.kw,
+          eventSlug: e.slug,
         });
       }
     }
