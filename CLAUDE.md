@@ -60,7 +60,8 @@
 - 홈 이벤트 배너 → event_best 실데이터 연동
 - Android AAB: ~/aigo/builds/android/aigo-v1.0.5-vc66.aab
 - iOS IPA: ~/aigo/builds/ios/aigo-v1.0.5-vc66.ipa
-- 다음 작업: vc66 실기기 테스트 (카테고리 베스트/알림 수신/업데이트 알림) → BUG-41 수정 → cron 활성화 → Play Console/App Store 제출
+- iOS 실기기 테스트 완료 (2026-04-28): 카테고리/기념일 추천 + 계정 삭제 정상 / BUG-41,42,43 + IMPROVE-A,B 발견
+- 다음 작업: BUG-41/42/43 수정 → vc67 재빌드 → 가격/알림 시간대 협의 → cron 전체 활성화 → Play Console/App Store 제출
 
 ## 이전 상태: v1.0.5 vc63 로컬 빌드 완료 (2026-04-26)
 - Firebase 프로젝트 jigumiya 통합 완료 (자매 앱과 백엔드 일원화)
@@ -174,15 +175,28 @@
 
 ### 남은 TODO
 
-**🔴 P0 — 신규 (2026-04-28 발견)**
+**🔴 P0 — iOS 실기기 테스트에서 발견 (2026-04-28)**
 - **BUG-41**: 구글 로그인 후 앱 삭제 → 재설치 → 같은 계정 로그인 시 아이정보(babyName/babyBirthdate 등) 복원 실패, 온보딩 재진행됨
-  - 예상 원인: Firebase users/{uid} 에서 아이정보 복원 로직 미구현 또는 실패
-  - vc66 빌드에 미반영 — 수정 후 vc67 재빌드 예정
+  - 예상 원인: restore.ts 단일 아이 필드(babyName/babyGender/babyBirthDate)만 있고 children[] 배열이 비어있는 사용자에서 childrenCount=0 반환 → handleGoogleStart가 onNext()로 빠져 재입력 강제
+  - 수정 방향: restore.ts 단일 아이 → children[] 마이그레이션 + handleGoogleStart 분기 보강(settings 의미 필드 있으면 onComplete)
+  - vc66 빌드 미반영 — 수정 후 vc67 재빌드 예정
 
-**🟠 P1 — 알림 (vc66 패치 포함, 실기기 테스트 미완료)**
-- 가설 A/C/E 모두 vc66에 반영됨. 본인 디바이스 + 외부 테스터 검증 필요
+**🟠 P1 — iOS 실기기 테스트에서 발견 (2026-04-28)**
+- **BUG-42**: 쿠팡 앱에서 공유하기 → 아이고 선택 시 상품추가 화면 무한로딩 (간헐적, iOS/Android 공통)
+  - 우회: 앱 튕긴 후 재진입하면 정상 동작
+  - 예상 원인: ShareIntentHandler/CoupangScraper WebView 초기화 race
+- **BUG-43**: Android 구글 로그인 실패 — DEVELOPER_ERROR
+  - 예상 원인: Firebase aigo-a → jigumiya 통합 후 Play Console 키스토어 SHA-1을 jigumiya 프로젝트 OAuth 클라이언트에 추가하지 않음
+  - 확인 필요: Firebase Console(jigumiya) > Project settings > OAuth 2.0 Client IDs > Android client > SHA-1 fingerprint 등록
 
-**🟡 P2 — UX 버그**
+**🟠 P1 — 알림 (vc66 패치 포함)**
+- 알림 가설 A/C/E 모두 vc66 반영됨. 외부 테스터 디바이스 검증 필요
+
+**🟡 P2 — UX 개선 (iOS 실기기 테스트에서 발견)**
+- **IMPROVE-A**: 설정화면에 로그인된 구글 계정 이메일/이름 표시 (iOS/Android 공통)
+- **IMPROVE-B**: 온보딩 "매일 6회 자동 가격 확인" 문구 수정 — 알림 설계 확정 후 실제 횟수로 갱신
+
+**🟡 P2 — 기존 UX 버그**
 - **BUG-36**: 접종 리스트 등록 후 나중에 체크 기능
 - **BUG-37**: 월령별 추천 카테고리 복수선택 해제 안 됨
 - **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (BUG-41 의 부분 사례일 가능성)
@@ -190,12 +204,40 @@
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
 
+### iOS 실기기 정상 확인 (2026-04-28)
+- ✅ 월령별 카테고리 추천상품 Firebase에서 정상 로드
+- ✅ 기념일 추천상품 Firebase에서 정상 로드 (event_best)
+- ✅ 계정 삭제 흐름 정상 (구글 재인증 → Firestore/Auth 정리 → 온보딩 복귀)
+
 **다음 단계**:
-1. vc66 실기기 테스트 (카테고리 베스트 / 알림 수신 / 업데이트 알림)
-2. BUG-41 아이정보 복원 수정 → vc67
-3. cron 전체 활성화 (실기기 테스트 통과 후)
+1. BUG-41 / BUG-42 / BUG-43 수정 → vc67 재빌드
+2. 가격 체크 + 알림 설계 최종 확정 (시간대 협의 후)
+3. cron 전체 활성화
 4. Android Play Console 내부테스트 → 프로덕션 승급
 5. iOS App Store 심사 제출 (Apple 회신 반영)
+
+---
+
+## 가격 체크 + 알림 설계 (2026-04-28 초안, 내일 재논의)
+
+### shared-price-checker (단일 통합 cron)
+- **공유 범위**: 지금이야 + 아이고 shared_products 동일 컬렉션 사용 → 단일 cron으로 양 앱 커버
+- **사이클 자동 계산**: `meta/stats.sharedProductCount` 읽어서 동적 sleep 간격 결정
+  - 계산식: `전체상품수 ÷ 40회/분 = 1사이클 소요분`, 가용시간(20.5h) 내 자동 반복
+- **호출 속도**: 분당 최대 40회 (한도 50/분 대비 안전 마진)
+- **운영 시간**: 04:30 ~ 01:00 KST (익일) — 카테고리 업데이트 시간대(01:00~04:30) 제외
+- **rate-limited 감지**: 즉시 중단, 당일 재실행 없음 (다음날 04:30 정상 재개)
+
+### 알림 발송 (하루 3회 고정)
+- **시간대 미확정** (내일 협의) — 후보: 08:00 / 13:00 / 20:00 KST
+- 각 발송 시점까지 누적된 가격 하락 상품 모아서 한 번에 발송
+- 가격 변동 없을 때 처리 방식 미확정 ("오늘은 가격 변동이 없었어요" 알림 여부)
+
+### 내일 재논의 항목
+- 알림 발송 시간대 3회 확정
+- 가격 변동 없을 때 알림 정책
+- 온보딩 "매일 N회 가격 알림" 문구 최종 확정 (IMPROVE-B 연동)
+- 전체 cron 스케줄 최종 검토 후 활성화 여부
 
 ### EAS 빌드 크레딧
 - 현재: 100% 소진 (리셋: 2026-04-21)
