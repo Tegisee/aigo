@@ -84,9 +84,9 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
       //    — setDoc merge:true가 원칙상 기존 필드를 보존해야 하지만,
       //      실제 관찰상 쓰기 직후 getDocFromServer가 방금 쓴 필드만 반환하는 증상이 있어
       //      **read-before-write** 순서로 변경해 서버 원본 상태를 먼저 확정
-      const { childrenCount, itemsCount } = await restoreDataFromFirestore();
+      const { childrenCount, itemsCount, hasMeaningfulSettings } = await restoreDataFromFirestore();
       await appendRestoreDebugLine(
-        `[Onboarding] restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}`,
+        `[Onboarding] restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}, hasMeaningfulSettings=${hasMeaningfulSettings}`,
       );
 
       // 5. 복원 이후 setLinked (isLinked, linkedProvider 필드 업데이트 — merge:true)
@@ -95,8 +95,10 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
       // 6. push token 등록 (onAuthStateChanged와 중복돼도 setDoc merge:true라 안전)
       registerForPushNotifications().catch(() => {});
 
-      // 7. 분기 — childrenCount/itemsCount > 0 이면 복원 완료로 간주
-      if (childrenCount > 0 || itemsCount > 0) {
+      // 7. 분기 — 의미 데이터(아이/관심상품/부모정보/접종기록 등) 있으면 복원 완료로 간주
+      //    BUG-41: 단일 아이 필드만 있는 옛 사용자도 children[] 마이그레이션되어 childrenCount>0
+      //    그래도 babyBirthDate 없는 부분 데이터 사용자 보호용으로 hasMeaningfulSettings 체크 추가
+      if (childrenCount > 0 || itemsCount > 0 || hasMeaningfulSettings) {
         const parts = [`${googleResult.email}`, '이전 데이터가 복원되었습니다.'];
         if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
         if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);

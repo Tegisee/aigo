@@ -56,7 +56,7 @@ export default function LoginScreen() {
           childrenCount = result.childrenCount;
           itemsCount = result.itemsCount;
           await appendRestoreDebugLine(
-            `[Login] restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}`,
+            `[Login] restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}, hasMeaningfulSettings=${result.hasMeaningfulSettings}`,
           );
         } catch (e: any) {
           console.warn('[Login] 데이터 복원 실패:', e);

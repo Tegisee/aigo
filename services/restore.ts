@@ -17,6 +17,7 @@ const RESTORE_DEBUG_KEY = 'aigo-restore-debug';
 export interface RestoreResult {
   childrenCount: number;
   itemsCount: number;
+  hasMeaningfulSettings: boolean;
   debugInfo: string;
 }
 
@@ -77,7 +78,7 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
   if (!uid) {
     debugLines.push('ABORT: uid 확보 실패');
     await saveRestoreDebug(debugLines.join('\n'));
-    return { childrenCount: 0, itemsCount: 0, debugInfo: debugLines.join('\n') };
+    return { childrenCount: 0, itemsCount: 0, hasMeaningfulSettings: false, debugInfo: debugLines.join('\n') };
   }
 
   // ── Step 2: settings / items 분리 조회 (silent fail 제거) ──
@@ -118,6 +119,7 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
   }
 
   let childrenCount = 0;
+  let hasMeaningfulSettings = false;
 
   // ── Step 3: restoreKeys로 Zustand에 반영 ──
   if (settings) {
@@ -138,6 +140,33 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
       }
     }
 
+    // ── 단일 아이 → children[] 마이그레이션 (BUG-41) ──
+    // 옛날 사용자: children[]가 없거나 빈 배열인데 babyName/babyBirthDate 있음
+    // 마이그레이션 안 하면 childrenCount=0 → handleGoogleStart가 온보딩 재진행 강제
+    const childrenIsEmpty = !Array.isArray(restoreData.children) || restoreData.children.length === 0;
+    if (childrenIsEmpty && restoreData.babyName && restoreData.babyBirthDate) {
+      const migratedChild = {
+        id: `child-${Date.now()}`,
+        name: restoreData.babyName,
+        gender: restoreData.babyGender ?? 'unknown',
+        birthDate: restoreData.babyBirthDate,
+      };
+      restoreData.children = [migratedChild];
+      restoreData.selectedChildId = migratedChild.id;
+      debugLines.push(`migrated: 단일 아이 → children[] (id=${migratedChild.id}, name=${migratedChild.name})`);
+
+      // Firestore에도 백필 (다음 복원 때는 children[]에서 바로 읽도록)
+      try {
+        await updateUserSettings({
+          children: restoreData.children,
+          selectedChildId: restoreData.selectedChildId,
+        });
+        debugLines.push('migrated: Firestore 백필 성공');
+      } catch (e: any) {
+        debugLines.push(`migrated: Firestore 백필 실패 — ${e?.message ?? e}`);
+      }
+    }
+
     // children 배열이 있으면 selectedChild 데이터 동기화 보장
     if (restoreData.children?.length > 0) {
       childrenCount = restoreData.children.length;
@@ -150,6 +179,20 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
         restoreData.babyBirthDate = selectedChild.birthDate;
       }
     }
+
+    // 의미 필드 존재 여부 (childrenCount=0이라도 부모정보/접종기록 있으면 복원 분기)
+    const parentHasData = restoreData.parentInfo && Object.keys(restoreData.parentInfo).length > 0;
+    const vaccinationHasData =
+      restoreData.vaccinationRecords && Object.keys(restoreData.vaccinationRecords).length > 0;
+    const checkupHasData =
+      restoreData.checkupRecords && Object.keys(restoreData.checkupRecords).length > 0;
+    hasMeaningfulSettings =
+      childrenCount > 0 ||
+      Boolean(restoreData.babyName) ||
+      Boolean(parentHasData) ||
+      Boolean(vaccinationHasData) ||
+      Boolean(checkupHasData);
+    debugLines.push(`hasMeaningfulSettings: ${hasMeaningfulSettings}`);
 
     if (Object.keys(restoreData).length > 0) {
       console.log('[Restore] Zustand setState — keys:', Object.keys(restoreData).join(','));
@@ -171,7 +214,7 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
 
   const debugInfo = debugLines.join('\n');
   await saveRestoreDebug(debugInfo);
-  return { childrenCount, itemsCount: items.length, debugInfo };
+  return { childrenCount, itemsCount: items.length, hasMeaningfulSettings, debugInfo };
 }
 
 /**
