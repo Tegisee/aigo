@@ -151,7 +151,7 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
         <View style={styles.featureList}>
           <FeatureRow icon="notifications-outline" text="목표가 도달 시 푸시 알림" />
           <FeatureRow icon="analytics-outline" text="가격 변동 그래프 제공" />
-          <FeatureRow icon="time-outline" text="매일 6회 자동 가격 확인" />
+          <FeatureRow icon="time-outline" text="가격 변동 시 즉시 알림" />
         </View>
       </Animated.View>
 
