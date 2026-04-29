@@ -29,6 +29,11 @@ export interface BabyCategoryDef {
   displayOrder: number;
   /** cron 그룹 (1~4) */
   group: CronGroup;
+  /**
+   * 상품명에 포함된 경우 적재 제외 (대소문자 무관, 단순 substring 매칭).
+   * 예: stroller는 강아지 유모차 노이즈 제거.
+   */
+  excludeKeywords?: string[];
 }
 
 // ─── 그룹 1 (01:15 KST) — 장난감 + 의류 8구간 × 2 = 16콜 ───────
@@ -104,7 +109,7 @@ const GROUP_4: BabyCategoryDef[] = [
   { category: '보행기/점퍼루',     slug: 'walker',        keyword: '보행기',         displayOrder: 8,  group: 4 },
   { category: '유아식',            slug: 'toddler-food',  keyword: '유아식',         displayOrder: 9,  group: 4 },
   { category: '안전용품',          slug: 'safety',        keyword: '아기 안전용품',  displayOrder: 10, group: 4 },
-  { category: '유모차/카시트',     slug: 'stroller',      keyword: '유모차',         displayOrder: 14, group: 4 },
+  { category: '유모차/카시트',     slug: 'stroller',      keyword: '유모차',         displayOrder: 14, group: 4, excludeKeywords: ['애완견', '반려견', '강아지'] },
   { category: '유아 도서/학습',    slug: 'toddler-books', keyword: '유아 도서',      displayOrder: 15, group: 4 },
   { category: '생활용품',          slug: 'daily',         keyword: '아기 생활용품',  displayOrder: 16, group: 4 },
   { category: '가구',              slug: 'furniture',     keyword: '아기 가구',      displayOrder: 17, group: 4 },

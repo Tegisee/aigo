@@ -1,0 +1,42 @@
+name: Baby Category Notifier
+
+# 월령별 가격 변동 알림 — 모든 그룹(01:15/01:30/03:00/03:20)이 끝난 뒤
+# price_drops_baby/{오늘} 을 읽어 사용자별로 매칭/발송.
+# 비활성 상태로 신설 — 수동 dispatch 검증 후 자동화.
+on:
+  # schedule:
+  #   - cron: '0 19 * * *'   # 04:00 KST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'DRY_RUN (1=발송 안 함, 0=실제 발송)'
+        required: false
+        type: string
+        default: '1'
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        working-directory: scripts/baby-category-notifier
+        run: npm install
+
+      - name: Build TypeScript
+        working-directory: scripts/baby-category-notifier
+        run: npx tsc
+
+      - name: Run baby category notifier
+        working-directory: scripts/baby-category-notifier
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node dist/index.js

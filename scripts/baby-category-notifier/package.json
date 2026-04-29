@@ -1,0 +1,19 @@
+{
+  "name": "aigo-baby-category-notifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "notify": "node --loader ts-node/esm index.ts",
+    "notify:js": "node dist/index.js",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "expo-server-sdk": "^3.13.0",
+    "firebase-admin": "^13.4.0"
+  },
+  "devDependencies": {
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.2"
+  }
+}

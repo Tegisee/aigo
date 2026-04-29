@@ -2,16 +2,14 @@
  * 아이고 BabyCategory 베스트 업데이터 (cron, 비활성 상태로 시작)
  *
  * 동작:
- *   1. AIGO_BABY_CATEGORIES 순회
+ *   1. AIGO_BABY_CATEGORIES 순회 (또는 GROUP=N 지정 시 해당 그룹만)
  *   2. 카테고리당 searchProducts(keyword, 50) 1콜
- *   3. category_best_baby/{slug} 단일 문서 덮어쓰기
- *   4. 다음 카테고리 호출 전 SLEEP_BETWEEN_CATEGORIES_MS 대기
- *   5. rate-limited 감지 시 즉시 중단
- *
- * 호출 정책 (지금이야 category-best-updater 와 동일 패턴):
- *   - 검색 API 분당 50회 한도 → 1콜/분 보수 운영
- *   - 23개 × 60초 sleep ≈ 약 23분 소요
- *   - 지금이야 02:00 KST 와 분리하여 04:00 KST 권장
+ *   3. excludeKeywords 필터링 (예: stroller 강아지/반려견 제외)
+ *   4. 기존 category_best_baby/{slug} 와 비교 → 가격 하락 5% 이상 또는 1,000원 이상 추출
+ *   5. category_best_baby/{slug} 단일 문서 덮어쓰기
+ *   6. 변동분 누적 → 그룹 종료 시 price_drops_baby/{YYYY-MM-DD KST} 에 merge
+ *   7. 다음 카테고리 호출 전 SLEEP_BETWEEN_CATEGORIES_MS 대기
+ *   8. rate-limited 감지 시 즉시 중단
  *
  * 환경변수:
  *   FIREBASE_SERVICE_ACCOUNT_KEY    Admin SDK 인증 (필수, jigumiya 프로젝트)
@@ -19,11 +17,12 @@
  *   COUPANG_SECRET_KEY               (필수)
  *   SLEEP_BETWEEN_CATEGORIES_MS      카테고리 사이 sleep (기본 60000)
  *   PRODUCTS_PER_CATEGORY            카테고리당 가져올 상품 수 (기본 50)
+ *   GROUP                            1|2|3|4 (미지정 시 전체)
  */
 
 import { initializeApp, cert } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { searchProducts } from './coupang-api.js';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
+import { searchProducts, type SearchedProduct } from './coupang-api.js';
 import {
   AIGO_BABY_CATEGORIES,
   getCategoriesByGroup,
@@ -40,23 +39,122 @@ const GROUP: CronGroup | null =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// 가격 하락 임계값 — 5% 이상 OR 1,000원 이상 (둘 중 하나만 만족)
+const DROP_RATE_THRESHOLD = 0.05;
+const DROP_AMOUNT_THRESHOLD = 1000;
+
+interface PriceDrop {
+  productId: string;
+  productName: string;
+  productImage: string;
+  productUrl: string;
+  isRocket: boolean;
+  prevPrice: number;
+  newPrice: number;
+  dropAmount: number;
+  dropRate: number;
+}
+
+/** YYYY-MM-DD (KST) */
+function todayKstDateStr(): string {
+  const now = new Date();
+  // KST = UTC + 9h
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10);
+}
+
+function applyExcludeFilter(
+  products: SearchedProduct[],
+  excludeKeywords: string[] | undefined,
+  slug: string,
+): SearchedProduct[] {
+  if (!excludeKeywords || excludeKeywords.length === 0) return products;
+  const before = products.length;
+  const filtered = products.filter(
+    (p) => !excludeKeywords.some((kw) => (p.productName ?? '').includes(kw)),
+  );
+  if (filtered.length !== before) {
+    console.log(
+      `[BabyBest] ${slug} 제외 필터 적용: ${before} → ${filtered.length} (제외 ${before - filtered.length})`,
+    );
+  }
+  return filtered;
+}
+
+function detectDrops(
+  prevProducts: SearchedProduct[] | undefined,
+  newProducts: SearchedProduct[],
+): PriceDrop[] {
+  if (!prevProducts || prevProducts.length === 0) return [];
+  const prevById = new Map(prevProducts.map((p) => [p.productId, p]));
+  const drops: PriceDrop[] = [];
+  for (const np of newProducts) {
+    const prev = prevById.get(np.productId);
+    if (!prev) continue;
+    if (prev.productPrice <= 0 || np.productPrice <= 0) continue;
+    if (np.productPrice >= prev.productPrice) continue; // 상승/동일 제외
+    const dropAmount = prev.productPrice - np.productPrice;
+    const dropRate = dropAmount / prev.productPrice;
+    if (dropAmount < DROP_AMOUNT_THRESHOLD && dropRate < DROP_RATE_THRESHOLD) continue;
+    drops.push({
+      productId: np.productId,
+      productName: np.productName,
+      productImage: np.productImage,
+      productUrl: np.productUrl,
+      isRocket: np.isRocket,
+      prevPrice: prev.productPrice,
+      newPrice: np.productPrice,
+      dropAmount,
+      dropRate,
+    });
+  }
+  return drops;
+}
+
 async function updateOne(
   db: FirebaseFirestore.Firestore,
   cat: BabyCategoryDef,
-): Promise<{ ok: boolean; rateLimited: boolean; count: number }> {
+): Promise<{
+  ok: boolean;
+  rateLimited: boolean;
+  count: number;
+  drops: PriceDrop[];
+}> {
   console.log(
     `[BabyBest] ${cat.slug} (${cat.category}) keyword="${cat.keyword}" limit=${LIMIT}`,
   );
   const result = await searchProducts(cat.keyword, LIMIT);
 
   if (result.rateLimited) {
-    return { ok: false, rateLimited: true, count: 0 };
+    return { ok: false, rateLimited: true, count: 0, drops: [] };
   }
   if (!result.ok || result.products.length === 0) {
     console.warn(
       `[BabyBest] ${cat.slug} 응답 비정상 (rCode=${result.rCode ?? 'N/A'}) — 미갱신`,
     );
-    return { ok: false, rateLimited: false, count: 0 };
+    return { ok: false, rateLimited: false, count: 0, drops: [] };
+  }
+
+  const filtered = applyExcludeFilter(result.products, cat.excludeKeywords, cat.slug);
+  if (filtered.length === 0) {
+    console.warn(`[BabyBest] ${cat.slug} 필터 후 0개 — 미갱신`);
+    return { ok: false, rateLimited: false, count: 0, drops: [] };
+  }
+
+  // 기존 문서 read → 가격 비교
+  const docRef = db.collection('category_best_baby').doc(cat.slug);
+  let prevProducts: SearchedProduct[] | undefined;
+  try {
+    const prevSnap = await docRef.get();
+    if (prevSnap.exists) {
+      prevProducts = prevSnap.data()?.products as SearchedProduct[] | undefined;
+    }
+  } catch (e) {
+    console.warn(`[BabyBest] ${cat.slug} 기존 문서 read 실패:`, e);
+  }
+  const drops = detectDrops(prevProducts, filtered);
+  if (drops.length > 0) {
+    console.log(`[BabyBest] ${cat.slug} 가격 하락 감지: ${drops.length}개`);
   }
 
   const docPayload = {
@@ -65,18 +163,34 @@ async function updateOne(
     keyword: cat.keyword,
     displayOrder: cat.displayOrder,
     updatedAt: Date.now(),
-    products: result.products,
+    products: filtered,
   };
+  await docRef.set(docPayload);
 
-  await db
-    .collection('category_best_baby')
-    .doc(cat.slug)
-    .set(docPayload);
+  console.log(`[BabyBest] ${cat.slug} 저장 완료 — ${filtered.length}개`);
+  return { ok: true, rateLimited: false, count: filtered.length, drops };
+}
 
-  console.log(
-    `[BabyBest] ${cat.slug} 저장 완료 — ${result.products.length}개`,
-  );
-  return { ok: true, rateLimited: false, count: result.products.length };
+/** 7일 이전 price_drops_baby 문서 정리 */
+async function cleanupOldDrops(db: FirebaseFirestore.Firestore) {
+  const KEEP_DAYS = 7;
+  const cutoff = new Date(Date.now() - KEEP_DAYS * 24 * 60 * 60 * 1000);
+  const cutoffStr = new Date(cutoff.getTime() + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  try {
+    const snap = await db
+      .collection('price_drops_baby')
+      .where('__name__', '<', cutoffStr)
+      .get();
+    if (snap.empty) return;
+    const batch = db.batch();
+    snap.docs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    console.log(`[BabyBest] price_drops_baby 7일 이전 ${snap.size}개 정리 완료`);
+  } catch (e) {
+    console.warn('[BabyBest] price_drops_baby 정리 실패:', e);
+  }
 }
 
 async function main() {
@@ -96,6 +210,7 @@ async function main() {
   let success = 0;
   let failed = 0;
   let totalProducts = 0;
+  const dropsBySlug: Record<string, PriceDrop[]> = {};
 
   for (let i = 0; i < targets.length; i++) {
     const cat = targets[i]!;
@@ -111,6 +226,9 @@ async function main() {
     if (r.ok) {
       success += 1;
       totalProducts += r.count;
+      if (r.drops.length > 0) {
+        dropsBySlug[cat.slug] = r.drops;
+      }
     } else {
       failed += 1;
     }
@@ -120,8 +238,35 @@ async function main() {
     }
   }
 
+  // 변동분 적재 (그룹별 merge로 같은 날짜 문서에 누적)
+  const slugCount = Object.keys(dropsBySlug).length;
+  if (slugCount > 0) {
+    const dateStr = todayKstDateStr();
+    try {
+      await db
+        .collection('price_drops_baby')
+        .doc(dateStr)
+        .set(
+          {
+            bySlug: dropsBySlug,
+            groupsCompleted: FieldValue.arrayUnion(GROUP ?? 0),
+            updatedAt: Date.now(),
+          },
+          { merge: true },
+        );
+      console.log(
+        `[BabyBest] price_drops_baby/${dateStr} 적재 — 슬러그 ${slugCount}개, group=${GROUP ?? 'ALL'}`,
+      );
+    } catch (e) {
+      console.warn('[BabyBest] price_drops_baby 적재 실패:', e);
+    }
+  }
+
+  // 7일 이전 문서 정리 (그룹마다 호출돼도 멱등)
+  await cleanupOldDrops(db);
+
   console.log(
-    `[BabyBest] 종료 — 성공 ${success} / 실패 ${failed} / 상품 누계 ${totalProducts}`,
+    `[BabyBest] 종료 — 성공 ${success} / 실패 ${failed} / 상품 누계 ${totalProducts} / 변동 슬러그 ${slugCount}`,
   );
 }
 
