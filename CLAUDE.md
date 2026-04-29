@@ -52,16 +52,28 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.5 vc66 로컬 빌드 완료 (2026-04-28)
+## 현재 상태: v1.0.6 vc67 로컬 빌드 완료 (2026-04-30)
+- BUG-41 (재설치 후 구글 로그인 데이터 복원 실패) 수정 — restore.ts children[] 마이그레이션 + hasMeaningfulSettings 분기
+- BUG-42 (쿠팡 공유 → 상품추가 무한로딩) 수정 — 자동 handleNext + useFocusEffect 가드 + Functions 워밍업 + 타임아웃
+- BUG-43 (Android 구글 로그인 DEVELOPER_ERROR) 수정 — Firebase Console jigumiya 프로젝트 SHA-1 4개 등록
+- IMPROVE-B 완료 — 온보딩 "매일 6회 자동 가격 확인" → "가격 변동 시 즉시 알림"
+- 월령별 가격 변동 알림 cron 신설 (scripts/baby-category-notifier, 04:00 KST 비활성)
+  · price_drops_baby/{date} 데이터 모델, 24h 가드, 사용자당 1알림 요약
+- stroller 슬러그 강아지/반려견/애완견 필터 추가
+- 앱 측 푸시 알림 라우팅 분기 추가 (screen=detail/baby-category/price-drops/home)
+- 두 레포(아이고 + 지금이야) Public 전환 완료 (GitHub Actions 무제한 무료) + 보안 점검 통과
+- Google Cloud API Key 제한 설정 완료 (Bundle ID / 패키지 + SHA-1 / referrer)
+- Android AAB: ~/aigo/builds/android/aigo-v1.0.6-vc67.aab
+- iOS IPA: ~/aigo/builds/ios/aigo-v1.0.6-vc67.ipa
+- 다음 작업: 실기기 검증 → cron 전체 활성화 → Play Console 내부테스트 → 프로덕션 승급 → App Store 심사 제출
+
+## 이전 상태: v1.0.5 vc66 로컬 빌드 완료 (2026-04-28)
 - Phase 3 월령 세분화 cron 적재 완료 (baby 538 상품 + event 55 상품)
 - Firestore Rules 통합 (jigumiya 단일 소스) + 배포 완료
 - 알림 버그 가설 A/C/E 3건 모두 패치 (FCM SA 교체 + channelId/priority + savePushToken retry)
 - 업데이트 알림 기능 추가 (services/updateCheck.ts + meta/config_aigo)
 - 홈 이벤트 배너 → event_best 실데이터 연동
-- Android AAB: ~/aigo/builds/android/aigo-v1.0.5-vc66.aab
-- iOS IPA: ~/aigo/builds/ios/aigo-v1.0.5-vc66.ipa
 - iOS 실기기 테스트 완료 (2026-04-28): 카테고리/기념일 추천 + 계정 삭제 정상 / BUG-41,42,43 + IMPROVE-A,B 발견
-- 다음 작업: BUG-41/42/43 수정 → vc67 재빌드 → 가격/알림 시간대 협의 → cron 전체 활성화 → Play Console/App Store 제출
 
 ## 이전 상태: v1.0.5 vc63 로컬 빌드 완료 (2026-04-26)
 - Firebase 프로젝트 jigumiya 통합 완료 (자매 앱과 백엔드 일원화)
@@ -175,31 +187,31 @@
 
 ### 남은 TODO
 
-**🔴 P0 — iOS 실기기 테스트에서 발견 (2026-04-28)**
-- **BUG-41**: 구글 로그인 후 앱 삭제 → 재설치 → 같은 계정 로그인 시 아이정보(babyName/babyBirthdate 등) 복원 실패, 온보딩 재진행됨
-  - 예상 원인: restore.ts 단일 아이 필드(babyName/babyGender/babyBirthDate)만 있고 children[] 배열이 비어있는 사용자에서 childrenCount=0 반환 → handleGoogleStart가 onNext()로 빠져 재입력 강제
-  - 수정 방향: restore.ts 단일 아이 → children[] 마이그레이션 + handleGoogleStart 분기 보강(settings 의미 필드 있으면 onComplete)
-  - vc66 빌드 미반영 — 수정 후 vc67 재빌드 예정
+**✅ 완료 (2026-04-29 ~ 04-30, vc67 반영)**
+- **BUG-41**: 재설치 후 구글 로그인 시 아이정보 복원 실패 — 커밋 `6c37165` (restore.ts children[] 마이그레이션 + hasMeaningfulSettings 분기)
+- **BUG-42**: 쿠팡 공유 → 상품추가 무한로딩 — 커밋 `4f8b338` (자동 handleNext, useFocusEffect 가드, timeoutRef cleanup, Functions 워밍업, 타임아웃)
+- **BUG-43**: Android 구글 로그인 DEVELOPER_ERROR — Firebase Console(jigumiya) OAuth 클라이언트에 SHA-1 4개 등록 + google-services.json 교체
+- **IMPROVE-B**: 온보딩 "매일 6회 자동 가격 확인" → "가격 변동 시 즉시 알림" — 커밋 `1eeab82`
 
-**🟠 P1 — iOS 실기기 테스트에서 발견 (2026-04-28)**
-- **BUG-42**: 쿠팡 앱에서 공유하기 → 아이고 선택 시 상품추가 화면 무한로딩 (간헐적, iOS/Android 공통)
-  - 우회: 앱 튕긴 후 재진입하면 정상 동작
-  - 예상 원인: ShareIntentHandler/CoupangScraper WebView 초기화 race
-- **BUG-43**: Android 구글 로그인 실패 — DEVELOPER_ERROR
-  - 예상 원인: Firebase aigo-a → jigumiya 통합 후 Play Console 키스토어 SHA-1을 jigumiya 프로젝트 OAuth 클라이언트에 추가하지 않음
-  - 확인 필요: Firebase Console(jigumiya) > Project settings > OAuth 2.0 Client IDs > Android client > SHA-1 fingerprint 등록
+**🟠 P1 — vc67 실기기 검증 대기**
+- BUG-41/42/43 + 알림 가설 A/C/E 모두 vc67 반영. 외부 테스터 디바이스 통합 검증 필요
 
-**🟠 P1 — 알림 (vc66 패치 포함)**
-- 알림 가설 A/C/E 모두 vc66 반영됨. 외부 테스터 디바이스 검증 필요
-
-**🟡 P2 — UX 개선 (iOS 실기기 테스트에서 발견)**
+**🟡 P2 — UX 개선**
 - **IMPROVE-A**: 설정화면에 로그인된 구글 계정 이메일/이름 표시 (iOS/Android 공통)
-- **IMPROVE-B**: 온보딩 "매일 6회 자동 가격 확인" 문구 수정 — 알림 설계 확정 후 실제 횟수로 갱신
 
 **🟡 P2 — 기존 UX 버그**
 - **BUG-36**: 접종 리스트 등록 후 나중에 체크 기능
 - **BUG-37**: 월령별 추천 카테고리 복수선택 해제 안 됨
-- **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (BUG-41 의 부분 사례일 가능성)
+- **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (BUG-41 의 부분 사례일 가능성, vc67 검증 후 잔존 여부 판단)
+
+**🟡 P2 — Phase 3 UI 후속**
+- 앱 측 baby-category 탭 라우팅 구현 — 푸시 알림 `screen=baby-category` + slugs 도착 시 홈 탭에서 해당 월령별 카테고리 섹션으로 자동 스크롤/하이라이트
+- 가격 하락 알림 도착 시 사용자 동선(홈 → 카테고리 → 상품 카드) UX 개선
+
+**🟡 P2 — 출시**
+- cron 전체 활성화 (실기기 검증 통과 후)
+- Play Console 내부테스트 → 프로덕션 승급
+- iOS App Store 심사 제출 (Apple 회신 반영)
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
@@ -312,6 +324,116 @@
 - v1.0.5 vc62 (2026-04-20) - 로컬 빌드 완료, AQ-3/AQ-4 수정 후 vc63 재빌드 예정 (vc62 폐기)
 - v1.0.5 vc63 (2026-04-26) - Firebase jigumiya 통합 + 계정 삭제 + price-checker 캐시 + BabyCategory cron + 쿠팡 직접 호출 제거
 - v1.0.5 vc66 (2026-04-28) - Phase 3 월령 세분화 + event-best-updater + 알림 버그 3건 + 업데이트 알림 + 홈 event_best 연동
+- v1.0.6 vc67 (2026-04-30) - BUG-41/42/43 + IMPROVE-B 완료, baby-category-notifier 신설, stroller 강아지 필터, 푸시 라우팅 분기, 두 레포 Public 전환
+
+## 2026-04-30 작업 이력 (v1.0.6 vc67)
+
+### 1. BUG-41 수정 — 재설치 후 구글 로그인 시 아이정보 복원 실패 (커밋 6c37165)
+- **원인**: 옛 단일 아이 사용자(babyName/babyGender/babyBirthDate 필드만 있고 children[] 비어있음)는 `restore.ts`가 `childrenCount=0` 반환 → `OnboardingScreen.handleGoogleStart`가 `onNext()`로 빠져 온보딩 재입력 강제
+- **services/restore.ts**:
+  - `RestoreResult`에 `hasMeaningfulSettings: boolean` 필드 추가
+  - 단일 아이 → children[] 자동 마이그레이션: settings.children 비어있고 babyName/babyBirthDate 있으면 `child-{Date.now()}` id로 children[] 생성 + Firestore 백필 (`updateUserSettings`)
+  - 의미 필드(parentInfo / vaccinationRecords / checkupRecords / babyName) 존재 시 `hasMeaningfulSettings=true`
+- **components/OnboardingScreen.tsx**: 분기 조건 `childrenCount > 0 || itemsCount > 0` → `... || hasMeaningfulSettings`
+- **app/modal/login.tsx**: 디버그 라인에 hasMeaningfulSettings 추가 (분기 영향 없음 — 익명→구글 업그레이드 흐름)
+
+### 2. BUG-42 수정 — 쿠팡 공유 → 상품추가 무한로딩 (커밋 4f8b338)
+- **가설 정리**:
+  - ① useFocusEffect 재진입으로 step 리셋: 외부 앱 튕김 → 복귀 시 `step='url'`로 리셋되어 진행 중 스크래핑 죽음
+  - ② Functions/네트워크 콜드 스타트 무한 대기
+  - ③ 공유 진입 시 사용자가 "다음" 버튼 누르는 UX 부담
+- **app/modal/add-item.tsx**:
+  - 자동 handleNext useEffect: `sharedUrl + step==='url'` 시 `autoTriggeredRef`로 1회 자동 트리거
+  - useFocusEffect 가드: `step !== 'url'`이면 리셋 스킵 (진행 중 보호)
+  - timeoutRef cleanup useEffect: 모달 언마운트 시 좀비 timeout 정리
+  - `callResolveAffiliate` 8초 race timeout (handleNext + handleSave 양쪽)
+  - fallback fetch 5초 AbortController × 2 (redirect:manual / redirect:follow)
+  - `generateDeepLink` 5초 race timeout (handleNext + handleSave 양쪽)
+- **app/_layout.tsx**: Functions 콜드 스타트 워밍업 — 앱 시작 3초 후 `callResolveAffiliate('https://www.coupang.com/vp/products/warmup')` 백그라운드 더미 호출 (실패 무시)
+- **CoupangScraper 본문 side effect는 별도 검증용으로 이번 커밋에서 제외**
+
+### 3. BUG-43 수정 — Android 구글 로그인 DEVELOPER_ERROR
+- **원인**: Firebase aigo-a → jigumiya 통합 후 jigumiya 프로젝트 OAuth 클라이언트에 com.aigo.app 키스토어 SHA-1이 등록 안 됨
+- **SHA-1 추출**: vc66 AAB의 META-INF/F3256989.RSA → keytool printcert
+  - 업로드 키 SHA-1: `A8:E3:56:3B:85:BE:78:28:76:A2:80:96:BF:E5:7B:DB:2C:9D:A7:5F`
+  - SHA-256: `A4:52:74:5B:CD:99:CC:BF:78:2F:82:60:1D:38:38:40:02:E7:4B:31:EF:39:84:62:78:B8:2B:50:23:34:40:7C`
+- **Firebase Console(jigumiya) > Android 앱(com.aigo.app)에 SHA-1 4개 등록 완료** (업로드 키 + Play App Signing 키 + 디버그/추가 키)
+- **google-services.json 교체** (Firebase 측 OAuth 설정은 클라이언트 파일과 별개라 mtime 변화 없을 수도)
+
+### 4. IMPROVE-B — 온보딩 알림 횟수 문구 (커밋 1eeab82)
+- **components/OnboardingScreen.tsx:154**: "매일 6회 자동 가격 확인" → "가격 변동 시 즉시 알림"
+- 이유: 가격 체크 cron이 04:30~01:00 KST 분당 40회 순차로 변경되며 하루 N회 고정 표현 부정확
+
+### 5. 월령별 가격 변동 알림 — baby-category-notifier 신설 (커밋 db139f7)
+- **scripts/baby-category-best-updater/baby-categories.ts**:
+  - `excludeKeywords?: string[]` 필드 신규 (선언적 제외 키워드)
+- **scripts/baby-category-best-updater/index.ts**:
+  - 적재 직전 기존 `category_best_baby/{slug}` read → 신/구 가격 비교
+  - 임계: **5% 이상 OR 1,000원 이상 하락**
+  - 변동분 → `price_drops_baby/{YYYY-MM-DD KST}` 그룹별 merge (`bySlug` 맵 + `groupsCompleted`)
+  - 7일 이전 price_drops_baby 자동 정리 (그룹마다 멱등 호출)
+- **scripts/baby-category-notifier/ 신설**:
+  - `index.ts`: `price_drops_baby/{오늘}` read → users 순회 → 슬러그 끝 `-N-M` 범위로 월령 매칭 (없으면 공통 슬러그)
+  - `messages.ts`: 랜덤 메시지 3종 (월령 토큰 치환 1종 + 일반 2종)
+  - 24h 가드: `users/{uid}.lastBabyDropAlertAt`
+  - 가드 로직: notificationEnabled / expoPushToken / Expo 토큰 형식 / babyBirthDate / 월령 매칭 슬러그 1개 이상
+  - DRY_RUN=1 모드 지원
+  - 만료 토큰 cleanupInvalidUsers
+- **.github/workflows/baby-category-notifier.yml 신설**: 04:00 KST = 19:00 UTC schedule (비활성, workflow_dispatch 가능)
+- **firestore.rules**: jigumiya 단일 소스에 `price_drops_baby/{date}` read O / write X 추가 (지금이야 레포에서 처리)
+
+### 6. stroller 슬러그 강아지 필터 (커밋 db139f7)
+- **scripts/baby-category-best-updater/baby-categories.ts**:
+  - `stroller` 슬러그에 `excludeKeywords: ['애완견', '반려견', '강아지']` 적용
+- **index.ts `applyExcludeFilter`**: 상품명 substring 매칭, 필터 후 0개면 미갱신, 10개 미만 허용 (재검색 X — 분당 50회 한도 보호)
+
+### 7. 앱 업데이트 알림 — meta/config_aigo (사용자 직접 업데이트)
+- **Firebase Console**: `meta/config_aigo.minRequiredVersion` `"1.0.5"` → `"1.0.6"` 갱신
+- v1.0.6 vc67 빌드부터 강제 업데이트 임계값 상향
+- forceUpdate=false 유지 (선택 업데이트 알림)
+
+### 8. 푸시 알림 클릭 라우팅 분기 (커밋 61b405a)
+- **services/notifications.ts**:
+  - `routeFromNotification(response)` 신규 — `data.screen` 분기:
+    - `screen='detail' + itemId` → `/detail/{itemId}`
+    - `screen='baby-category'` → `/` (홈, slugs[] 파라미터 동봉)
+    - `screen='price-drops'` → `/` (아이고는 가격변동 탭 없으므로 홈)
+    - `screen='home'` → `/`
+    - 하위 호환: screen 미지정 + itemId → `/detail/{itemId}`
+  - 사용처 없는 `getItemIdFromNotification` 제거 (dead code)
+- **app/_layout.tsx**: `addNotificationResponseReceivedListener` + `getLastNotificationResponseAsync` 양쪽 모두 routeFromNotification 사용
+- **scripts/baby-category-notifier/index.ts**: `data.screen` `'home'` → `'baby-category'` (slugs 동봉)
+
+### 9. 두 레포 Public 전환 + 보안 점검
+- **GitHub Actions**: Public 레포 무제한 무료 (Private 한도 부담 해소)
+- **보안 점검 결과 (Public 전환 안전)**:
+  - `firebase-service-account.json` (private key 평문) — `.gitignore` 보호 + `git rev-list` 결과 비어있음 (한 번도 커밋된 적 없음)
+  - 쿠팡 파트너스 키 — 모두 `process.env.COUPANG_*` 환경변수, 코드 하드코딩 없음, GitHub Actions Secret 사용
+  - `.env`/`.env.example` — `.env`는 ignore, `.env.example`는 placeholder (`your_xxx_here`)
+  - Firebase Web API key (`services/firebase.ts:47` `AIzaSyAMGMGrOJw1TqdytZqB_Y0-roiYRyKQ5Ho`) — 클라이언트 식별자, Firebase 공식 입장상 비밀 아님
+  - google-services.json / GoogleService-Info.plist — 클라이언트 식별 정보 (apiKey/client_id/project_id), Public 노출 일반적
+- **Push protection / Secret scanning** GitHub 자동 활성화
+
+### 10. Google Cloud API Key 제한 설정
+- Google Cloud Console(jigumiya) > APIs & Credentials:
+  - **Android API Key** (`AIzaSy...GAV5U`): 애플리케이션 제한 → "Android 앱" → 패키지 `com.aigo.app` + 자매앱 `com.jigumiya.app` + SHA-1 지문
+  - **iOS API Key** (`AIzaSy...KQ5Ho`): "iOS 앱" → Bundle ID `com.aigo.app` + 자매앱 Bundle ID
+  - API 제한: Firebase 관련 API만 허용 (Maps/Geocoding 등 차단)
+
+### 11. v1.0.6 vc67 로컬 빌드 완료
+- **app.config.js**: `version: "1.0.5"` → `"1.0.6"`, `versionCode: 66` → `67` (커밋 26578b4 + 9030ba0)
+- **Android AAB**: `~/aigo/builds/android/aigo-v1.0.6-vc67.aab`
+- **iOS IPA**: `~/aigo/builds/ios/aigo-v1.0.6-vc67.ipa`
+- EAS `appVersionSource:remote + autoIncrement:true` 라 실제 versionCode/buildNumber는 EAS 서버 카운터 기준 자동 증가
+
+### 미해결 / 다음 작업
+- 실기기 통합 검증 (BUG-41/42/43 + 알림 + UX 개선) — 외부 테스터 라운드
+- cron 전체 활성화 (검증 통과 후)
+- Play Console 내부테스트 업로드 → 프로덕션 승급
+- iOS App Store 심사 제출 (Apple 회신 반영)
+- 앱 측 baby-category 탭 라우팅 UI 구현 (홈 탭에서 slugs 받아 해당 월령별 카테고리 섹션으로 스크롤/하이라이트)
+
+---
 
 ## 2026-04-28 작업 이력 (v1.0.5 vc66)
 

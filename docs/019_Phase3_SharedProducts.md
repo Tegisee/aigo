@@ -1,6 +1,6 @@
 # 019. Phase 3 공유 컬렉션 설계 (지금이야 + 아이고)
 
-## 상태: 설계 확정 (2026-04-27)
+## 상태: 설계 확정 (2026-04-27) + 월령별 알림 cron 신설 (2026-04-30, §12)
 
 지금이야 ↔ 아이고가 동일한 Firebase 프로젝트(`jigumiya`)를 공유하면서 양 앱에 의미있는 데이터를 cron으로 적재하고, 클라이언트는 read 전용으로 사용하는 구조.
 
@@ -56,6 +56,7 @@ event_best/{eventSlug}
 | 02:00 | category_best | 지금이야 | 19개 categoryId, sleep 80s |
 | 03:00 | baby 3그룹 | 아이고 | 소모품: 기저귀 5구간 + 분유 3구간 + 물티슈 + 수유용품 |
 | 03:20 | baby 4그룹 | 아이고 | 나머지 BabyCategory |
+| 04:00 | baby-category-notifier | 아이고 | 월령별 가격 변동 알림 (§12) — 그룹 1~4 종료 후 통합 발송 |
 | 04:30 ~ 01:00 (익일) | shared_products price-check | 통합 | 20.5h 장기 cron, 분당 최대 40회, 순번 기준 순차 (§10-1) |
 
 **시간대 분리 이유**: 분당 50회 한도 대비 동시 호출 방지 + 02:00~04:00에 모든 적재 완료 → 04:30 가격 체크 시작 시점에 category_best 캐시 모두 신선.
@@ -248,10 +249,92 @@ match /meta/{docId} {
 
 ---
 
+## §12. 월령별 가격 변동 알림 (2026-04-30 신설, 비활성)
+
+### §12-1. 데이터 모델
+
+```
+price_drops_baby/{YYYY-MM-DD KST} {
+  bySlug: {
+    "toys-7-12": [
+      {
+        productId, productName, productImage, productUrl, isRocket,
+        prevPrice, newPrice,
+        dropAmount,    // prev - new (KRW)
+        dropRate       // (prev - new) / prev (0~1)
+      }, ...
+    ],
+    "wipes": [...],     // 공통 슬러그 (월령 무관)
+    ...
+  },
+  groupsCompleted: [1, 2, 3, 4],   // 디버그용
+  updatedAt: number
+}
+```
+
+### §12-2. 적재 (baby-category-best-updater)
+
+- 각 그룹 cron이 슬러그별로 새 데이터 fetch 직전 기존 `category_best_baby/{slug}` read
+- 신/구 productId 매칭 → **가격 하락 5% 이상 OR 1,000원 이상**인 항목 추출
+- 그룹 종료 시 `price_drops_baby/{오늘 KST}` 문서에 **merge** (그룹별 이어 적재, 같은 날짜 1문서 사용)
+- 7일 이전 문서 자동 정리 (그룹마다 멱등 호출, `__name__ < cutoffStr` 쿼리 + batch.delete)
+
+### §12-3. 발송 (baby-category-notifier)
+
+- **schedule**: 04:00 KST = 19:00 UTC (그룹 1~4 모두 종료 후 안전 마진)
+- **데이터 소스**: `price_drops_baby/{오늘 KST}` 단일 read
+- **사용자 매칭**:
+  - users 컬렉션 전체 순회 + 가드: notificationEnabled / expoPushToken / Expo 토큰 형식 / babyBirthDate
+  - 사용자 대표 자녀: `selectedChildId` 우선, 없으면 `children[0]`, fallback `babyBirthDate` (단일 아이 레거시)
+  - 슬러그 매칭 함수 `slugMatchesMonths(slug, months)`: 슬러그 끝 `-N-M` 정규식 매칭 시 N..M 범위, 없으면 공통(`true`)
+  - 매칭 슬러그 1개 이상이면 1알림 발송 (사용자당 1알림 요약)
+- **24h 가드**: `users/{uid}.lastBabyDropAlertAt` (Firestore Timestamp/number) 체크 — 24h 미만이면 skip → 발송 성공 후 갱신
+- **메시지** (3종 랜덤):
+  - `${months}개월 아이를 위한 추천 상품 가격이 변동됐어요 👶`
+  - `우리 아이 월령 맞춤 상품! 가격이 내려갔어요 🎀`
+  - `지금이 좋아요! 아이 월령별 추천 상품 가격을 확인해보세요`
+- **채널/우선순위**: `channelId='price'`, `priority='high'` (기존 가격 알림과 동일)
+- **data payload**: `{ type: 'baby-category-drop', slugs: matchedSlugs, screen: 'baby-category' }` — 클라이언트 라우팅용
+- **DRY_RUN=1** 모드 지원 (workflow_dispatch input)
+- **만료 토큰**: `cleanupInvalidUsers` (DeviceNotRegistered / InvalidCredentials)
+
+### §12-4. 클라이언트 라우팅 (services/notifications.ts)
+
+`routeFromNotification(response)` — `data.screen` 분기:
+- `'detail' + itemId` → `/detail/{itemId}`
+- `'baby-category'` → `/` (홈, slugs[] 파라미터 동봉)
+- `'price-drops'` → `/` (아이고는 가격변동 탭 없음)
+- `'home'` → `/`
+- 하위 호환: screen 미지정 + itemId → `/detail/{itemId}`
+
+**향후 작업**: 홈 탭(`app/(tabs)/index.tsx`)에서 `useLocalSearchParams<{ slugs?: string[] }>()` 받아 해당 월령별 카테고리 섹션으로 자동 스크롤/하이라이트.
+
+### §12-5. 운영 정책
+
+- **공통 슬러그 (wipes 등) 정책**: 모든 사용자 알림 OK (사용자 4번 컨펌)
+- **가격 상승**: 알림 X (하락만)
+- **앱 미설치 / 알림 off 사용자**: 자동 skip
+- **price_drops_baby 보관**: 7일치 후 삭제 (무한 누적 X)
+- **임계값 조정 가능 위치**: `scripts/baby-category-best-updater/index.ts` 상수 `DROP_RATE_THRESHOLD` / `DROP_AMOUNT_THRESHOLD`
+
+### §12-6. excludeKeywords 필드 (강아지/반려견 노이즈 제거)
+
+`BabyCategoryDef.excludeKeywords?: string[]` 필드 신규.
+- **stroller 슬러그**: `['애완견', '반려견', '강아지']` 적용 (강아지 유모차 노이즈 제거)
+- 적재 직전 `applyExcludeFilter`에서 상품명 substring 매칭 시 제외
+- 결과 10개 미만 허용 (재검색 X — 분당 50회 한도 보호)
+- 다른 슬러그도 노이즈 발견 시 같은 필드로 확장 가능
+
+---
+
 ## §11. 참고
 
 - 지금이야 측 동일 설계 문서: `~/jigumiya/docs/019_Phase3_SharedProducts.md`
-- 아이고 BabyCategory 정의: `types/index.ts` `BabyCategory` 타입 + `CATEGORY_TO_SLUG`
-- 아이고 이벤트 정의: `services/events.ts` `getActiveEvents()`
-- 아이고 cron 코드: `scripts/baby-category-best-updater/`
+- 아이고 BabyCategory 정의: `types/index.ts` `BabyCategory` 타입 + `getAgeBucket()` + `getCategorySlug(category, months)` (함수형)
+- 아이고 이벤트 정의: `services/events.ts` `getActiveEvents()` + `EventBanner.eventSlug`
+- 아이고 cron 코드:
+  - `scripts/baby-category-best-updater/` (그룹 1~4)
+  - `scripts/event-best-updater/` (기념일 31개)
+  - `scripts/baby-category-notifier/` (월령별 알림, 신설)
 - 가격 체크 캐시: `scripts/price-checker/category-best-cache.ts` (지금이야 모듈 이식)
+- 클라이언트 푸시 라우팅: `services/notifications.ts` `routeFromNotification()`
