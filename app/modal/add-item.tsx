@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -99,19 +99,43 @@ export default function AddItemModal() {
   const parsedUrlRef = useRef('');
   const resolvedUrlRef = useRef('');
   const affiliateUrlRef = useRef('');
+  const autoTriggeredRef = useRef(false);
 
-  // 모달이 다시 열릴 때 state 초기화 (expo-router 캐싱 대응)
+  // BUG-42 가드: step !== 'url' 일 때(스크래핑/상세 진행 중)는 리셋 스킵
+  // 외부 앱(쿠팡 앱) 튕김 → 복귀 시 useFocusEffect 재호출되어도 진행 상태 유지
   useFocusEffect(
     useCallback(() => {
       setUrl(sharedUrl ?? '');
+      if (step !== 'url') return;
       setTargetPrice('');
       setStep('url');
       setScraped(null);
       setScrapeFailed(false);
       setScrapeUrl(null);
       setSaving(false);
-    }, [sharedUrl])
+    }, [sharedUrl, step])
   );
+
+  // BUG-42 cleanup: 모달 언마운트 시 좀비 timeoutRef 정리
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  // BUG-42 자동 트리거: 공유 진입 시 sharedUrl 있으면 1회 자동 handleNext
+  // — autoTriggeredRef 로 재포커스 재호출 차단
+  useEffect(() => {
+    if (!isFromShare || autoTriggeredRef.current) return;
+    if (!sharedUrl?.trim()) return;
+    if (step !== 'url') return;
+    autoTriggeredRef.current = true;
+    handleNext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sharedUrl, step, isFromShare]);
 
   const suggestedPrice = scraped?.price ? Math.round(scraped.price * 0.9) : null;
 
@@ -150,31 +174,54 @@ export default function AddItemModal() {
     parsedUrlRef.current = parsedUrl;
 
     // URL resolve + 제휴 딥링크 생성 (Functions 우선 → 실패 시 클라이언트 fallback)
+    // BUG-42: 각 비동기 호출에 타임아웃 — Functions 콜드 스타트 / 네트워크 행 → 무한로딩 차단
     let resolved = parsedUrl;
     let affiliate = parsedUrl;
 
-    const functionsResult = await callResolveAffiliate(parsedUrl);
+    const FUNCTIONS_TIMEOUT_MS = 8000;
+    const FETCH_TIMEOUT_MS = 5000;
+    const DEEPLINK_TIMEOUT_MS = 5000;
+
+    const functionsResult = await Promise.race([
+      callResolveAffiliate(parsedUrl),
+      new Promise<{ ok: false; error: string }>((resolve) =>
+        setTimeout(() => resolve({ ok: false, error: 'functions-timeout' }), FUNCTIONS_TIMEOUT_MS),
+      ),
+    ]);
     if (functionsResult.ok) {
       resolved = functionsResult.originalUrl;
       affiliate = functionsResult.shortenUrl;
       console.log('[AddItem] Functions 성공:', affiliate.slice(0, 60));
     } else {
-      console.warn('[AddItem] Functions 실패 → client fallback:', functionsResult.error, functionsResult.detail);
+      console.warn('[AddItem] Functions 실패 → client fallback:', (functionsResult as any).error, (functionsResult as any).detail);
       if (parsedUrl.includes('link.coupang.com')) {
+        // 1차: redirect:manual + 5초 abort
+        const ctrl1 = new AbortController();
+        const t1 = setTimeout(() => ctrl1.abort(), FETCH_TIMEOUT_MS);
         try {
-          const res = await fetch(parsedUrl, { redirect: 'manual' });
+          const res = await fetch(parsedUrl, { redirect: 'manual', signal: ctrl1.signal });
           const location = res.headers.get('location');
           if (location && location.includes('coupang.com')) {
             resolved = location;
           } else {
-            const res2 = await fetch(parsedUrl, { redirect: 'follow' });
-            if (res2.url && res2.url.includes('coupang.com')) resolved = res2.url;
+            // 2차: redirect:follow + 5초 abort (별도 controller)
+            const ctrl2 = new AbortController();
+            const t2 = setTimeout(() => ctrl2.abort(), FETCH_TIMEOUT_MS);
+            try {
+              const res2 = await fetch(parsedUrl, { redirect: 'follow', signal: ctrl2.signal });
+              if (res2.url && res2.url.includes('coupang.com')) resolved = res2.url;
+            } catch {} finally { clearTimeout(t2); }
           }
-        } catch {}
+        } catch {} finally { clearTimeout(t1); }
       }
       if (hasCoupangApiKeys() && (resolved.includes('/vp/') || resolved.includes('/vm/'))) {
         try {
-          const deepLink = await generateDeepLink(resolved, 'tracked');
+          const deepLink = await Promise.race([
+            generateDeepLink(resolved, 'tracked'),
+            new Promise<null>((resolve) =>
+              setTimeout(() => resolve(null), DEEPLINK_TIMEOUT_MS),
+            ),
+          ]);
           if (deepLink?.shortenUrl) {
             affiliate = deepLink.shortenUrl;
             console.log('[AddItem] client 제휴 링크:', deepLink.shortenUrl.slice(0, 60));
@@ -258,9 +305,15 @@ export default function AddItemModal() {
     let affiliateUrl = affiliateUrlRef.current || parsedUrlRef.current;
 
     // handleNext에서 제휴 링크 생성 실패했으면 scraped.resolvedUrl로 재시도 (Functions → client fallback)
+    // BUG-42: handleSave에도 동일 타임아웃 적용
     if (affiliateUrl === parsedUrlRef.current && resolvedUrl.includes('coupang.com')) {
       console.log('[AddItem] Functions 재시도:', resolvedUrl.slice(0, 60));
-      const retryResult = await callResolveAffiliate(resolvedUrl);
+      const retryResult = await Promise.race([
+        callResolveAffiliate(resolvedUrl),
+        new Promise<{ ok: false; error: string }>((resolve) =>
+          setTimeout(() => resolve({ ok: false, error: 'functions-timeout' }), 8000),
+        ),
+      ]);
       if (retryResult.ok) {
         affiliateUrl = retryResult.shortenUrl;
         console.log('[AddItem] Functions 재시도 성공:', affiliateUrl.slice(0, 60));
@@ -268,7 +321,10 @@ export default function AddItemModal() {
           (resolvedUrl.includes('/vp/') || resolvedUrl.includes('/vm/'))) {
         try {
           console.log('[AddItem] client 딥링크 재시도:', resolvedUrl.slice(0, 60));
-          const deepLink = await generateDeepLink(resolvedUrl, 'tracked');
+          const deepLink = await Promise.race([
+            generateDeepLink(resolvedUrl, 'tracked'),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+          ]);
           if (deepLink?.shortenUrl) {
             affiliateUrl = deepLink.shortenUrl;
             console.log('[AddItem] client 제휴 링크 성공:', affiliateUrl.slice(0, 60));

@@ -9,7 +9,7 @@ import * as Notifications from 'expo-notifications';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import { theme } from '../constants/theme';
 import { initCoupangApi } from '../services/config';
-import { syncLocalToFirestore, subscribeAuthState, getInitialAuthUser } from '../services/firebase';
+import { syncLocalToFirestore, subscribeAuthState, getInitialAuthUser, callResolveAffiliate } from '../services/firebase';
 import { backfillSettingsToFirestore, appendRestoreDebugLine } from '../services/restore';
 import { checkAppVersion, snoozeUpdate, type UpdateCheckResult } from '../services/updateCheck';
 import {
@@ -274,6 +274,15 @@ export default function RootLayout() {
   // API 키 초기화 — AsyncStorage/Zustand과 무관, 즉시 실행 (ENV-1 수정)
   useEffect(() => {
     initCoupangApi();
+  }, []);
+
+  // BUG-42: Functions 콜드 스타트 워밍업 (앱 시작 3초 후 백그라운드 더미 호출)
+  // 다음 쿠팡 공유 → 상품추가 시 첫 호출 지연 제거. 실패 무시.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      callResolveAffiliate('https://www.coupang.com/vp/products/warmup').catch(() => {});
+    }, 3000);
+    return () => clearTimeout(t);
   }, []);
 
   // 재설치 감지 (최초 1회)
