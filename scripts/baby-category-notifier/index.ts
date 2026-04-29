@@ -222,7 +222,7 @@ async function main() {
       data: {
         type: 'baby-category-drop',
         slugs: matchedSlugs,
-        screen: 'home',
+        screen: 'baby-category',
       },
     });
     targetUids.push(uid);

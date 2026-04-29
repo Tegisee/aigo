@@ -173,10 +173,43 @@ function retryTokenSave(token: string, attempt: number, debug: string[]) {
   }, 2000 * attempt);
 }
 
-/** 알림 클릭 시 itemId 추출 */
-export function getItemIdFromNotification(
+export interface NotificationRoute {
+  pathname: string;
+  params?: Record<string, string | string[]>;
+}
+
+/**
+ * 알림 클릭 → 라우팅 정보 결정.
+ *  - screen='detail' + itemId  → /detail/{itemId}
+ *  - screen='baby-category'    → 홈 (slugs 파라미터 동봉)
+ *  - screen='price-drops'      → 홈 (아이고는 가격변동 탭 없음)
+ *  - screen='home'             → 홈
+ *  - 하위 호환: screen 미지정 + itemId → /detail/{itemId}
+ *  - 그 외 / 데이터 없음        → null (라우팅 안 함)
+ */
+export function routeFromNotification(
   response: Notifications.NotificationResponse,
-): string | null {
-  const data = response.notification.request.content.data;
-  return (data?.itemId as string) ?? null;
+): NotificationRoute | null {
+  const data = response.notification.request.content.data || {};
+  const screen = data?.screen as string | undefined;
+  const itemId = data?.itemId as string | undefined;
+  const slugs = data?.slugs as string[] | undefined;
+
+  if (screen === 'detail' && itemId) {
+    return { pathname: `/detail/${itemId}` };
+  }
+  if (screen === 'baby-category') {
+    return {
+      pathname: '/',
+      params: slugs && slugs.length > 0 ? { slugs } : undefined,
+    };
+  }
+  if (screen === 'price-drops' || screen === 'home') {
+    return { pathname: '/' };
+  }
+  // 하위 호환 — screen 미지정 + itemId
+  if (itemId) {
+    return { pathname: `/detail/${itemId}` };
+  }
+  return null;
 }

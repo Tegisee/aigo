@@ -14,7 +14,7 @@ import { backfillSettingsToFirestore, appendRestoreDebugLine } from '../services
 import { checkAppVersion, snoozeUpdate, type UpdateCheckResult } from '../services/updateCheck';
 import {
   registerForPushNotifications,
-  getItemIdFromNotification,
+  routeFromNotification,
 } from '../services/notifications';
 import { useAppStore } from '../store/useAppStore';
 import OnboardingScreen from '../components/OnboardingScreen';
@@ -362,21 +362,18 @@ export default function RootLayout() {
     //   - 세션이 없으면 OnboardingScreen에서 사용자 선택(handleGoogleStart/handleAnonymousStart)
     //     시에만 signIn 실행 → 익명 uid 고아 생성을 원천 차단
 
-    // 알림 클릭 리스너
+    // 알림 클릭 리스너 (foreground/background 모두)
     notifListenerRef.current =
       Notifications.addNotificationResponseReceivedListener((response) => {
-        const itemId = getItemIdFromNotification(response);
-        if (itemId) {
-          router.push(`/detail/${itemId}`);
-        }
+        const route = routeFromNotification(response);
+        if (route) router.push(route as any);
       });
 
     // 앱 종료 상태에서 알림 클릭으로 열린 경우
     Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (response) {
-        const itemId = getItemIdFromNotification(response);
-        if (itemId) router.push(`/detail/${itemId}`);
-      }
+      if (!response) return;
+      const route = routeFromNotification(response);
+      if (route) router.push(route as any);
     });
 
     return () => {
