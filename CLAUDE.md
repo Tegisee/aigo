@@ -197,28 +197,40 @@
 **✅ 완료 (2026-04-29 ~ 04-30, vc67 반영)**
 - **BUG-41**: 재설치 후 구글 로그인 시 아이정보 복원 실패 — 커밋 `6c37165` (restore.ts children[] 마이그레이션 + hasMeaningfulSettings 분기)
 - **BUG-42**: 쿠팡 공유 → 상품추가 무한로딩 — 커밋 `4f8b338` (자동 handleNext, useFocusEffect 가드, timeoutRef cleanup, Functions 워밍업, 타임아웃)
-- **BUG-43**: Android 구글 로그인 DEVELOPER_ERROR — Firebase Console(jigumiya) OAuth 클라이언트에 SHA-1 4개 등록 + google-services.json 교체
+- **BUG-43**: Android 구글 로그인 DEVELOPER_ERROR 1차 시도 — Firebase SHA-1 4개 등록 (vc69에서 aigo-a OAuth 충돌 정리로 완전 해결)
 - **IMPROVE-B**: 온보딩 "매일 6회 자동 가격 확인" → "가격 변동 시 즉시 알림" — 커밋 `1eeab82`
 
-**🟠 P1 — vc67 실기기 검증 대기**
-- BUG-41/42/43 + 알림 가설 A/C/E 모두 vc67 반영. 외부 테스터 디바이스 통합 검증 필요
+**✅ 완료 (2026-05-01, vc69+vc70 반영)**
+- **AIGO-BUG-01**: Android DEVELOPER_ERROR + iOS Bundle ID `<empty>` 차단 — 커밋 `30d2245` + `34e7412`
+  · iOS: GCP `AIzaSy...KQ5Ho` API Key "iOS 앱 제한" 해제 (firebase-js-sdk가 RN에서 `X-Ios-Bundle-Identifier` 미부여)
+  · Android: aigo-a 프로젝트 com.aigo.app Android/iOS 앱 삭제 → jigumiya SHA-1 토글로 GCP OAuth 자동 생성 트리거 → 새 google-services.json 갱신 (Android OAuth 2개 추가)
+- **AIGO-BUG-02**: 추천상품 미표시 — AIGO-BUG-01 부수 해결 (구글 로그인 정상화로 인증 토큰 발급 → category_best_baby/event_best 정상 read)
+- **AIGO-BUG-03**: 추천상품 후속 이슈 — AIGO-BUG-01 부수 해결
+
+**🟠 P1 — vc69(Android)+vc70(iOS) 비공개 테스트 검토 중**
+- AIGO-BUG-01/02/03 모두 vc69+vc70 반영
+- Play Console 비공개 테스트 vc69 업로드 완료, **검토 단계 (대기)**
+- iOS vc70 Transporter 업로드 + App Store 심사 정보 회신 대기
 
 **🟡 P2 — UX 개선**
 - **IMPROVE-A**: 설정화면에 로그인된 구글 계정 이메일/이름 표시 (iOS/Android 공통)
+- **AIGO-BUG-04**: 와우회원 필드 (사양 정리 필요)
+- **AIGO-BUG-05**: 익명 로그인 사용자에게 구글 연동 가능 표기 (UX 명확화)
 
 **🟡 P2 — 기존 UX 버그**
 - **BUG-36**: 접종 리스트 등록 후 나중에 체크 기능
 - **BUG-37**: 월령별 추천 카테고리 복수선택 해제 안 됨
-- **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (BUG-41 의 부분 사례일 가능성, vc67 검증 후 잔존 여부 판단)
+- **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (AIGO-BUG-01 해결로 자동 잔존 여부 vc69 검증 결과로 판단)
 
 **🟡 P2 — Phase 3 UI 후속**
 - 앱 측 baby-category 탭 라우팅 구현 — 푸시 알림 `screen=baby-category` + slugs 도착 시 홈 탭에서 해당 월령별 카테고리 섹션으로 자동 스크롤/하이라이트
 - 가격 하락 알림 도착 시 사용자 동선(홈 → 카테고리 → 상품 카드) UX 개선
 
 **🟡 P2 — 출시**
-- cron 전체 활성화 (실기기 검증 통과 후)
-- Play Console 내부테스트 → 프로덕션 승급
-- iOS App Store 심사 제출 (Apple 회신 반영)
+- 비공개 테스트 검토 완료 → Play Console 프로덕션 승급
+- iOS vc70 Transporter 업로드 + App Store 심사 정보 회신
+- AIGO-BUG-04 / AIGO-BUG-05 수정 후속 빌드
+- cron 전체 활성화 (검증 통과 후)
 
 **🟢 낮음**
 - 육아정보 API 2단계 (L)
@@ -335,6 +347,44 @@
 - v1.0.6 vc68 (2026-04-30) - 폐기 (Play Console versionCode 충돌, AIGO-BUG-01 1차 수정 빌드)
 - v1.0.6 vc69 (2026-05-01) - Android, AIGO-BUG-01 완전 해결 (aigo-a OAuth 충돌 정리 + google-services.json 갱신)
 - v1.0.6 vc70 (2026-05-01) - iOS, AIGO-BUG-01 완전 해결 (Android와 동일 변경)
+
+## 2026-05-01 작업 이력 (v1.0.6 vc69+vc70)
+
+### AIGO-BUG-01 완전 해결 — Android DEVELOPER_ERROR + iOS Bundle ID `<empty>` 차단
+
+**iOS root cause** (선해결): GCP `AIzaSy...KQ5Ho` API Key의 "iOS 앱" 애플리케이션 제한 활성 + `services/firebase.ts` firebase-js-sdk가 React Native에서 `X-Ios-Bundle-Identifier` 헤더를 자동 부여하지 않음 → GCP가 빈 헤더를 "Bundle ID `<empty>`"로 인식하여 차단. **해결**: GCP Console에서 해당 API Key 애플리케이션 제한을 "없음"으로 변경 (Firebase Web API key는 클라이언트 식별자, 공식적으로 비밀 아님)
+
+**Android root cause**: Google OAuth 2.0 글로벌 정책상 `(SHA-1, 패키지명)` 동일 조합은 GCP 전체에서 단 하나의 프로젝트만 OAuth 2.0 Android 클라이언트로 점유 가능. **aigo-a 프로젝트가 com.aigo.app + 업로드 키 SHA-1을 잔존 점유** → jigumiya 측에 Firebase Console로 SHA-1 4개 등록해도 GCP 측 OAuth Android 클라이언트가 자동 생성되지 못함 → @react-native-google-signin이 jigumiya OAuth 매칭 실패 → DEVELOPER_ERROR. (BUG-43에서 SHA-1 등록만 했지 OAuth 자동 생성 미완 — vc67 빌드도 깨진 상태였음)
+
+**Android 해결 절차** (커밋 `30d2245`):
+1. **aigo-a Firebase Console > Android/iOS 앱(com.aigo.app) 삭제** (soft-delete 30일 유예이지만 OAuth 클라이언트 정리 트리거)
+2. **jigumiya Firebase Console > Android 앱(com.aigo.app) > SHA-1 1개 제거 → 즉시 재추가** (자동 생성 트리거)
+3. 5분 대기 → jigumiya GCP > APIs & Credentials > OAuth 2.0 클라이언트 ID 목록에 `Android client for com.aigo.app` 자동 생성 확인 (SHA-1당 1개씩, 총 **2개** 생성)
+4. **새 google-services.json 다운로드 → 클라이언트 교체** — `oauth_client[]` 배열에 `client_type:1` Android 항목 2개 추가됨 확인
+
+**자동 생성된 Android OAuth 클라이언트 SHA-1**:
+- `a8e3563b85be782876a28096bfe57bdb2c9da75f` — vc69 업로드 키 ✅ (vc67 AAB SHA-1 대조 완료)
+- `a1eb1cce71bc4c4555463da0f7e43754d3836b19` — 별도 키 (Play 서명 또는 디버그 추정)
+
+⚠️ **Firebase Console에 SHA-1 4개 등록인데 OAuth 클라이언트는 2개만 자동 생성** — Play App Signing 키 SHA-1이 이 2개에 포함됐는지 미확인. 비공개 테스트 검토 완료 후 실기기 검증 결과에 따라 추가 등록 필요 여부 판단.
+
+### AIGO-BUG-02, 03 부수 해결
+- AIGO-BUG-01 (구글 로그인) 정상화 → Firestore 인증 토큰 정상 발급 → `category_best_baby` / `event_best` 추천상품 정상 표시 확인
+
+### vc69 Android + vc70 iOS 빌드 (커밋 `34e7412`)
+- versionCode bump 67 → 68 → (Play Console 충돌, 폐기) → **69**
+- EAS `appVersionSource:remote` 단일 카운터 공유 → iOS 빌드 시 자동 +1로 vc70 부여
+- Android AAB: `~/aigo/builds/android/aigo-v1.0.6-vc69.aab` (2026-05-01 00:21)
+- iOS IPA: `~/aigo/builds/ios/aigo-v1.0.6-vc70.ipa` (2026-05-01 02:05)
+- Play Console 비공개 테스트 vc69 업로드 완료 → **검토 단계 (대기)**
+
+### 진행 중 / 다음 작업
+- 비공개 테스트 검토 완료 → Play Console 프로덕션 승급
+- iOS vc70 Transporter 업로드 → App Store 심사 정보 회신 (Apple)
+- AIGO-BUG-04 (와우회원 필드) / AIGO-BUG-05 (익명 로그인 시 구글 연동 표기) 수정
+- cron 전체 활성화 (검증 통과 후)
+
+---
 
 ## 2026-04-30 작업 이력 (v1.0.6 vc67)
 
