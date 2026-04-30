@@ -52,20 +52,27 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.6 vc67 로컬 빌드 완료 (2026-04-30)
+## 현재 상태: v1.0.6 vc69(Android) + vc70(iOS) 로컬 빌드 완료 (2026-05-01)
+- **AIGO-BUG-01 완전 해결** (Android DEVELOPER_ERROR + iOS `requests-from-this-ios-client-application-<empty>-are-blocked`)
+- iOS root cause: GCP `AIzaSy...KQ5Ho` API Key "iOS 앱 제한" 활성 + firebase-js-sdk가 RN에서 `X-Ios-Bundle-Identifier` 헤더 미부여 → "Bundle ID `<empty>`" 차단. 제한 해제로 해결
+- Android root cause: aigo-a 프로젝트에 `com.aigo.app + SHA-1` OAuth 클라이언트 잔존 → Google OAuth 글로벌 정책상 `(SHA-1, 패키지명)` 동일 조합은 단일 GCP 프로젝트만 점유 가능 → jigumiya 측 OAuth Android 클라이언트 자동 생성 차단
+- 해결 절차: aigo-a > Android/iOS 앱 삭제 → jigumiya Firebase Console SHA-1 토글 트리거 → GCP에 `Android client for com.aigo.app` 2개 자동 생성 → 새 google-services.json 다운로드 (oauth_client에 client_type:1 항목 추가) → vc68 빌드 (Play Console versionCode 충돌로 폐기) → vc69 재빌드
+- 커밋 `30d2245` (fix: AIGO-BUG-01 ...) + 본 커밋 (versionCode 68→69 + CLAUDE.md)
+- Android AAB: ~/aigo/builds/android/aigo-v1.0.6-vc69.aab
+- iOS IPA: ~/aigo/builds/ios/aigo-v1.0.6-vc70.ipa
+- ⚠️ Play App Signing 키 SHA-1 미확인 — Play Console 내부테스트 배포 후 재서명 키로 SHA-1 매칭 안 되면 추가 등록 필요
+- 다음 작업: Play Console 내부테스트 vc69 업로드 → 외부 테스터 검증 → cron 전체 활성화 → 프로덕션 승급 → App Store 심사 제출
+
+## 이전 상태: v1.0.6 vc67 로컬 빌드 완료 (2026-04-30)
 - BUG-41 (재설치 후 구글 로그인 데이터 복원 실패) 수정 — restore.ts children[] 마이그레이션 + hasMeaningfulSettings 분기
 - BUG-42 (쿠팡 공유 → 상품추가 무한로딩) 수정 — 자동 handleNext + useFocusEffect 가드 + Functions 워밍업 + 타임아웃
-- BUG-43 (Android 구글 로그인 DEVELOPER_ERROR) 수정 — Firebase Console jigumiya 프로젝트 SHA-1 4개 등록
+- BUG-43 (Android 구글 로그인 DEVELOPER_ERROR) 1차 수정 — Firebase Console jigumiya 프로젝트 SHA-1 4개 등록 (실제 OAuth 클라이언트 자동 생성은 vc69에서 완전 해결)
 - IMPROVE-B 완료 — 온보딩 "매일 6회 자동 가격 확인" → "가격 변동 시 즉시 알림"
 - 월령별 가격 변동 알림 cron 신설 (scripts/baby-category-notifier, 04:00 KST 비활성)
-  · price_drops_baby/{date} 데이터 모델, 24h 가드, 사용자당 1알림 요약
 - stroller 슬러그 강아지/반려견/애완견 필터 추가
 - 앱 측 푸시 알림 라우팅 분기 추가 (screen=detail/baby-category/price-drops/home)
-- 두 레포(아이고 + 지금이야) Public 전환 완료 (GitHub Actions 무제한 무료) + 보안 점검 통과
-- Google Cloud API Key 제한 설정 완료 (Bundle ID / 패키지 + SHA-1 / referrer)
-- Android AAB: ~/aigo/builds/android/aigo-v1.0.6-vc67.aab
-- iOS IPA: ~/aigo/builds/ios/aigo-v1.0.6-vc67.ipa
-- 다음 작업: 실기기 검증 → cron 전체 활성화 → Play Console 내부테스트 → 프로덕션 승급 → App Store 심사 제출
+- 두 레포(아이고 + 지금이야) Public 전환 완료
+- Google Cloud API Key 제한 설정 (vc69에서 iOS 제한은 해제 — firebase-js-sdk 충돌)
 
 ## 이전 상태: v1.0.5 vc66 로컬 빌드 완료 (2026-04-28)
 - Phase 3 월령 세분화 cron 적재 완료 (baby 538 상품 + event 55 상품)
@@ -325,6 +332,9 @@
 - v1.0.5 vc63 (2026-04-26) - Firebase jigumiya 통합 + 계정 삭제 + price-checker 캐시 + BabyCategory cron + 쿠팡 직접 호출 제거
 - v1.0.5 vc66 (2026-04-28) - Phase 3 월령 세분화 + event-best-updater + 알림 버그 3건 + 업데이트 알림 + 홈 event_best 연동
 - v1.0.6 vc67 (2026-04-30) - BUG-41/42/43 + IMPROVE-B 완료, baby-category-notifier 신설, stroller 강아지 필터, 푸시 라우팅 분기, 두 레포 Public 전환
+- v1.0.6 vc68 (2026-04-30) - 폐기 (Play Console versionCode 충돌, AIGO-BUG-01 1차 수정 빌드)
+- v1.0.6 vc69 (2026-05-01) - Android, AIGO-BUG-01 완전 해결 (aigo-a OAuth 충돌 정리 + google-services.json 갱신)
+- v1.0.6 vc70 (2026-05-01) - iOS, AIGO-BUG-01 완전 해결 (Android와 동일 변경)
 
 ## 2026-04-30 작업 이력 (v1.0.6 vc67)
 
