@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "250441543259-bdmvv1hgtd6nl3gc5kot3nn3jipqe83j.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aigo.app",
+            "certificate_hash": "a8e3563b85be782876a28096bfe57bdb2c9da75f"
+          }
+        },
+        {
+          "client_id": "250441543259-oklr1uk65phet8g791p25ncn18r3bchl.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.aigo.app",
+            "certificate_hash": "a1eb1cce71bc4c4555463da0f7e43754d3836b19"
+          }
+        },
+        {
           "client_id": "250441543259-i9f0jqbl1g2vcbja49hja9u7epmq7vuq.apps.googleusercontent.com",
           "client_type": 3
         }
