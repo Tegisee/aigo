@@ -9,8 +9,9 @@ import { theme } from '../../constants/theme';
 import { useAppStore, type BabyGender, type Child, type ParentInfo } from '../../store/useAppStore';
 import DatePickerButton from '../../components/DatePickerButton';
 import { getRestoreDebugInfo } from '../../services/restore';
-import { deleteAccount, getAuthState } from '../../services/firebase';
+import { deleteAccount, getAuthState, signOutFirebase } from '../../services/firebase';
 import { signInWithGoogle, signOutGoogle } from '../../services/googleAuth';
+import { signInWithApple, signOutApple } from '../../services/appleAuth';
 
 const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -141,8 +142,9 @@ export default function SettingsScreen() {
     try {
       const authState = getAuthState();
       let googleIdToken: string | undefined;
+      let appleCredential: { identityToken: string; rawNonce: string } | undefined;
 
-      // 구글 계정이면 재인증을 위해 idToken 획득
+      // 외부 계정이면 재인증을 위해 토큰 재획득
       if (authState.provider === 'google') {
         const googleResult = await signInWithGoogle();
         if ('error' in googleResult) {
@@ -153,9 +155,19 @@ export default function SettingsScreen() {
           return;
         }
         googleIdToken = googleResult.idToken;
+      } else if (authState.provider === 'apple') {
+        const appleResult = await signInWithApple();
+        if ('error' in appleResult) {
+          setDeleting(false);
+          if (appleResult.error !== '로그인이 취소되었습니다.') {
+            Alert.alert('재인증 실패', appleResult.error);
+          }
+          return;
+        }
+        appleCredential = { identityToken: appleResult.identityToken, rawNonce: appleResult.rawNonce };
       }
 
-      const result = await deleteAccount(googleIdToken);
+      const result = await deleteAccount(googleIdToken, appleCredential);
 
       if (!result.success) {
         setDeleting(false);
@@ -169,8 +181,9 @@ export default function SettingsScreen() {
         return;
       }
 
-      // 구글 세션 정리
+      // 외부 세션 정리
       await signOutGoogle().catch(() => {});
+      await signOutApple().catch(() => {});
 
       // 로컬 데이터 초기화 (hasSeenOnboarding도 리셋 → 온보딩 화면으로 이동)
       await resetAllData();
@@ -182,6 +195,57 @@ export default function SettingsScreen() {
       setDeleting(false);
       Alert.alert('계정 삭제 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
     }
+  };
+
+  const [signingOut, setSigningOut] = useState(false);
+
+  const performLogout = async () => {
+    setSigningOut(true);
+    try {
+      await signOutGoogle().catch(() => {});
+      await signOutApple().catch(() => {});
+      await signOutFirebase();
+
+      // 로컬 상태만 초기화 (Firestore 데이터는 보존 → 다음 로그인 시 자동 복원)
+      useAppStore.setState({
+        trackedItems: [],
+        isLinked: false,
+        linkedProvider: null,
+        babyName: '',
+        babyGender: 'unknown',
+        babyBirthDate: null,
+        children: [],
+        selectedChildId: null,
+        parentInfo: {},
+        vaccinationRecords: {},
+        checkupRecords: {},
+        vaccinationHospitals: {},
+        checkupHospitals: {},
+        hasSeenOnboarding: false,
+      });
+      try {
+        await AsyncStorage.removeItem('aigo-storage');
+      } catch {}
+    } catch (e: any) {
+      Alert.alert('로그아웃 실패', e?.message ?? '알 수 없는 오류가 발생했습니다.');
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      '로그아웃',
+      '로그아웃하시겠어요? 데이터는 다음 로그인 시 자동 복원됩니다.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '로그아웃',
+          style: 'destructive',
+          onPress: () => { void performLogout(); },
+        },
+      ],
+    );
   };
 
   const handleDeleteAccount = () => {
@@ -235,7 +299,13 @@ export default function SettingsScreen() {
                 color={isLinked ? theme.success : theme.subtext}
               />
               <View style={styles.rowText}>
-                <Text style={styles.label}>{isLinked ? '구글 계정 연동됨' : '익명 사용 중'}</Text>
+                <Text style={styles.label}>
+                  {isLinked
+                    ? linkedProvider === 'apple'
+                      ? 'Apple 계정 연동됨'
+                      : '구글 계정 연동됨'
+                    : '익명 사용 중'}
+                </Text>
                 <Text style={styles.desc}>
                   {isLinked
                     ? '기기 변경 시에도 데이터가 유지됩니다'
@@ -245,6 +315,21 @@ export default function SettingsScreen() {
               </View>
             </View>
           </View>
+          {isLinked && (
+            <>
+              <View style={styles.divider} />
+              <TouchableOpacity style={styles.row} onPress={handleLogout} activeOpacity={0.6}>
+                <View style={styles.rowLeft}>
+                  <Ionicons name="log-out-outline" size={20} color={theme.text} />
+                  <View style={styles.rowText}>
+                    <Text style={styles.label}>로그아웃</Text>
+                    <Text style={styles.desc}>다음 로그인 시 데이터 자동 복원</Text>
+                  </View>
+                </View>
+                <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* 알림 */}
@@ -543,6 +628,16 @@ export default function SettingsScreen() {
           <View style={styles.loadingBox}>
             <ActivityIndicator size="large" color={theme.primary} />
             <Text style={styles.loadingText}>계정을 삭제하는 중…</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 로그아웃 로딩 */}
+      <Modal visible={signingOut} transparent animationType="fade">
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color={theme.primary} />
+            <Text style={styles.loadingText}>로그아웃 중…</Text>
           </View>
         </View>
       </Modal>

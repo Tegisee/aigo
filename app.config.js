@@ -16,6 +16,7 @@ export default {
       supportsTablet: true,
       bundleIdentifier: "com.aigo.app",
       googleServicesFile: "./GoogleService-Info.plist",
+      usesAppleSignIn: true,
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
         LSApplicationQueriesSchemes: ["coupang", "itms-appss"],

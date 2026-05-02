@@ -19,9 +19,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../constants/theme';
 import { useAppStore } from '../store/useAppStore';
 import { signInWithGoogle } from '../services/googleAuth';
+import { signInWithApple, isAppleSignInAvailable } from '../services/appleAuth';
 import {
   signInAnonymously,
   linkGoogleAccount,
+  linkAppleAccount,
   getCurrentUid,
   waitForNonAnonymousUid,
 } from '../services/firebase';
@@ -41,12 +43,18 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
   const scaleAnim = useRef(new Animated.Value(0.8)).current;
   const { setLinked } = useAppStore();
   const [loading, setLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.spring(scaleAnim, { toValue: 1, friction: 6, useNativeDriver: true }),
     ]).start();
+
+    if (Platform.OS === 'ios') {
+      isAppleSignInAvailable().then(setAppleAvailable).catch(() => setAppleAvailable(false));
+    }
   }, []);
 
   const handleGoogleStart = async () => {
@@ -112,6 +120,57 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
     setLoading(false);
   };
 
+  const handleAppleStart = async () => {
+    setAppleLoading(true);
+    try {
+      const appleResult = await signInWithApple();
+      if ('error' in appleResult) {
+        if (appleResult.error !== '로그인이 취소되었습니다.') {
+          Alert.alert('로그인 실패', appleResult.error);
+        }
+        setAppleLoading(false);
+        return;
+      }
+
+      const firebaseResult = await linkAppleAccount(appleResult.identityToken, appleResult.rawNonce);
+      if (!firebaseResult.success) {
+        Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
+        setAppleLoading(false);
+        return;
+      }
+
+      const preRestoreUid = getCurrentUid();
+      await appendRestoreDebugLine(
+        `[Onboarding] Apple pre-restore uid=${preRestoreUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
+      );
+      const confirmedUid = await waitForNonAnonymousUid(5000);
+      await appendRestoreDebugLine(
+        `[Onboarding] Apple waitForNonAnonymous 결과 uid=${confirmedUid ?? 'null'}`,
+      );
+
+      const { childrenCount, itemsCount, hasMeaningfulSettings } = await restoreDataFromFirestore();
+      await appendRestoreDebugLine(
+        `[Onboarding] Apple restore 결과 — childrenCount=${childrenCount}, itemsCount=${itemsCount}, hasMeaningfulSettings=${hasMeaningfulSettings}`,
+      );
+
+      setLinked('apple');
+      registerForPushNotifications().catch(() => {});
+
+      const accountLabel = appleResult.email || appleResult.fullName || 'Apple 계정';
+      if (childrenCount > 0 || itemsCount > 0 || hasMeaningfulSettings) {
+        const parts = [accountLabel, '이전 데이터가 복원되었습니다.'];
+        if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
+        if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
+        Alert.alert('복원 완료', parts.join('\n'), [{ text: '확인', onPress: onRestore }]);
+      } else {
+        onNext();
+      }
+    } catch (e: any) {
+      Alert.alert('오류', e.message || 'Apple 로그인 중 오류가 발생했습니다.');
+    }
+    setAppleLoading(false);
+  };
+
   const handleAnonymousStart = () => {
     Alert.alert(
       '익명으로 시작',
@@ -171,6 +230,25 @@ function Step1({ onNext, onRestore }: { onNext: () => void; onRestore: () => voi
           {loading ? '연결 중...' : '구글 계정으로 시작'}
         </Text>
       </TouchableOpacity>
+
+      {/* Apple 계정으로 시작 (iOS only) */}
+      {Platform.OS === 'ios' && appleAvailable && (
+        <TouchableOpacity
+          style={[styles.appleStartBtn, appleLoading && { opacity: 0.6 }]}
+          onPress={handleAppleStart}
+          activeOpacity={0.8}
+          disabled={appleLoading}
+        >
+          {appleLoading ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Ionicons name="logo-apple" size={20} color="#fff" />
+          )}
+          <Text style={styles.appleStartBtnText}>
+            {appleLoading ? '연결 중...' : 'Apple 계정으로 시작'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {/* 익명으로 시작 */}
       <TouchableOpacity
@@ -666,6 +744,22 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   googleStartBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  appleStartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#000000',
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginTop: 12,
+    width: '100%',
+  },
+  appleStartBtnText: {
     color: '#fff',
     fontSize: 17,
     fontWeight: '700',

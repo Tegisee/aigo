@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -17,9 +18,27 @@ import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { getCategoriesByMonth, type BabyCategory } from '../../types';
 import { hasCoupangApiKeys, generateDeepLink, type CoupangProduct } from '../../services/coupangApi';
-import { fetchPopularByCategory, fetchBabyCategoryBest, fetchEventBest, type SharedProduct } from '../../services/firebase';
+import {
+  fetchPopularByCategory,
+  fetchBabyCategoryBest,
+  fetchEventBest,
+  fetchSharedPriceDrops,
+  fetchBabyCategoryBestPool,
+  type SharedProduct,
+  type BabyPriceDrop,
+  type BabyBestProduct,
+} from '../../services/firebase';
 import { getAppShareMessage } from '../../services/config';
 import { getActiveEvents, type EventBanner } from '../../services/events';
+
+const DEALS_TARGET = 20;
+const DEALS_CACHE_KEY = 'home-baby-deals-cache';
+const DEALS_CACHE_TTL_MS = 60 * 60 * 1000; // 1h
+const BEST_POOL_PER_CATEGORY = 5;
+
+type BabyDealItem =
+  | { type: 'drop'; data: BabyPriceDrop }
+  | { type: 'best'; data: BabyBestProduct };
 
 export default function HomeScreen() {
   const { trackedItems, syncFromFirestore, babyBirthDate, babyName, babyGender, children, selectedChildId, selectChild, parentInfo } = useAppStore();
@@ -28,6 +47,8 @@ export default function HomeScreen() {
   const [loadingCategory, setLoadingCategory] = useState<string | null>(null);
   const [eventProducts, setEventProducts] = useState<Record<number, CoupangProduct[]>>({});
   const [loadingEvent, setLoadingEvent] = useState<number | null>(null);
+  const [drops, setDrops] = useState<BabyPriceDrop[] | null>(null);
+  const [bestPool, setBestPool] = useState<BabyBestProduct[] | null>(null);
 
   const displayName = babyName || '우리 아이';
   const babyMonths = babyBirthDate ? (() => {
@@ -61,6 +82,108 @@ export default function HomeScreen() {
 
     return () => sub.remove();
   }, [syncFromFirestore]);
+
+  // 오늘의 육아템: shared_products 가격 하락 + category_best_baby fallback (1h AsyncStorage 캐시)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(DEALS_CACHE_KEY);
+        if (raw) {
+          const cached = JSON.parse(raw) as {
+            ts: number;
+            childId: string | null;
+            drops: BabyPriceDrop[];
+            pool: BabyBestProduct[];
+          };
+          const sameChild = (cached?.childId ?? null) === (selectedChildId ?? null);
+          if (
+            sameChild &&
+            Date.now() - cached.ts < DEALS_CACHE_TTL_MS
+          ) {
+            if (!cancelled) {
+              setDrops(cached.drops ?? []);
+              setBestPool(cached.pool ?? []);
+            }
+            return;
+          }
+        }
+      } catch {}
+
+      const slugCategories = getCategoriesByMonth(babyMonths);
+      const [dropsRes, poolRes] = await Promise.all([
+        fetchSharedPriceDrops(DEALS_TARGET, 100, babyGender).catch(() => [] as BabyPriceDrop[]),
+        fetchBabyCategoryBestPool(slugCategories, BEST_POOL_PER_CATEGORY, babyGender, babyMonths).catch(
+          () => [] as BabyBestProduct[],
+        ),
+      ]);
+
+      if (cancelled) return;
+      setDrops(dropsRes);
+      setBestPool(poolRes);
+      AsyncStorage.setItem(
+        DEALS_CACHE_KEY,
+        JSON.stringify({
+          ts: Date.now(),
+          childId: selectedChildId ?? null,
+          drops: dropsRes,
+          pool: poolRes,
+        }),
+      ).catch(() => {});
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedChildId, babyMonths, babyGender]);
+
+  const deals = useMemo<BabyDealItem[]>(() => {
+    const sortedDrops = drops ?? [];
+    const dropDeals: BabyDealItem[] = sortedDrops
+      .slice(0, DEALS_TARGET)
+      .map((d) => ({ type: 'drop' as const, data: d }));
+    const used = new Set(dropDeals.map((d) => d.data.productId));
+    const remain = DEALS_TARGET - dropDeals.length;
+    const bestDeals: BabyDealItem[] = [];
+    if (remain > 0 && bestPool && bestPool.length > 0) {
+      for (const p of bestPool) {
+        if (bestDeals.length >= remain) break;
+        if (used.has(p.productId)) continue;
+        used.add(p.productId);
+        bestDeals.push({ type: 'best' as const, data: p });
+      }
+    }
+    return [...dropDeals, ...bestDeals];
+  }, [drops, bestPool]);
+
+  const dealsLoaded = drops !== null || bestPool !== null;
+
+  const handleBuyDrop = useCallback(async (drop: BabyPriceDrop) => {
+    const fallbackUrl = `https://www.coupang.com/vp/products/${drop.productId}`;
+    try {
+      const dl = await generateDeepLink(fallbackUrl);
+      if (dl?.shortenUrl) {
+        await Linking.openURL(dl.shortenUrl);
+        return;
+      }
+    } catch {}
+    try {
+      await Linking.openURL(fallbackUrl);
+    } catch {}
+  }, []);
+
+  const handleBuyBest = useCallback(async (item: BabyBestProduct) => {
+    try {
+      const dl = await generateDeepLink(item.productUrl);
+      if (dl?.shortenUrl) {
+        await Linking.openURL(dl.shortenUrl);
+        return;
+      }
+    } catch {}
+    try {
+      await Linking.openURL(item.productUrl);
+    } catch {}
+  }, []);
 
   const handleShareApp = async () => {
     try {
@@ -227,6 +350,84 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        )}
+
+        {/* 오늘의 육아템 (shared_products 가격 하락 + category_best_baby fallback) */}
+        {dealsLoaded && (
+          <View style={styles.dealsSection}>
+            <View style={styles.dealsHeader}>
+              <Ionicons name="flash" size={14} color="#FFD700" />
+              <Text style={styles.dealsTitle}>오늘의 육아템</Text>
+            </View>
+            {deals.length === 0 ? (
+              <Text style={styles.dealsEmpty}>
+                아직 가격 변동 데이터가 부족해요. 가격이 내려가면 바로 알려드릴게요!
+              </Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.dealsScroll}
+              >
+                {deals.map((deal) => {
+                  if (deal.type === 'drop') {
+                    const d = deal.data;
+                    const dropPct = Math.abs(Math.round(d.dropRate));
+                    return (
+                      <TouchableOpacity
+                        key={`drop-${d.productId}`}
+                        style={styles.dealsCard}
+                        onPress={() => handleBuyDrop(d)}
+                        activeOpacity={0.8}
+                      >
+                        {d.thumbnail ? (
+                          <Image source={{ uri: d.thumbnail }} style={styles.dealsImage} />
+                        ) : (
+                          <View style={[styles.dealsImage, styles.dealsImagePlaceholder]}>
+                            <Ionicons name="bag-outline" size={16} color={theme.subtext} />
+                          </View>
+                        )}
+                        <View style={styles.dealsInfo}>
+                          <Text style={styles.dealsName} numberOfLines={1}>{d.productName}</Text>
+                          <View style={styles.dealsPriceRow}>
+                            <Text style={styles.dealsPrice} numberOfLines={1}>
+                              {d.currentPrice.toLocaleString()}원
+                            </Text>
+                            <View style={styles.dealsBadge}>
+                              <Text style={styles.dealsBadgeText}>-{dropPct}%</Text>
+                            </View>
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  }
+                  const p = deal.data;
+                  return (
+                    <TouchableOpacity
+                      key={`best-${p.productId}`}
+                      style={styles.dealsCard}
+                      onPress={() => handleBuyBest(p)}
+                      activeOpacity={0.8}
+                    >
+                      {p.productImage ? (
+                        <Image source={{ uri: p.productImage }} style={styles.dealsImage} />
+                      ) : (
+                        <View style={[styles.dealsImage, styles.dealsImagePlaceholder]}>
+                          <Ionicons name="bag-outline" size={16} color={theme.subtext} />
+                        </View>
+                      )}
+                      <View style={styles.dealsInfo}>
+                        <Text style={styles.dealsName} numberOfLines={1}>{p.productName}</Text>
+                        <Text style={styles.dealsPrice} numberOfLines={1}>
+                          {p.productPrice.toLocaleString()}원
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
         )}
 
         {/* 이벤트 배너 (기념일 / 시즌 / 부모) */}
@@ -732,6 +933,88 @@ const styles = StyleSheet.create({
     color: theme.primary,
     fontSize: 13,
     fontWeight: 'bold',
+  },
+
+  // ── 오늘의 육아템 ──
+  dealsSection: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.border,
+    marginBottom: 8,
+  },
+  dealsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  dealsTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.text,
+  },
+  dealsScroll: {
+    gap: 8,
+    paddingHorizontal: 20,
+  },
+  dealsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.card,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.border,
+    padding: 8,
+    gap: 8,
+    width: 200,
+  },
+  dealsImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+  },
+  dealsImagePlaceholder: {
+    backgroundColor: theme.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dealsInfo: {
+    flex: 1,
+  },
+  dealsName: {
+    color: theme.text,
+    fontSize: 12,
+    marginBottom: 2,
+  },
+  dealsPrice: {
+    color: theme.primary,
+    fontSize: 13,
+    fontWeight: 'bold',
+    flexShrink: 1,
+  },
+  dealsPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dealsBadge: {
+    backgroundColor: '#E84545',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  dealsBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  dealsEmpty: {
+    color: theme.subtext,
+    fontSize: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    lineHeight: 18,
   },
 
   affiliateText: {

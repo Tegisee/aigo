@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Platform, View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,11 +8,13 @@ import { useAppStore } from '../../store/useAppStore';
 import {
   getAuthState,
   linkGoogleAccount,
+  linkAppleAccount,
   getCurrentUid,
   waitForNonAnonymousUid,
 } from '../../services/firebase';
 import { registerForPushNotifications } from '../../services/notifications';
 import { signInWithGoogle } from '../../services/googleAuth';
+import { signInWithApple, isAppleSignInAvailable } from '../../services/appleAuth';
 import { restoreDataFromFirestore, appendRestoreDebugLine } from '../../services/restore';
 
 export default function LoginScreen() {
@@ -20,6 +22,14 @@ export default function LoginScreen() {
   const { isLinked, linkedProvider, setLinked } = useAppStore();
   const authState = getAuthState();
   const [loading, setLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      isAppleSignInAvailable().then(setAppleAvailable).catch(() => setAppleAvailable(false));
+    }
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -85,6 +95,61 @@ export default function LoginScreen() {
     setLoading(false);
   };
 
+  const handleAppleLogin = async () => {
+    setAppleLoading(true);
+    try {
+      const appleResult = await signInWithApple();
+      if ('error' in appleResult) {
+        if (appleResult.error !== '로그인이 취소되었습니다.') {
+          Alert.alert('로그인 실패', appleResult.error);
+        }
+        setAppleLoading(false);
+        return;
+      }
+
+      const firebaseResult = await linkAppleAccount(appleResult.identityToken, appleResult.rawNonce);
+      if (!firebaseResult.success) {
+        Alert.alert('연동 실패', firebaseResult.error || '다시 시도해주세요.');
+        setAppleLoading(false);
+        return;
+      }
+
+      const preRestoreUid = getCurrentUid();
+      await appendRestoreDebugLine(
+        `[Login] Apple pre-restore uid=${preRestoreUid ?? 'null'}, recoveredAccount=${firebaseResult.recoveredAccount}`,
+      );
+      const confirmedUid = await waitForNonAnonymousUid(5000);
+      await appendRestoreDebugLine(
+        `[Login] Apple waitForNonAnonymous 결과 uid=${confirmedUid ?? 'null'}`,
+      );
+
+      let childrenCount = 0;
+      let itemsCount = 0;
+      try {
+        const result = await restoreDataFromFirestore();
+        childrenCount = result.childrenCount;
+        itemsCount = result.itemsCount;
+      } catch (e: any) {
+        console.warn('[Login] Apple 데이터 복원 실패:', e);
+      }
+
+      setLinked('apple');
+      registerForPushNotifications().catch(() => {});
+
+      const accountLabel = appleResult.email || appleResult.fullName || 'Apple 계정';
+      const parts = [accountLabel, 'Apple 계정이 연동되었습니다.'];
+      if (childrenCount > 0 || itemsCount > 0) {
+        parts.push(`\n이전 데이터 복원 완료`);
+        if (childrenCount > 0) parts.push(`아이 정보 ${childrenCount}건`);
+        if (itemsCount > 0) parts.push(`관심상품 ${itemsCount}건`);
+      }
+      Alert.alert('연동 완료', parts.join('\n'));
+    } catch (e: any) {
+      Alert.alert('오류', e.message || 'Apple 로그인 중 오류가 발생했습니다.');
+    }
+    setAppleLoading(false);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -107,9 +172,14 @@ export default function LoginScreen() {
         {isLinked ? (
           <View style={styles.linkedInfo}>
             <View style={styles.linkedRow}>
-              <Ionicons name="logo-google" size={20} color="#4285F4" />
+              <Ionicons
+                name={authState.provider === 'apple' ? 'logo-apple' : 'logo-google'}
+                size={20}
+                color={authState.provider === 'apple' ? '#000' : '#4285F4'}
+              />
               <Text style={styles.linkedText}>
-                {authState.email || '구글 계정 연동됨'}
+                {authState.email
+                  || (authState.provider === 'apple' ? 'Apple 계정 연동됨' : '구글 계정 연동됨')}
               </Text>
             </View>
             <Text style={styles.linkedDesc}>
@@ -144,6 +214,24 @@ export default function LoginScreen() {
                 {loading ? '연동 중...' : '구글 계정으로 연동'}
               </Text>
             </TouchableOpacity>
+
+            {Platform.OS === 'ios' && appleAvailable && (
+              <TouchableOpacity
+                style={[styles.appleBtn, appleLoading && { opacity: 0.7 }]}
+                onPress={handleAppleLogin}
+                activeOpacity={0.8}
+                disabled={appleLoading}
+              >
+                {appleLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Ionicons name="logo-apple" size={20} color="#fff" />
+                )}
+                <Text style={styles.appleBtnText}>
+                  {appleLoading ? '연동 중...' : 'Apple 계정으로 연동'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.skipBtn}
@@ -221,6 +309,22 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   googleBtnText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  appleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#000000',
+    borderRadius: 14,
+    paddingVertical: 16,
+    width: '100%',
+    marginBottom: 12,
+  },
+  appleBtnText: {
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',

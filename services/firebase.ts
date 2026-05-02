@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   linkWithCredential,
   GoogleAuthProvider,
+  OAuthProvider,
   signInWithCredential,
   reauthenticateWithCredential,
   deleteUser,
@@ -340,17 +341,100 @@ export async function linkGoogleAccount(idToken: string): Promise<LinkGoogleResu
   }
 }
 
+/** Apple 로그인 → 익명 계정에 연동 또는 직접 signIn (linkGoogleAccount와 동일 패턴) */
+export async function linkAppleAccount(
+  identityToken: string,
+  rawNonce: string,
+): Promise<LinkGoogleResult> {
+  if (!auth) return { success: false, error: 'Firebase 미초기화', recoveredAccount: false };
+
+  const prevUid = auth.currentUser?.uid;
+  const provider = new OAuthProvider('apple.com');
+
+  try {
+    const credential = provider.credential({ idToken: identityToken, rawNonce });
+    const currentUser = auth.currentUser;
+
+    if (currentUser?.isAnonymous) {
+      await linkWithCredential(currentUser, credential);
+      console.log('[Firebase] Apple 연동 성공 (uid 유지):', currentUser.uid);
+      return { success: true, recoveredAccount: false };
+    } else if (currentUser) {
+      return { success: true, recoveredAccount: false };
+    } else {
+      const result = await signInWithCredential(auth, credential);
+      const newUid = result.user.uid;
+
+      const cur = auth!.currentUser;
+      const providers = cur?.providerData?.map((p) => p.providerId) ?? [];
+      const postLinkLog =
+        `[AppleLogin] direct-signIn uid=${cur?.uid ?? 'null'}, ` +
+        `isAnonymous=${cur?.isAnonymous ?? 'null'}, ` +
+        `providers=${JSON.stringify(providers)}`;
+      console.log(postLinkLog);
+      await appendFirebaseDebug(postLinkLog).catch(() => {});
+
+      const confirmedUid = await waitForNonAnonymousUid(5000);
+      await appendFirebaseDebug(`[AppleLogin] non-anon confirmed uid=${confirmedUid ?? 'null'}`).catch(() => {});
+
+      console.log('[Firebase] Apple 직접 로그인 성공:', newUid);
+      return { success: true, recoveredAccount: !!prevUid && prevUid !== newUid };
+    }
+  } catch (e: any) {
+    if (e.code === 'auth/credential-already-in-use') {
+      try {
+        const credential = provider.credential({ idToken: identityToken, rawNonce });
+        const result = await signInWithCredential(auth!, credential);
+        const newUid = result.user.uid;
+
+        const cur = auth!.currentUser;
+        const providers = cur?.providerData?.map((p) => p.providerId) ?? [];
+        const postLinkLog =
+          `[AppleLogin] post-link uid=${cur?.uid ?? 'null'}, ` +
+          `isAnonymous=${cur?.isAnonymous ?? 'null'}, ` +
+          `providers=${JSON.stringify(providers)}`;
+        console.log(postLinkLog);
+        await appendFirebaseDebug(postLinkLog);
+
+        const confirmedUid = await waitForNonAnonymousUid(5000);
+        await appendFirebaseDebug(`[AppleLogin] non-anon confirmed uid=${confirmedUid ?? 'null'}`);
+
+        console.log('[Firebase] 기존 Apple 계정으로 로그인 성공 (데이터 복구):', prevUid, '→', newUid);
+        return { success: true, recoveredAccount: true };
+      } catch (fallbackError: any) {
+        console.warn('[Firebase] Apple 직접 로그인도 실패:', fallbackError);
+        return { success: false, error: fallbackError.message, recoveredAccount: false };
+      }
+    }
+    console.warn('[Firebase] Apple 연동 실패:', e);
+    return { success: false, error: e.message, recoveredAccount: false };
+  }
+}
+
+/** Firebase Auth 로그아웃 — currentUser를 null로 (Firestore 데이터는 보존) */
+export async function signOutFirebase(): Promise<void> {
+  if (!auth) return;
+  try {
+    await firebaseSignOut(auth);
+  } catch (e) {
+    console.warn('[Firebase] signOut 실패:', e);
+  }
+}
+
 /** 현재 로그인 상태 확인 */
-export function getAuthState(): { isAnonymous: boolean; provider: string | null; email: string | null } {
+export function getAuthState(): { isAnonymous: boolean; provider: 'google' | 'apple' | null; email: string | null } {
   const user = auth?.currentUser;
   if (!user) return { isAnonymous: true, provider: null, email: null };
 
   const googleProvider = user.providerData.find((p) => p.providerId === 'google.com');
-  return {
-    isAnonymous: user.isAnonymous,
-    provider: googleProvider ? 'google' : null,
-    email: googleProvider?.email ?? null,
-  };
+  if (googleProvider) {
+    return { isAnonymous: user.isAnonymous, provider: 'google', email: googleProvider.email ?? null };
+  }
+  const appleProvider = user.providerData.find((p) => p.providerId === 'apple.com');
+  if (appleProvider) {
+    return { isAnonymous: user.isAnonymous, provider: 'apple', email: appleProvider.email ?? user.email ?? null };
+  }
+  return { isAnonymous: user.isAnonymous, provider: null, email: null };
 }
 
 // ─── Push Token / 알림 설정 ───
@@ -823,6 +907,95 @@ export async function fetchEventBest(
   }
 }
 
+// ─── 오늘의 육아템 (가격 하락 + 카테고리 베스트 fallback) ───
+
+export interface BabyPriceDrop {
+  productId: string;
+  productName: string;
+  thumbnail: string;
+  prevPrice: number;
+  currentPrice: number;
+  dropRate: number; // 음수 %
+  trackerCount: number;
+}
+
+/**
+ * shared_products에서 가격 하락 상품 추출 (price_drops 컬렉션 미이식 대안).
+ *
+ * Firestore는 필드 간 비교 쿼리 불가 → lastCheckedAt desc 정렬로 최근 체크된 상품
+ * 가져온 뒤 클라이언트에서 currentPrice < previousPrice 필터 + dropRate 정렬.
+ *
+ * 호출 비용: scanLimit read 1회 (기본 100건). previousPrice=0 이거나 currentPrice 동일/상승 항목은 클라 필터로 제거.
+ */
+export async function fetchSharedPriceDrops(
+  maxItems: number = 20,
+  scanLimit: number = 100,
+  gender?: 'male' | 'female' | 'unknown',
+): Promise<BabyPriceDrop[]> {
+  if (!db) return [];
+
+  try {
+    const q = query(
+      collection(db!, 'shared_products'),
+      orderBy('lastCheckedAt', 'desc'),
+      firestoreLimit(scanLimit),
+    );
+    const snapshot = await getDocs(q);
+    const all = snapshot.docs.map((d) => d.data() as SharedProduct);
+
+    const drops: BabyPriceDrop[] = [];
+    for (const p of all) {
+      const prev = Number(p.previousPrice) || 0;
+      const curr = Number(p.currentPrice) || 0;
+      if (prev <= 0 || curr <= 0 || curr >= prev) continue;
+      if (gender && gender !== 'unknown' && p.gender && p.gender !== 'both' && p.gender !== gender) continue;
+      const dropRate = ((curr - prev) / prev) * 100;
+      drops.push({
+        productId: String(p.productId),
+        productName: p.productName,
+        thumbnail: p.thumbnail || '',
+        prevPrice: prev,
+        currentPrice: curr,
+        dropRate,
+        trackerCount: Number(p.trackerCount) || 0,
+      });
+    }
+
+    drops.sort((a, b) => a.dropRate - b.dropRate);
+    return drops.slice(0, maxItems);
+  } catch (e) {
+    console.warn('[Firebase] shared_products 가격 하락 조회 실패:', e);
+    return [];
+  }
+}
+
+/**
+ * fallback 풀 구성용: 여러 BabyCategory 슬러그 병렬 read (category_best_baby).
+ * 월령/성별 적용된 카테고리 목록 받아 perCategory개씩 합산.
+ */
+export async function fetchBabyCategoryBestPool(
+  categories: BabyCategory[],
+  perCategory: number = 5,
+  gender?: 'male' | 'female' | 'unknown',
+  months: number | null = null,
+): Promise<BabyBestProduct[]> {
+  if (!db || categories.length === 0) return [];
+
+  const results = await Promise.all(
+    categories.map((cat) => fetchBabyCategoryBest(cat, perCategory, gender, months)),
+  );
+  const seen = new Set<string>();
+  const pool: BabyBestProduct[] = [];
+  for (const arr of results) {
+    for (const p of arr) {
+      if (seen.has(p.productId)) continue;
+      seen.add(p.productId);
+      pool.push(p);
+    }
+  }
+  return pool;
+}
+
 // ─── 앱 메타 설정 (업데이트 안내용) ───
 
 export interface AppConfigDoc {
@@ -883,14 +1056,15 @@ async function deleteUserSubcollections(uid: string): Promise<void> {
 
 /**
  * 계정 삭제
- * 1. (구글 계정인 경우) reauthenticateWithCredential로 재인증
+ * 1. (구글/Apple 계정인 경우) reauthenticateWithCredential로 재인증
  * 2. Firestore users/{uid} 하위 컬렉션 삭제 (items 등)
  * 3. Firestore users/{uid} 문서 삭제
  * 4. Firebase Auth 계정 삭제 (deleteUser)
- * 5. Google Sign-In 세션 로그아웃 (호출자 측)
+ * 5. 외부 세션 로그아웃 (호출자 측)
  */
 export async function deleteAccount(
   googleIdToken?: string,
+  appleCredential?: { identityToken: string; rawNonce: string },
 ): Promise<DeleteAccountResult> {
   if (!auth || !db) {
     return { success: false, errorCode: 'not_configured', errorMessage: 'Firebase 미초기화' };
@@ -903,9 +1077,10 @@ export async function deleteAccount(
 
   const uid = user.uid;
   const isGoogle = user.providerData.some((p) => p.providerId === 'google.com');
+  const isApple = user.providerData.some((p) => p.providerId === 'apple.com');
 
   try {
-    // 1. 구글 계정이면 재인증 (최근 로그인 요구 대응)
+    // 1. 외부 계정이면 재인증 (최근 로그인 요구 대응)
     if (isGoogle) {
       if (!googleIdToken) {
         return { success: false, errorCode: 'reauth_cancelled', errorMessage: '재인증이 필요합니다.' };
@@ -915,6 +1090,21 @@ export async function deleteAccount(
         await reauthenticateWithCredential(user, credential);
       } catch (e: any) {
         console.warn('[DeleteAccount] 재인증 실패:', e);
+        return { success: false, errorCode: 'reauth_failed', errorMessage: e?.message ?? '재인증 실패' };
+      }
+    } else if (isApple) {
+      if (!appleCredential) {
+        return { success: false, errorCode: 'reauth_cancelled', errorMessage: '재인증이 필요합니다.' };
+      }
+      try {
+        const provider = new OAuthProvider('apple.com');
+        const credential = provider.credential({
+          idToken: appleCredential.identityToken,
+          rawNonce: appleCredential.rawNonce,
+        });
+        await reauthenticateWithCredential(user, credential);
+      } catch (e: any) {
+        console.warn('[DeleteAccount] Apple 재인증 실패:', e);
         return { success: false, errorCode: 'reauth_failed', errorMessage: e?.message ?? '재인증 실패' };
       }
     }
