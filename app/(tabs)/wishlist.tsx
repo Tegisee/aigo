@@ -62,6 +62,7 @@ export default function WishlistScreen() {
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          style={styles.childFilterScroll}
           contentContainerStyle={styles.childFilter}
         >
           <TouchableOpacity
@@ -207,9 +208,13 @@ const styles = StyleSheet.create({
   },
 
   // ── 아이별 필터 ──
+  childFilterScroll: {
+    height: 44, // 칩 36 + 위아래 여유 4px 고정 — 칩 선택 변동에도 컨테이너 높이 불변
+    flexGrow: 0, // 부모 flex 영향으로 늘어나지 않도록 명시
+    marginBottom: 16, // 아래 fetchBtn과 충분한 여백
+  },
   childFilter: {
     paddingHorizontal: 16,
-    paddingBottom: 8,
     flexDirection: 'row',
     alignItems: 'center', // cross-axis stretch 방지 — 자식 칩이 다른 높이로 늘어나지 않음
   },
