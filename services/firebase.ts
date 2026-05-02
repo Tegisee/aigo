@@ -1003,6 +1003,7 @@ export interface AppConfigDoc {
   latestVersion?: string;
   forceUpdate?: boolean;
   releaseNotes?: string;
+  updateMessage?: string; // 운영자 커스텀 안내문구 — 있으면 releaseNotes/기본문구보다 우선 표시
   updatedAt?: number;
 }
 

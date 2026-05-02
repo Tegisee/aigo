@@ -21,22 +21,45 @@ import OnboardingScreen from '../components/OnboardingScreen';
 
 const INSTALL_MARKER_KEY = 'aigo-install-marker';
 
+/** 스토어 앱 딥링크 우선 시도, 실패 시 web URL fallback */
+async function openStoreUrl(primary: string, fallback: string) {
+  if (primary) {
+    try {
+      const can = await Linking.canOpenURL(primary);
+      if (can) {
+        await Linking.openURL(primary);
+        return;
+      }
+    } catch {}
+  }
+  if (fallback) {
+    try {
+      await Linking.openURL(fallback);
+      return;
+    } catch (e) {
+      console.warn('[Update] 스토어 web fallback 실패:', e);
+    }
+  }
+  Alert.alert('오류', '스토어를 열 수 없습니다. 직접 검색해주세요.');
+}
+
 /** Alert.alert 로 업데이트 안내 표시. forceUpdate=true 면 "나중에" 버튼 없음. */
 function showUpdateAlert(r: UpdateCheckResult) {
   const versionLine = r.latestVersion
     ? `현재 버전: ${r.currentVersion}\n최신 버전: ${r.latestVersion}`
     : `현재 버전: ${r.currentVersion}\n필요 버전: ${r.minRequiredVersion}`;
-  const message = r.releaseNotes
-    ? `${versionLine}\n\n${r.releaseNotes}`
-    : `${versionLine}\n\n더 나은 사용 경험을 위해 최신 버전으로 업데이트해주세요.`;
+  // 우선순위: updateMessage > releaseNotes > 기본문구
+  const body = r.updateMessage
+    ? r.updateMessage
+    : r.releaseNotes
+      ? r.releaseNotes
+      : '더 나은 사용 경험을 위해 최신 버전으로 업데이트해주세요.';
+  const message = `${versionLine}\n\n${body}`;
 
   const updateBtn = {
     text: '업데이트',
     onPress: () => {
-      Linking.openURL(r.storeUrl).catch((e) => {
-        console.warn('[Update] 스토어 열기 실패:', e);
-        Alert.alert('오류', '스토어를 열 수 없습니다. 직접 검색해주세요.');
-      });
+      openStoreUrl(r.storeUrl, r.storeUrlFallback);
     },
   };
 
@@ -298,7 +321,7 @@ export default function RootLayout() {
       appKey: 'aigo',
       currentVersion: Constants.expoConfig?.version ?? '0.0.0',
       androidPackageName: 'com.aigo.app',
-      iosAppStoreId: undefined, // TODO: App Store 등록 후 갱신
+      iosAppStoreId: '6762362777',
     })
       .then((r) => {
         if (cancelled || !r) return;

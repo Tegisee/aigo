@@ -35,7 +35,12 @@ export interface UpdateCheckResult {
   minRequiredVersion: string;
   latestVersion?: string;
   releaseNotes?: string;
+  /** 운영자 커스텀 안내문구 — 있으면 releaseNotes/기본문구보다 우선 표시 */
+  updateMessage?: string;
+  /** 스토어 앱 딥링크 (market://, itms-apps://) — 우선 시도 */
   storeUrl: string;
+  /** 스토어 web URL — 앱 딥링크 실패 시 fallback */
+  storeUrlFallback: string;
 }
 
 const SNOOZE_KEY_PREFIX = 'aigo-update-snoozed-';
@@ -54,18 +59,23 @@ function compareVersions(a: string, b: string): number {
   return 0;
 }
 
-function getStoreUrl(config: UpdateCheckConfig): string {
+function getStoreUrls(config: UpdateCheckConfig): { primary: string; fallback: string } {
   if (Platform.OS === 'android') {
-    return `market://details?id=${config.androidPackageName}`;
+    return {
+      primary: `market://details?id=${config.androidPackageName}`,
+      fallback: `https://play.google.com/store/apps/details?id=${config.androidPackageName}`,
+    };
   }
   if (Platform.OS === 'ios') {
     if (config.iosAppStoreId) {
-      return `itms-apps://apps.apple.com/app/id${config.iosAppStoreId}`;
+      return {
+        primary: `itms-apps://apps.apple.com/app/id${config.iosAppStoreId}`,
+        fallback: `https://apps.apple.com/app/id${config.iosAppStoreId}`,
+      };
     }
-    // TODO: App Store ID 등록 후 호출자가 iosAppStoreId 채울 것
-    return 'https://apps.apple.com/kr/';
+    return { primary: '', fallback: 'https://apps.apple.com/kr/' };
   }
-  return '';
+  return { primary: '', fallback: '' };
 }
 
 /**
@@ -83,6 +93,7 @@ export async function checkAppVersion(
   const latestVersion = data.latestVersion;
   const forceUpdate = !!data.forceUpdate;
   const releaseNotes = data.releaseNotes;
+  const updateMessage = data.updateMessage;
 
   if (!minRequiredVersion) return null;
 
@@ -104,6 +115,7 @@ export async function checkAppVersion(
     } catch {}
   }
 
+  const storeUrls = getStoreUrls(config);
   return {
     needsUpdate: true,
     forceUpdate,
@@ -111,7 +123,9 @@ export async function checkAppVersion(
     minRequiredVersion,
     latestVersion,
     releaseNotes,
-    storeUrl: getStoreUrl(config),
+    updateMessage,
+    storeUrl: storeUrls.primary,
+    storeUrlFallback: storeUrls.fallback,
   };
 }
 
