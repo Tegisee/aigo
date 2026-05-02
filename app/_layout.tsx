@@ -336,6 +336,24 @@ export default function RootLayout() {
       await appendRestoreDebugLine(
         `[Layout] auth 확정 — uid=${uid}, anon=${info?.isAnonymous}, providers=${JSON.stringify(info?.providers ?? [])}, hasSeenOnboarding=${hasSeenOnboarding}`,
       );
+
+      // Firebase auth 상태 ↔ store.isLinked 동기화 (재설치/store 비어있는 경로 방어)
+      // Firestore는 read 안 함 — providerData만 보고 결정 → 빠르고 비용 0
+      const providers = info?.providers ?? [];
+      const detectedProvider: 'google' | 'apple' | null =
+        providers.includes('google.com') ? 'google'
+        : providers.includes('apple.com') ? 'apple'
+        : null;
+      if (detectedProvider && !info?.isAnonymous) {
+        const { isLinked: storeLinked, linkedProvider: storeProv } = useAppStore.getState();
+        if (!storeLinked || storeProv !== detectedProvider) {
+          useAppStore.setState({ isLinked: true, linkedProvider: detectedProvider });
+          await appendRestoreDebugLine(
+            `[Layout] isLinked 자동 동기화 — provider=${detectedProvider} (store stale 방어)`,
+          );
+        }
+      }
+
       if (!hasSeenOnboarding) {
         await appendRestoreDebugLine(
           '[Layout] 온보딩 진행 중 — post-signin 작업 skip (OnboardingScreen이 제어)',

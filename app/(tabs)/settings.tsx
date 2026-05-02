@@ -32,6 +32,11 @@ export default function SettingsScreen() {
     resetAllData,
   } = useAppStore();
 
+  // store.isLinked가 stale일 수 있어 Firebase auth state도 함께 검사 (이중 안전망)
+  const liveAuthState = getAuthState();
+  const effectiveLinked = isLinked || (liveAuthState.provider !== null && !liveAuthState.isAnonymous);
+  const effectiveProvider = linkedProvider ?? liveAuthState.provider;
+
   // 부모 정보 모달
   const [showParentModal, setShowParentModal] = useState(false);
   const [parentField, setParentField] = useState<'mom' | 'dad' | 'anniversary'>('mom');
@@ -294,20 +299,20 @@ export default function SettingsScreen() {
           <View style={styles.row}>
             <View style={styles.rowLeft}>
               <Ionicons
-                name={isLinked ? 'shield-checkmark' : 'shield-outline'}
+                name={effectiveLinked ? 'shield-checkmark' : 'shield-outline'}
                 size={20}
-                color={isLinked ? theme.success : theme.subtext}
+                color={effectiveLinked ? theme.success : theme.subtext}
               />
               <View style={styles.rowText}>
                 <Text style={styles.label}>
-                  {isLinked
-                    ? linkedProvider === 'apple'
+                  {effectiveLinked
+                    ? effectiveProvider === 'apple'
                       ? 'Apple 계정 연동됨'
                       : '구글 계정 연동됨'
                     : '익명 사용 중'}
                 </Text>
                 <Text style={styles.desc}>
-                  {isLinked
+                  {effectiveLinked
                     ? '기기 변경 시에도 데이터가 유지됩니다'
                     : '앱 삭제 시 데이터가 초기화됩니다'
                   }
@@ -315,7 +320,7 @@ export default function SettingsScreen() {
               </View>
             </View>
           </View>
-          {isLinked && (
+          {effectiveLinked && (
             <>
               <View style={styles.divider} />
               <TouchableOpacity style={styles.row} onPress={handleLogout} activeOpacity={0.6}>

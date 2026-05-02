@@ -131,6 +131,7 @@ export async function restoreDataFromFirestore(): Promise<RestoreResult> {
       'vaccinationHospitals', 'checkupHospitals',
       'notificationEnabled', 'repurchaseNotificationEnabled',
       'isWowMember',
+      'isLinked', 'linkedProvider',
     ] as const;
 
     const restoreData: Record<string, any> = {};
