@@ -56,14 +56,20 @@
 - 마지막 코드 상태: 커밋 `d83de23` (refactor: 관심상품 칩 ScrollView 단순화)
 - vc72에서 핵심 기능(오늘의 육아템 + 로그아웃 + Apple Sign In) 통합 완료, 이후 vc73~vc78은 발견된 버그/UX 개선 반복 빌드
 
-### vc72 핵심 기능 (a9d44cb)
+### vc72 핵심 기능 4종 (a9d44cb)
 - **오늘의 육아템 섹션 신설** (홈 탭): shared_products 가격 하락순 + category_best_baby fallback, 1h AsyncStorage 캐시. `fetchSharedPriceDrops`/`fetchBabyCategoryBestPool` 신규
+- **관심상품 탭 자녀 칩 버튼 높이 통일 1차 시도**: `height:36 + paddingVertical:0` (이후 vc74~vc78에서 반복 재시도, 최종 미해결 — AIGO-BUG-06)
 - **로그아웃 기능 추가** (설정 화면): 외부 계정(구글/Apple) 사용자 한정. `signOutGoogle/Apple + signOutFirebase + 로컬 정리`. Firestore 데이터는 보존 → 다음 로그인 시 자동 복원
 - **Apple Sign In 구현** (iOS only): `expo-apple-authentication` + `expo-crypto`(nonce SHA256) + Firebase `OAuthProvider('apple.com')`. 온보딩/로그인/설정/계정삭제 4곳 분기. `app.config.js` `usesAppleSignIn:true`
 
-### vc73~vc78 후속 수정
-- **isLinked 미동기화 3겹 방어** (`e520e2e`): 설정화면 로그아웃 버튼 미표시 버그 수정 — restore.ts restoreKeys에 isLinked/linkedProvider 추가 + _layout.tsx subscribeAuthState 콜백에 store↔Firebase auth 자동 동기화 + settings.tsx `effectiveLinked` 이중 안전망
-- **updateCheck 보강** (`cef9f1e`): App Store ID `'6762362777'` 채움 + 스토어 web fallback (`market://` 실패 시 `https://play.google.com/...` 재시도) + `updateMessage` 필드 우선 표시 (운영자 커스텀 안내)
+### vc73 — isLinked 3겹 방어 + updateCheck 보강
+- **isLinked 미동기화 3겹 방어** (`e520e2e`): Android 구글 로그인 사용자 설정화면 로그아웃 버튼 미표시 버그 수정 — restore.ts restoreKeys에 isLinked/linkedProvider 추가 + _layout.tsx subscribeAuthState 콜백에 store↔Firebase auth 자동 동기화 + settings.tsx `effectiveLinked` 이중 안전망
+- **updateCheck 보강** (`cef9f1e`): App Store ID `'6762362777'` 채움 + 스토어 web fallback (`market://` 실패 시 `https://play.google.com/store/apps/details?id=com.aigo.app` 재시도) + `updateMessage` 필드 우선 표시 (운영자 Firestore Console에서 커스텀 안내문구 노출 가능)
+
+### vc74~vc78 — 관심상품 칩 높이 반복 수정 (AIGO-BUG-06, 미해결)
+- 증상: 전체/아이1/아이2 칩 선택/미선택 시 세로 높이 미세 변동, '전체' 선택 시 위쪽 가장자리 잘림 등
+- 시도 5회 (모두 부분 해결, 완전 해결 못함) — 상세는 아래 ⚠️ TODO 섹션 참조
+- 칩 작업 일단 중단, 마지막 코드 상태 `d83de23` (단순화 버전)
 
 ### ⚠️ TODO — 관심상품 탭 자녀 칩 높이 흔들림 (미해결)
 - 증상: 전체/아이1/아이2 칩 선택/미선택 시 세로 높이가 미세하게 변동, '전체' 버튼 선택 시 위쪽 가장자리 잘림 등
@@ -76,11 +82,15 @@
 - 가설: fontWeight '500'↔'600' 전환 시 폰트 라인 메트릭이 자식 → 부모로 전파되는 RN/Android 빌드 특이 케이스. 또는 ScrollView contentContainer cross-axis stretch 동작이 의도와 다름
 - 다음 시도 후보: 칩을 ScrollView 대신 `<View style={flexDirection:'row'}>`로 교체 (가로 스크롤 포기 — 아이 2~3명 시 화면 폭 충분), Pressable + 자체 onLayout 측정으로 padding 강제 보정, 또는 fontWeight 차이 제거(둘 다 '600' 또는 '500' 통일)
 
+### 스토어 진행 상황 (2026-05-02)
+- **App Store**: vc70 빌드로 새 버전 제출 완료 — Apple Sign In 활성 + **시연영상 첨부**하여 심사 제출. Apple 회신 대기
+- **Google Play**: 프로덕션 액세스 신청 완료 — Google 검토 대기 (Play Console 14일 베타 충족 별도 요건)
+
 ### 다음 작업
 - 시뮬레이터에서 vc78 (`d83de23`) 검증 — 자연 흐름 레이아웃이 시각적으로 OK인지 확인 후 칩 작업 종료 가능
-- Apple Sign In 외부 작업 (Firebase Console + Apple Developer Capabilities)
-- Play Console vc72 업로드 → 외부 테스터 검증
-- App Store 심사 제출 (Apple Sign In 정상 작동 확인 후)
+- Apple Sign In 외부 작업 (Firebase Console > Authentication > Apple 활성화 + Apple Developer Capabilities) — App Store 제출(vc70) 회신 전 점검
+- Play Console 프로덕션 액세스 승인 후 vc72+ 프로덕션 승급
+- 칩 높이 작업 재개 (AIGO-BUG-06) — View 교체 / fontWeight 단일화 등 후보 시도
 
 ## 이전 상태: v1.0.6 vc69(Android) + vc70(iOS) 로컬 빌드 완료 (2026-05-01)
 - **AIGO-BUG-01 완전 해결** (Android DEVELOPER_ERROR + iOS `requests-from-this-ios-client-application-<empty>-are-blocked`)
@@ -386,8 +396,52 @@
 - v1.0.6 vc68 (2026-04-30) - 폐기 (Play Console versionCode 충돌, AIGO-BUG-01 1차 수정 빌드)
 - v1.0.6 vc69 (2026-05-01) - Android, AIGO-BUG-01 완전 해결 (aigo-a OAuth 충돌 정리 + google-services.json 갱신)
 - v1.0.6 vc70 (2026-05-01) - iOS, AIGO-BUG-01 완전 해결 (Android와 동일 변경)
-- v1.0.6 vc72 (2026-05-02) - 오늘의 육아템 섹션 + 칩 통일 + 로그아웃 + Apple Sign In
-- v1.0.6 vc73~vc78 (2026-05-02 ~ 05-03) - isLinked 3겹 방어 / updateCheck 보강 (App Store ID + web fallback + updateMessage) / 관심상품 칩 높이 시도 5회 (미해결, TODO 잔존)
+- v1.0.6 vc72 (2026-05-02) - 오늘의 육아템 섹션 + 칩 통일 1차 + 로그아웃 + Apple Sign In
+- v1.0.6 vc73 (2026-05-02) - isLinked 3겹 방어 (Android 로그아웃 버튼 수정) + updateCheck 보강 (App Store ID 6762362777 + web fallback + updateMessage)
+- v1.0.6 vc74~vc78 (2026-05-02) - 관심상품 칩 높이 반복 수정 (5회 시도, 미해결 — AIGO-BUG-06)
+
+## 2026-05-02 후속 작업 이력 (v1.0.6 vc73~vc78 + 스토어 제출)
+
+### vc73 — isLinked 미동기화 3겹 방어 (커밋 `e520e2e`)
+**증상**: Android 구글 로그인 사용자가 설정 화면에서 로그아웃 버튼을 볼 수 없음.
+
+**원인**: `store.isLinked`가 false로 남는 두 구멍 — (1) `services/restore.ts` `restoreKeys` 화이트리스트에 `isLinked`/`linkedProvider` 누락 → Firestore에 저장돼 있어도 클라가 안 읽어옴, (2) `app/_layout.tsx` `subscribeAuthState` 콜백이 `providerData`를 보고 store를 자동 갱신하지 않음. 재설치/AsyncStorage 클린업 후 발현.
+
+**수정**:
+1. `services/restore.ts:134` `restoreKeys`에 `'isLinked','linkedProvider'` 추가 — 다음 복원부터 자동 해결
+2. `app/_layout.tsx:339-356` `subscribeAuthState` 콜백에 `info.providers` 검사 후 `useAppStore.setState({ isLinked, linkedProvider })` 자동 동기화 (Firestore read 0회, providerData만 검사)
+3. `app/(tabs)/settings.tsx` `effectiveLinked = isLinked || (getAuthState().provider !== null && !isAnonymous)` 이중 안전망 + 계정 카드/로그아웃 분기 모두 effective 값으로 교체
+
+### vc73 — updateCheck 보강 (커밋 `cef9f1e`)
+지금이야 `services/updateChecker.ts` 패턴 참고하여 3종 보강:
+1. **iOS App Store ID** `'6762362777'` 채움 (`app/_layout.tsx:300`) — 기존 `undefined` TODO 제거. iOS에서 `itms-apps://apps.apple.com/app/id6762362777` 딥링크 활성화
+2. **스토어 web fallback** — `UpdateCheckResult.storeUrlFallback` 필드 추가, `getStoreUrls()`가 `{primary, fallback}` 반환. `_layout.tsx` 신규 `openStoreUrl(primary, fallback)` 헬퍼 — `canOpenURL(primary)` 실패 시 `https://play.google.com/store/apps/details?id=com.aigo.app` (또는 `https://apps.apple.com/app/id6762362777`)로 자동 재시도. Play Store 미설치/iOS 시뮬레이터 케이스 대비
+3. **`updateMessage` 필드 우선 표시** — `AppConfigDoc.updateMessage?: string` + `UpdateCheckResult.updateMessage?` 추가. 본문 우선순위: `updateMessage > releaseNotes > 기본문구`. Firestore `meta/config_aigo`에서 운영자가 케이스별 커스텀 안내 가능 (예: "긴급 보안 업데이트", "성능 개선 패치")
+
+### vc74~vc78 — 관심상품 칩 높이 흔들림 반복 수정 (AIGO-BUG-06, 미해결)
+**증상**: 관심상품 탭의 전체/아이1/아이2 칩이 선택/미선택 상태에서 세로 높이가 미세하게 변동, '전체' 선택 시 위쪽 잘림 등.
+
+**시도 이력 5회** (모두 부분 해결, 완전 해결 못함):
+1. `9bf97f4` 칩 자체 `height:36` + `lineHeight:16` + `includeFontPadding:false` + `textAlignVertical:'center'` 등 텍스트 박스 모델 강제
+2. `81dc5d7` `childFilterChipActive`에도 `height/minHeight/maxHeight 36` 강제 + Active 텍스트도 `lineHeight:16` 명시 (3겹 강제)
+3. `3f9b440` ScrollView `style.height:44` + `flexGrow:0` + `marginBottom:16` 외부 height 고정 + contentContainer `alignItems:'center'`
+4. `b88a9b8` ScrollView `height` 44→50 + contentContainer `paddingVertical:4` (전체 칩 잘림 보고로 확장)
+5. `d83de23` height 고정 방식 모두 버리고 자연 흐름 단순화 — `flexGrow:0 + paddingVertical:8 + marginBottom:8`만, 칩 자체 `height:36`은 유지
+
+**가설**: fontWeight `'500'`↔`'600'` 전환 시 폰트 라인 메트릭(ascender/descender) 변동이 자식 → 부모로 전파되는 RN/Android 빌드 특이 케이스. 또는 ScrollView contentContainer cross-axis 동작 차이.
+
+**다음 시도 후보** (작업 재개 시):
+- ScrollView → 일반 `<View style={{flexDirection:'row'}}>`로 교체 (가로 스크롤 포기, 아이 2~3명 시 화면 폭 충분)
+- `Pressable` + `onLayout` 측정으로 padding 강제 보정
+- fontWeight 단일화(둘 다 `'600'` 또는 `'500'`) — 시각적 active 강조는 색상으로만
+
+**현재 상태**: 작업 일단 중단, 마지막 코드 `d83de23`. AIGO-BUG-06으로 P2 등록.
+
+### 스토어 제출 (외부 작업)
+- **App Store**: vc70 빌드로 새 버전 제출 완료. Apple Sign In 활성화 후 **시연영상 첨부**하여 심사 제출 (Apple Sign In 동작 확인용). Apple 회신 대기
+- **Google Play**: **프로덕션 액세스 신청 완료**. Google 검토 대기 (14일 베타 충족 등 별도 요건 충족 검증)
+
+---
 
 ## 2026-05-02 작업 이력 (v1.0.6 vc72)
 
