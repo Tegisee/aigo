@@ -52,14 +52,35 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.6 vc72 로컬 빌드 완료 (2026-05-02)
+## 현재 상태: v1.0.6 vc71~vc78 반복 빌드 진행 중 (2026-05-02 ~ 05-03)
+- 마지막 코드 상태: 커밋 `d83de23` (refactor: 관심상품 칩 ScrollView 단순화)
+- vc72에서 핵심 기능(오늘의 육아템 + 로그아웃 + Apple Sign In) 통합 완료, 이후 vc73~vc78은 발견된 버그/UX 개선 반복 빌드
+
+### vc72 핵심 기능 (a9d44cb)
 - **오늘의 육아템 섹션 신설** (홈 탭): shared_products 가격 하락순 + category_best_baby fallback, 1h AsyncStorage 캐시. `fetchSharedPriceDrops`/`fetchBabyCategoryBestPool` 신규
-- **관심상품 탭 자녀 칩 높이 고정**: `height:36 + paddingVertical:0` — 선택/미선택 폰트 weight 차이로 인한 변동 차단
 - **로그아웃 기능 추가** (설정 화면): 외부 계정(구글/Apple) 사용자 한정. `signOutGoogle/Apple + signOutFirebase + 로컬 정리`. Firestore 데이터는 보존 → 다음 로그인 시 자동 복원
 - **Apple Sign In 구현** (iOS only): `expo-apple-authentication` + `expo-crypto`(nonce SHA256) + Firebase `OAuthProvider('apple.com')`. 온보딩/로그인/설정/계정삭제 4곳 분기. `app.config.js` `usesAppleSignIn:true`
-- 커밋 `a9d44cb` (feat: v1.0.6 vc72 ...)
-- ⚠️ Apple Sign In 활성화 외부 작업 필요: Firebase Console > Authentication > Sign-in method > Apple 활성화 + Apple Developer Console 앱 ID `com.aigo.app` Capabilities "Sign In with Apple" 체크
-- 다음 작업: 시뮬레이터 검증 → Play Console vc72 업로드 → App Store 심사 (vc72 + Apple Sign In 정상 작동 확인 후)
+
+### vc73~vc78 후속 수정
+- **isLinked 미동기화 3겹 방어** (`e520e2e`): 설정화면 로그아웃 버튼 미표시 버그 수정 — restore.ts restoreKeys에 isLinked/linkedProvider 추가 + _layout.tsx subscribeAuthState 콜백에 store↔Firebase auth 자동 동기화 + settings.tsx `effectiveLinked` 이중 안전망
+- **updateCheck 보강** (`cef9f1e`): App Store ID `'6762362777'` 채움 + 스토어 web fallback (`market://` 실패 시 `https://play.google.com/...` 재시도) + `updateMessage` 필드 우선 표시 (운영자 커스텀 안내)
+
+### ⚠️ TODO — 관심상품 탭 자녀 칩 높이 흔들림 (미해결)
+- 증상: 전체/아이1/아이2 칩 선택/미선택 시 세로 높이가 미세하게 변동, '전체' 버튼 선택 시 위쪽 가장자리 잘림 등
+- 시도 이력 (5회 모두 부분적 해결, 완전 해결 못함):
+  1. `9bf97f4` 칩 자체 height:36 + lineHeight:16 + includeFontPadding:false + textAlignVertical:'center'
+  2. `81dc5d7` active 스타일에도 height/minHeight/maxHeight 36 강제 + active text에도 lineHeight:16 명시
+  3. `3f9b440` ScrollView style.height:44 + flexGrow:0 + marginBottom:16 외부 height 고정
+  4. `b88a9b8` ScrollView height 44→50 + contentContainer paddingVertical:4 (전체 칩 잘림 보고로 확장)
+  5. `d83de23` height 고정 방식 모두 버리고 단순화 — flexGrow:0 + paddingVertical:8 + marginBottom:8, contentContainer는 paddingHorizontal/flexDirection/alignItems만, 칩 자체 height:36은 유지
+- 가설: fontWeight '500'↔'600' 전환 시 폰트 라인 메트릭이 자식 → 부모로 전파되는 RN/Android 빌드 특이 케이스. 또는 ScrollView contentContainer cross-axis stretch 동작이 의도와 다름
+- 다음 시도 후보: 칩을 ScrollView 대신 `<View style={flexDirection:'row'}>`로 교체 (가로 스크롤 포기 — 아이 2~3명 시 화면 폭 충분), Pressable + 자체 onLayout 측정으로 padding 강제 보정, 또는 fontWeight 차이 제거(둘 다 '600' 또는 '500' 통일)
+
+### 다음 작업
+- 시뮬레이터에서 vc78 (`d83de23`) 검증 — 자연 흐름 레이아웃이 시각적으로 OK인지 확인 후 칩 작업 종료 가능
+- Apple Sign In 외부 작업 (Firebase Console + Apple Developer Capabilities)
+- Play Console vc72 업로드 → 외부 테스터 검증
+- App Store 심사 제출 (Apple Sign In 정상 작동 확인 후)
 
 ## 이전 상태: v1.0.6 vc69(Android) + vc70(iOS) 로컬 빌드 완료 (2026-05-01)
 - **AIGO-BUG-01 완전 해결** (Android DEVELOPER_ERROR + iOS `requests-from-this-ios-client-application-<empty>-are-blocked`)
@@ -230,6 +251,7 @@
 - **BUG-36**: 접종 리스트 등록 후 나중에 체크 기능
 - **BUG-37**: 월령별 추천 카테고리 복수선택 해제 안 됨
 - **BUG-39**: 구글 로그인 데이터 복원 간헐적 미적용 (AIGO-BUG-01 해결로 자동 잔존 여부 vc69 검증 결과로 판단)
+- **AIGO-BUG-06**: 관심상품 탭 자녀 칩 높이 흔들림 (vc73~vc78 시도 5회 미해결) — fontWeight '500'↔'600' 전환 시 폰트 라인 메트릭 변동 추정. 다음 시도 후보: ScrollView → 일반 View(가로 스크롤 포기) / Pressable + onLayout 측정 / fontWeight 단일화. 상세는 위 "현재 상태" TODO 섹션 참조
 
 **🟡 P2 — Phase 3 UI 후속**
 - 앱 측 baby-category 탭 라우팅 구현 — 푸시 알림 `screen=baby-category` + slugs 도착 시 홈 탭에서 해당 월령별 카테고리 섹션으로 자동 스크롤/하이라이트
@@ -365,6 +387,7 @@
 - v1.0.6 vc69 (2026-05-01) - Android, AIGO-BUG-01 완전 해결 (aigo-a OAuth 충돌 정리 + google-services.json 갱신)
 - v1.0.6 vc70 (2026-05-01) - iOS, AIGO-BUG-01 완전 해결 (Android와 동일 변경)
 - v1.0.6 vc72 (2026-05-02) - 오늘의 육아템 섹션 + 칩 통일 + 로그아웃 + Apple Sign In
+- v1.0.6 vc73~vc78 (2026-05-02 ~ 05-03) - isLinked 3겹 방어 / updateCheck 보강 (App Store ID + web fallback + updateMessage) / 관심상품 칩 높이 시도 5회 (미해결, TODO 잔존)
 
 ## 2026-05-02 작업 이력 (v1.0.6 vc72)
 
