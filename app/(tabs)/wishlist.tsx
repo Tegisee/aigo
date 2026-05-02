@@ -209,15 +209,14 @@ const styles = StyleSheet.create({
 
   // ── 아이별 필터 ──
   childFilterScroll: {
-    height: 50, // 칩 36 + 위아래 paddingVertical 4 + 여유 6px 고정 — 칩 잘림 방지 + 컨테이너 높이 불변
-    flexGrow: 0, // 부모 flex 영향으로 늘어나지 않도록 명시
-    marginBottom: 16, // 아래 fetchBtn과 충분한 여백
+    flexGrow: 0,
+    paddingVertical: 8,
+    marginBottom: 8,
   },
   childFilter: {
     paddingHorizontal: 16,
-    paddingVertical: 4, // 칩 위/아래 잘림 방지 (border + shadow 안전 영역)
     flexDirection: 'row',
-    alignItems: 'center', // cross-axis stretch 방지 — 자식 칩이 다른 높이로 늘어나지 않음
+    alignItems: 'center',
   },
   childFilterChip: {
     paddingHorizontal: 16,
