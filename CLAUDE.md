@@ -249,6 +249,14 @@
 
 ---
 
+## 가격 체크 cron 관리 정책 (2026-05-02 확정)
+- **단일 관리 위치**: 가격체크 cron은 지금이야 레포(`~/jigumiya`)에서 단일 관리 중. 아이고 레포에 별도 cron 없음.
+- **설계 문서**: `~/jigumiya/jigumiya/docs/020_PriceChecker_CronDesign.md` (지금이야 레포)
+- **공유 컬렉션**: shared_products / category_best_baby / event_best 모두 jigumiya 프로젝트에 적재 → 양 앱이 read만 수행
+- **아이고 cron 활성화 시점**: 지금이야 cron 안정화 후 진행 예정 (현재 비활성 유지)
+
+---
+
 ## 가격 체크 + 알림 설계 (2026-04-28 초안, 내일 재논의)
 
 ### shared-price-checker (단일 통합 cron)
