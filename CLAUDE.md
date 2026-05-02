@@ -67,10 +67,12 @@
 
 ### 빌드 산출물
 - Android AAB: `~/aigo/builds/android/aigo-v1.0.6-vc69.aab` (Play Console 검토 중)
-- iOS IPA: `~/aigo/builds/ios/aigo-v1.0.6-vc70.ipa` (App Store 심사 중)
+- iOS IPA: `~/aigo/builds/ios/aigo-v1.0.6-vc70.ipa` (App Store 1.0.6(20) 재제출에 사용)
 
 ### 스토어 진행
-- **App Store**: vc70 빌드 + Apple Sign In + 시연영상 첨부하여 심사 제출 → **Apple 회신 대기**
+- **App Store**:
+  - **1.0.4(12) 거절** — Guideline 4.8 + 5.1.1(v) 위반 (해당 빌드는 구글/애플 로그인 및 계정 삭제 미구현)
+  - **1.0.6(20) 재제출 완료** (2026-05-02 22:38 KST) — Apple Sign In + 구글 로그인 + 계정 삭제 + 시연영상 첨부 → **Apple 회신 대기**
 - **Google Play**: 프로덕션 액세스 신청 완료 → **Google 검토 대기** (14일 베타 충족 등 별도 요건)
 
 ---
@@ -101,7 +103,7 @@
 
 ### 🟡 P2 — 출시
 - 비공개 테스트 검토 완료 → Play Console 프로덕션 승급
-- iOS vc70 App Store 심사 정보 회신
+- iOS 1.0.6(20) App Store 심사 회신 대기 (1.0.4(12) 거절분 재제출본)
 - AIGO-BUG-04 / AIGO-BUG-05 수정 후속 빌드
 - cron 전체 활성화 (검증 통과 후)
 
@@ -193,6 +195,10 @@ EAS 크레딧 100% 소진 (리셋: 매월 21일)
 - v1.0.6 vc72 (2026-05-02) — 오늘의 육아템 + 칩 통일 1차 + 로그아웃 + Apple Sign In
 - v1.0.6 vc73 (2026-05-02) — isLinked 3겹 방어 + updateCheck 보강 (App Store ID 6762362777 + web fallback + updateMessage)
 - v1.0.6 vc74~vc78 (2026-05-02) — 관심상품 칩 높이 반복 수정 (5회 시도, 미해결 — AIGO-BUG-06)
+
+## App Store 심사 이력
+- **v1.0.4(12) 거절** — Guideline 4.8 + 5.1.1(v) 위반. 거절 사유: 구글/애플 로그인 미구현 + 계정 삭제 미구현. (해당 빌드 자체 한계)
+- **v1.0.6(20) 재제출** (2026-05-02 22:38 KST) — Apple Sign In + 구글 로그인 + 계정 삭제 + 시연영상 첨부 → Apple 회신 대기
 
 전체 이력은 `docs/archive/`:
 - `01_v1.0.1_v1.0.4_이력.md` — Phase 1 인프라 + 핵심 기능 + v1.0.1~v1.0.4 버그 수정
