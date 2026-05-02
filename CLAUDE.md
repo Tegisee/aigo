@@ -52,7 +52,16 @@
 - 기저귀/분유/물티슈 등 소모품 = 정기 구매 유도 가능
 - 파트너스 계정: 지금이야와 동일 계정 사용 가능
 
-## 현재 상태: v1.0.6 vc69(Android) + vc70(iOS) 로컬 빌드 완료 (2026-05-01)
+## 현재 상태: v1.0.6 vc72 로컬 빌드 완료 (2026-05-02)
+- **오늘의 육아템 섹션 신설** (홈 탭): shared_products 가격 하락순 + category_best_baby fallback, 1h AsyncStorage 캐시. `fetchSharedPriceDrops`/`fetchBabyCategoryBestPool` 신규
+- **관심상품 탭 자녀 칩 높이 고정**: `height:36 + paddingVertical:0` — 선택/미선택 폰트 weight 차이로 인한 변동 차단
+- **로그아웃 기능 추가** (설정 화면): 외부 계정(구글/Apple) 사용자 한정. `signOutGoogle/Apple + signOutFirebase + 로컬 정리`. Firestore 데이터는 보존 → 다음 로그인 시 자동 복원
+- **Apple Sign In 구현** (iOS only): `expo-apple-authentication` + `expo-crypto`(nonce SHA256) + Firebase `OAuthProvider('apple.com')`. 온보딩/로그인/설정/계정삭제 4곳 분기. `app.config.js` `usesAppleSignIn:true`
+- 커밋 `a9d44cb` (feat: v1.0.6 vc72 ...)
+- ⚠️ Apple Sign In 활성화 외부 작업 필요: Firebase Console > Authentication > Sign-in method > Apple 활성화 + Apple Developer Console 앱 ID `com.aigo.app` Capabilities "Sign In with Apple" 체크
+- 다음 작업: 시뮬레이터 검증 → Play Console vc72 업로드 → App Store 심사 (vc72 + Apple Sign In 정상 작동 확인 후)
+
+## 이전 상태: v1.0.6 vc69(Android) + vc70(iOS) 로컬 빌드 완료 (2026-05-01)
 - **AIGO-BUG-01 완전 해결** (Android DEVELOPER_ERROR + iOS `requests-from-this-ios-client-application-<empty>-are-blocked`)
 - iOS root cause: GCP `AIzaSy...KQ5Ho` API Key "iOS 앱 제한" 활성 + firebase-js-sdk가 RN에서 `X-Ios-Bundle-Identifier` 헤더 미부여 → "Bundle ID `<empty>`" 차단. 제한 해제로 해결
 - Android root cause: aigo-a 프로젝트에 `com.aigo.app + SHA-1` OAuth 클라이언트 잔존 → Google OAuth 글로벌 정책상 `(SHA-1, 패키지명)` 동일 조합은 단일 GCP 프로젝트만 점유 가능 → jigumiya 측 OAuth Android 클라이언트 자동 생성 차단
@@ -355,6 +364,68 @@
 - v1.0.6 vc68 (2026-04-30) - 폐기 (Play Console versionCode 충돌, AIGO-BUG-01 1차 수정 빌드)
 - v1.0.6 vc69 (2026-05-01) - Android, AIGO-BUG-01 완전 해결 (aigo-a OAuth 충돌 정리 + google-services.json 갱신)
 - v1.0.6 vc70 (2026-05-01) - iOS, AIGO-BUG-01 완전 해결 (Android와 동일 변경)
+- v1.0.6 vc72 (2026-05-02) - 오늘의 육아템 섹션 + 칩 통일 + 로그아웃 + Apple Sign In
+
+## 2026-05-02 작업 이력 (v1.0.6 vc72)
+
+### 1. 오늘의 육아템 섹션 신설 (홈 탭)
+- **services/firebase.ts**:
+  - `BabyPriceDrop` 인터페이스 + `fetchSharedPriceDrops(maxItems, scanLimit, gender)` — shared_products `lastCheckedAt desc` 100건 1회 read → 클라에서 `currentPrice < previousPrice` 필터 + `dropRate` 오름차순 정렬 (Firestore 필드 비교 쿼리 불가)
+  - `fetchBabyCategoryBestPool(categories, perCategory, gender, months)` — 월령 카테고리 슬러그 병렬 read, productId 중복 제거
+- **app/(tabs)/index.tsx**:
+  - `DEALS_TARGET=20`, `DEALS_CACHE_KEY='home-baby-deals-cache'`, `DEALS_CACHE_TTL_MS=1h`, `BEST_POOL_PER_CATEGORY=5`
+  - useEffect: AsyncStorage 1h 캐시 → 미스 시 두 함수 `Promise.all` 병렬 fetch (`childId` / `babyMonths` / `babyGender` 의존)
+  - `deals` useMemo: drop 우선 + best pool fallback, `productId` 중복 제거
+  - `handleBuyDrop`/`handleBuyBest`: `generateDeepLink(vp/products/{productId})` 우선 → 실패 시 productUrl 또는 vp URL 직접 (지금이야 fallback 체인 그대로)
+  - UI 위치: 자녀 선택 칩 아래 + 이벤트 배너 위 (지금이야 '오늘의 특가' 패턴 미러링)
+  - 빈 상태 안내: "아직 가격 변동 데이터가 부족해요. 가격이 내려가면 바로 알려드릴게요!"
+- **price_drops 컬렉션 미이식** 대안: shared_products 직접 쿼리. Phase 3 정식 구조 도입 시 교체 가능
+
+### 2. 관심상품 탭 자녀 칩 높이 통일
+- **app/(tabs)/wishlist.tsx**: `childFilterChip` `minHeight:36` → **`height:36`**, `paddingVertical:8` → **`0`**
+- 원인: 선택 시 `fontWeight:'600'`, 미선택 `'500'` → Android 일부 폰트 렌더러에서 line-height 차이로 칩 높이 변동
+- 가로는 텍스트 길이에 따라 유동 (paddingHorizontal:16 그대로)
+
+### 3. 로그아웃 기능 추가 (설정 화면)
+- **services/firebase.ts**: `signOutFirebase()` 신규 export — `firebaseSignOut(auth)` 래퍼, Firestore 데이터 보존
+- **app/(tabs)/settings.tsx**:
+  - `performLogout()`: `signOutGoogle` + `signOutApple` + `signOutFirebase` → 로컬 상태/AsyncStorage 정리 → `hasSeenOnboarding:false` (root layout이 자동으로 OnboardingScreen 전환)
+  - 계정 카드에 `isLinked` 조건부 로그아웃 row 추가 (익명 사용자는 미표시)
+  - 로딩 모달 추가 (`signingOut` state)
+- **deleteAccount와 차이점**: `removeItemFromFirestore` 호출 X (다른 사용자 trackerCount 보존, 본인 추적 항목 Firestore 유지) → 다음 로그인 시 `restoreFromFirestore`로 자동 복원
+
+### 4. Apple Sign In 구현 (iOS only)
+**신규 파일**:
+- **services/appleAuth.ts**: `signInWithApple()` — `expo-crypto.getRandomBytesAsync(32)` rawNonce → `digestStringAsync(SHA256)` hashedNonce → `AppleAuthentication.signInAsync({nonce: hashedNonce})` → `{identityToken, rawNonce, email, fullName}` 반환. `isAppleSignInAvailable()` (iOS + 디바이스 가용성). `signOutApple()` no-op (Apple 명시적 로그아웃 API 없음)
+
+**수정 파일**:
+- **app.config.js**: iOS `usesAppleSignIn:true` 추가 (Capabilities 자동 처리)
+- **services/firebase.ts**:
+  - `OAuthProvider` import 추가
+  - `linkAppleAccount(identityToken, rawNonce)` — `linkGoogleAccount`와 동일 분기 (익명 → Apple link / currentUser=null이면 직접 signIn / `auth/credential-already-in-use` fallback)
+  - `getAuthState()` provider 타입 `'google' | 'apple' | null` 확장
+  - `deleteAccount(googleIdToken?, appleCredential?)` 시그니처 확장 + Apple 재인증 분기 (`OAuthProvider('apple.com').credential({idToken, rawNonce})`)
+- **components/OnboardingScreen.tsx**: `handleAppleStart` 핸들러 (handleGoogleStart 미러링) + Apple 버튼 (구글 버튼 아래, `Platform.OS==='ios' && appleAvailable` 가드, 검정 배경 흰 텍스트)
+- **app/modal/login.tsx**: `handleAppleLogin` 핸들러 + Apple 버튼 + `linkedInfo` provider 분기 (apple 시 `logo-apple` 아이콘)
+- **app/(tabs)/settings.tsx**: `performLogout`에 `signOutApple()` 추가, `performDeleteAccount`에 Apple 재인증 분기 (`signInWithApple()`로 토큰 재발급), 계정 카드 라벨 provider별 분기 ('Apple 계정 연동됨' / '구글 계정 연동됨')
+
+**의존성 추가**: `expo-apple-authentication` + `expo-crypto`
+
+**외부 작업 필요**:
+- Firebase Console (jigumiya) > Authentication > Sign-in method > **Apple 활성화** (모바일 앱은 Service ID 불필요, Bundle ID 충분)
+- Apple Developer Console > 앱 ID `com.aigo.app` > Capabilities > **"Sign In with Apple" 체크** + 프로비저닝 프로파일 갱신 (EAS 자동 처리)
+
+### 5. v1.0.6 vc72 로컬 빌드 완료
+- Android AAB / iOS IPA: `~/aigo/builds/{android|ios}/aigo-v1.0.6-vc72.{aab|ipa}`
+- 커밋 `a9d44cb` (feat: v1.0.6 vc72 — 오늘의 육아템 + 칩 통일 + 로그아웃 + Apple Sign In)
+
+### 미해결 / 다음 작업
+- 시뮬레이터 검증 (홈 '오늘의 육아템' / 칩 일관성 / 로그아웃 흐름 / Apple Sign In E2E)
+- Firebase Console + Apple Developer Console 외부 작업 적용 후 Apple 로그인 실기기 테스트
+- Play Console vc72 업로드 → 외부 테스터 검증
+- App Store 심사 제출 (Apple Sign In 정상 작동 확인 후)
+
+---
 
 ## 2026-05-01 작업 이력 (v1.0.6 vc69+vc70)
 
