@@ -214,7 +214,8 @@ const styles = StyleSheet.create({
   },
   childFilterChip: {
     paddingHorizontal: 16,
-    paddingVertical: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
     borderRadius: 20,
     backgroundColor: theme.card,
     borderWidth: 1,
@@ -223,6 +224,7 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   childFilterChipActive: {
     backgroundColor: '#FF9500',
@@ -230,8 +232,13 @@ const styles = StyleSheet.create({
   },
   childFilterText: {
     fontSize: 13,
+    lineHeight: 16,
     fontWeight: '500',
     color: theme.subtext,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    padding: 0,
+    margin: 0,
   },
   childFilterTextActive: {
     color: '#fff',
