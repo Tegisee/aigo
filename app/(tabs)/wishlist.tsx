@@ -211,6 +211,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingBottom: 8,
     flexDirection: 'row',
+    alignItems: 'center', // cross-axis stretch 방지 — 자식 칩이 다른 높이로 늘어나지 않음
   },
   childFilterChip: {
     paddingHorizontal: 16,
@@ -222,6 +223,8 @@ const styles = StyleSheet.create({
     borderColor: theme.border,
     marginRight: 8,
     height: 36,
+    minHeight: 36,
+    maxHeight: 36,
     justifyContent: 'center',
     alignItems: 'center',
     overflow: 'hidden',
@@ -229,6 +232,10 @@ const styles = StyleSheet.create({
   childFilterChipActive: {
     backgroundColor: '#FF9500',
     borderColor: '#FF9500',
+    // 강제 height 동등 — base의 height만으로 부족할 때 보강 (RN 일부 버전에서 자식 fontWeight 변동이 부모로 전파되는 케이스 대비)
+    height: 36,
+    minHeight: 36,
+    maxHeight: 36,
   },
   childFilterText: {
     fontSize: 13,
@@ -243,6 +250,12 @@ const styles = StyleSheet.create({
   childFilterTextActive: {
     color: '#fff',
     fontWeight: '600',
+    // lineHeight 명시 동등 — fontWeight '500' → '600' 전환 시 line box 자동 재계산 차단
+    lineHeight: 16,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    padding: 0,
+    margin: 0,
   },
 
   // ── 관심상품 가져오기 ──
