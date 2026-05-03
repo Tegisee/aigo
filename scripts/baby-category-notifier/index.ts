@@ -103,40 +103,79 @@ async function cleanupInvalidUsers(
   console.log(`[BabyNotifier] 만료 토큰 정리: ${cleaned}건`);
 }
 
+/**
+ * 푸시 발송. chunk 단위 try/catch + batch 거절 시 1건씩 fallback (다른 EAS projectId 토큰 혼재 방어).
+ *
+ * 반환:
+ *   - successfulTokens: ticket.status === 'ok'로 응답된 토큰 (lastBabyDropAlertAt 갱신 대상)
+ *   - invalidTokens: DeviceNotRegistered / InvalidCredentials 토큰 (cleanup 대상)
+ */
 async function sendChunked(
   messages: ExpoPushMessage[],
-): Promise<{ tickets: ExpoPushTicket[]; invalidTokens: string[] }> {
-  const tickets: ExpoPushTicket[] = [];
+): Promise<{ successfulTokens: Set<string>; invalidTokens: string[] }> {
+  const successfulTokens = new Set<string>();
   const invalidTokens: string[] = [];
+
+  if (messages.length === 0) return { successfulTokens, invalidTokens };
 
   const chunks = expo.chunkPushNotifications(messages);
   for (const chunk of chunks) {
+    let tickets: ExpoPushTicket[] = [];
     try {
-      const result = await expo.sendPushNotificationsAsync(chunk);
-      tickets.push(...result);
-      console.log('[BabyNotifier] 발송:', result.length, '건');
+      tickets = await expo.sendPushNotificationsAsync(chunk);
+      console.log('[BabyNotifier] 발송:', tickets.length, '건');
     } catch (e) {
-      console.error('[BabyNotifier] 발송 실패:', e);
+      console.warn(
+        '[BabyNotifier] batch 거절 → 1건씩 재시도:',
+        e instanceof Error ? e.message.slice(0, 200) : String(e),
+      );
+      // 한 batch에 다른 EAS projectId 토큰이 섞이면 Expo가 전체 거절. 1건씩 보내면 충돌 회피.
+      tickets = [];
+      for (const m of chunk) {
+        try {
+          const single = await expo.sendPushNotificationsAsync([m]);
+          tickets.push(...single);
+        } catch (innerE) {
+          const tokenStr =
+            typeof m.to === 'string' ? m.to : Array.isArray(m.to) ? m.to[0] : '';
+          console.warn(
+            '[BabyNotifier] 단건 실패:',
+            tokenStr?.slice(0, 30),
+            innerE instanceof Error ? innerE.message.slice(0, 120) : String(innerE),
+          );
+          // index 정합성 유지용 sentinel — ProviderError는 cleanup 대상 아님 (토큰 보존)
+          tickets.push({
+            status: 'error',
+            message: innerE instanceof Error ? innerE.message : String(innerE),
+            details: { error: 'ProviderError' },
+          } as unknown as ExpoPushTicket);
+        }
+      }
     }
+
+    tickets.forEach((ticket, i) => {
+      const m = chunk[i];
+      const token =
+        typeof m?.to === 'string' ? m.to : Array.isArray(m?.to) ? m.to[0] : '';
+      if (ticket.status === 'ok') {
+        if (token) successfulTokens.add(token);
+      } else if (ticket.status === 'error') {
+        const code = ticket.details?.error;
+        if (code === 'DeviceNotRegistered' || code === 'InvalidCredentials') {
+          console.log('[BabyNotifier] 만료 토큰:', token?.slice(0, 30), `(code=${code})`);
+          if (token) invalidTokens.push(token);
+        } else {
+          console.log(
+            '[BabyNotifier][DEBUG] 판정 제외 에러:',
+            token?.slice(0, 30),
+            `(code=${code ?? 'unknown'}, message="${ticket.message}")`,
+          );
+        }
+      }
+    });
   }
 
-  tickets.forEach((ticket, i) => {
-    if (ticket.status !== 'error') return;
-    const token = messages[i]?.to as string;
-    const code = ticket.details?.error;
-    if (code === 'DeviceNotRegistered' || code === 'InvalidCredentials') {
-      console.log('[BabyNotifier] 만료 토큰:', token?.slice(0, 30), `(code=${code})`);
-      if (token) invalidTokens.push(token);
-    } else {
-      console.log(
-        '[BabyNotifier][DEBUG] 판정 제외 에러:',
-        token?.slice(0, 30),
-        `(code=${code ?? 'unknown'}, message="${ticket.message}")`,
-      );
-    }
-  });
-
-  return { tickets, invalidTokens };
+  return { successfulTokens, invalidTokens };
 }
 
 async function main() {
@@ -241,19 +280,18 @@ async function main() {
     return;
   }
 
-  const { tickets, invalidTokens } = await sendChunked(messages);
+  const { successfulTokens, invalidTokens } = await sendChunked(messages);
 
-  // ticket status 집계
-  const statusCount: Record<string, number> = {};
-  tickets.forEach((t) => {
-    statusCount[t.status] = (statusCount[t.status] || 0) + 1;
-  });
-  console.log('[BabyNotifier] ticket 집계:', JSON.stringify(statusCount));
+  console.log(
+    `[BabyNotifier] 발송 성공 토큰: ${successfulTokens.size}/${messages.length} (만료 토큰 ${invalidTokens.length}건)`,
+  );
 
-  // 발송 성공한 사용자만 lastBabyDropAlertAt 갱신
+  // 발송 성공한 토큰의 uid만 추려서 lastBabyDropAlertAt 갱신 (미발송 사용자는 24h 가드 박히지 않음)
   const successUids: string[] = [];
-  tickets.forEach((t, i) => {
-    if (t.status === 'ok') {
+  messages.forEach((m, i) => {
+    const token =
+      typeof m.to === 'string' ? m.to : Array.isArray(m.to) ? m.to[0] : '';
+    if (token && successfulTokens.has(token)) {
       const uid = targetUids[i];
       if (uid) successUids.push(uid);
     }
@@ -265,7 +303,11 @@ async function main() {
       console.warn(`[BabyNotifier] lastBabyDropAlertAt 갱신 실패 uid=${uid}:`, e);
     }
   }
-  console.log(`[BabyNotifier] lastBabyDropAlertAt 갱신: ${successUids.length}명`);
+  console.log(
+    `[BabyNotifier] lastBabyDropAlertAt 갱신 ${successUids.length}명 (발송 성공) / 미발송 가드 스킵 ${
+      messages.length - successUids.length
+    }명`,
+  );
 
   await cleanupInvalidUsers(db, invalidTokens);
 
