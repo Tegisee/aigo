@@ -58,35 +58,41 @@
 
 ---
 
-## 현재 상태 (2026-05-02 시점)
+## 현재 상태 (2026-05-04 시점)
 
-### 마지막 코드: 커밋 `d83de23`, 빌드 v1.0.6 vc78
-- vc72에서 핵심 기능(오늘의 육아템 + 로그아웃 + Apple Sign In) 통합
-- vc73에서 isLinked 3겹 방어 + updateCheck 보강
-- vc74~vc78 관심상품 칩 높이 반복 수정 5회 → 미해결 상태로 일단 중단
+### 마지막 코드: 커밋 `39f99bc`, 빌드 v1.0.7 vc80/bn80
+- **5ea7241** (BabyNotifier fix) — Expo batch 거절 방어 + 잘못된 lastBabyDropAlertAt 가드 차단
+- **39f99bc** (v1.0.7) — iOS 공유 무한로딩 수정 + Functions 콜드 스타트 완화 (지금이야 9de8269 + 601b166 동일 적용)
+- v1.0.6 라인 (vc78까지) → AIGO-BUG-06 칩 높이 미해결로 중단된 채 유지, v1.0.7로 라인 점프
 
 ### 빌드 산출물
-- Android AAB: `~/aigo/builds/android/aigo-v1.0.6-vc69.aab` (Play Console 검토 중)
-- iOS IPA: `~/aigo/builds/ios/aigo-v1.0.6-vc70.ipa` (App Store 1.0.6(20) 재제출에 사용)
+- Android AAB: `~/aigo/builds/android/aigo-v1.0.7-vc80.aab` (Play Store 프로덕션 검토 중)
+- iOS IPA: `~/aigo/builds/ios/aigo-v1.0.7-vc80.ipa` (App Store 1.0.7 빌드 21 심사 대기 중)
 
 ### 스토어 진행
 - **App Store**:
   - **1.0.4(12) 거절** — Guideline 4.8 + 5.1.1(v) 위반 (해당 빌드는 구글/애플 로그인 및 계정 삭제 미구현)
-  - **1.0.6(20) 재제출 완료** (2026-05-02 22:38 KST) — Apple Sign In + 구글 로그인 + 계정 삭제 + 시연영상 첨부 → **Apple 회신 대기**
-- **Google Play**: 프로덕션 액세스 신청 완료 → **Google 검토 대기** (14일 베타 충족 등 별도 요건)
+  - **1.0.6(20) 재제출 완료** (2026-05-02 22:38 KST) — Apple Sign In + 구글 로그인 + 계정 삭제 + 시연영상 첨부
+  - **1.0.7(21) 제출 완료** (2026-05-04) — iOS 공유 무한로딩 + 콜드 스타트 보강 → **Apple 심사 대기**
+- **Google Play**:
+  - 1.0.6 vc69 비공개 테스트 검토 통과 후 1.0.7 vc80 프로덕션 업로드 → **Google 검토 대기**
 
 ---
 
 ## 미해결 TODO
 
-### 🟠 P1 — vc69/vc70 비공개 테스트 검토 중
-- AIGO-BUG-01/02/03 모두 vc69+vc70 반영 (Android DEVELOPER_ERROR + iOS Bundle ID `<empty>` 차단 완전 해결)
-- Play App Signing 키 SHA-1 미확인 — 비공개 테스트 검토 후 실기기 검증 결과로 추가 등록 필요 여부 판단
+### 🟠 P1 — v1.0.7 vc80/bn80 스토어 검토 중
+- App Store 1.0.7(21) Apple 심사 회신 대기 (1.0.6(20) 통과 후 후속)
+- Play Store 1.0.7 vc80 프로덕션 검토 대기
+- baby-category-notifier cron 실동작 검증 — Expo batch 거절 fallback 분기가 실 트래픽에서 정상 작동하는지 다음 cron run 로그로 확인
+- Functions 콜드 스타트 응답시간 로그 (`[AddItem] Functions resolve {ms}ms`) 1~2일 누적 후 minInstances: 1 적용 여부 결정
 
 ### 🟡 P2 — UX 개선
 - **IMPROVE-A**: 설정화면에 로그인된 구글 계정 이메일/이름 표시 (iOS/Android 공통)
 - **AIGO-BUG-04**: 와우회원 필드 (사양 정리 필요)
 - **AIGO-BUG-05**: 익명 로그인 사용자에게 구글 연동 가능 표기 (UX 명확화)
+- **그래프 Y축 가격 표시 버그**: 가격 히스토리 그래프 Y축 라벨 이상 — 1~2일 가격 변동 누적 관찰 후 재현 여부 확인
+- **공지사항 팝업 + 전체 푸시 기능**: 운영자 공지(긴급 알림/이벤트)를 모든 사용자에게 일괄 발송하는 인프라 신설
 
 ### 🟡 P2 — 기존 UX 버그
 - **BUG-36**: 접종 리스트 등록 후 나중에 체크 기능
@@ -102,8 +108,8 @@
 - 가격 하락 알림 도착 시 사용자 동선(홈 → 카테고리 → 상품 카드) UX 개선
 
 ### 🟡 P2 — 출시
-- 비공개 테스트 검토 완료 → Play Console 프로덕션 승급
-- iOS 1.0.6(20) App Store 심사 회신 대기 (1.0.4(12) 거절분 재제출본)
+- App Store 1.0.7(21) 심사 회신 대기
+- Google Play 1.0.7 vc80 프로덕션 검토 대기
 - AIGO-BUG-04 / AIGO-BUG-05 수정 후속 빌드
 - cron 전체 활성화 (검증 통과 후)
 
@@ -113,11 +119,13 @@
 ---
 
 ## 다음 작업 (우선순위 순)
-1. 시뮬레이터에서 vc78 (`d83de23`) 검증 — 자연 흐름 레이아웃이 시각적으로 OK인지 확인 후 칩 작업 종료 여부 판단
-2. Apple Sign In 외부 작업 점검 — Firebase Console > Authentication > Apple 활성화 + Apple Developer Capabilities (App Store 회신 전)
-3. Play Console 프로덕션 액세스 승인 → vc72+ 프로덕션 승급
-4. 칩 높이 작업 재개 (AIGO-BUG-06) — View 교체 / fontWeight 단일화 등 후보 시도
-5. cron 전체 활성화 (검증 통과 후)
+1. baby-category-notifier 다음 cron run 로그 확인 — chunk 거절 fallback 분기 실동작 검증 (성공 시 successfulTokens / 실패 시 ProviderError sentinel 카운트)
+2. Functions 응답시간 로그 1~2일 누적 → 콜드/웜 분포 분석 → minInstances: 1 적용 여부 결정
+3. App Store 1.0.7(21) 심사 결과 회신 받으면 후속 액션 (통과 시 1.0.6(20) 함께 정리, 거절 시 사유 분석)
+4. Google Play 1.0.7 vc80 프로덕션 검토 통과 후 단계적 출시 비율 조정
+5. 그래프 Y축 버그 재현 시도 — 1~2일 가격 변동 누적 후 확인
+6. 공지사항 팝업 + 전체 푸시 인프라 설계 (Firestore announcements 컬렉션 + 앱 첫 진입 시 마지막 본 ID와 비교)
+7. 칩 높이 작업 재개 (AIGO-BUG-06) — View 교체 / fontWeight 단일화 등 후보 시도
 
 ---
 
@@ -195,10 +203,15 @@ EAS 크레딧 100% 소진 (리셋: 매월 21일)
 - v1.0.6 vc72 (2026-05-02) — 오늘의 육아템 + 칩 통일 1차 + 로그아웃 + Apple Sign In
 - v1.0.6 vc73 (2026-05-02) — isLinked 3겹 방어 + updateCheck 보강 (App Store ID 6762362777 + web fallback + updateMessage)
 - v1.0.6 vc74~vc78 (2026-05-02) — 관심상품 칩 높이 반복 수정 (5회 시도, 미해결 — AIGO-BUG-06)
+- **v1.0.7 vc80/bn80 (2026-05-04)** — iOS 공유 무한로딩 수정 + Functions 콜드 스타트 완화. 지금이야 9de8269 + 601b166 동일 적용 (commit `39f99bc`)
+  - iOS: handleNext Alert 가이드 + useFocusEffect step 보존 + startScrape iOS HTML fetch 8s timeout
+  - 공통: services/firebase.ts `warmupResolveAffiliate` 신설 (sentinel URL → backend early-return) + 모달 mount + AppState active 시 워밍업 + Functions 응답시간 로그
+  - **별도 커밋 5ea7241 (BabyNotifier)** — Expo batch 거절 시 chunk 단위 try/catch + 1건씩 fallback, lastBabyDropAlertAt 발송 성공 토큰만 갱신, 1회성 cleanup 스크립트 (DRY_RUN 결과 candidates=0 — 잔존 데이터 없음 확인)
 
 ## App Store 심사 이력
 - **v1.0.4(12) 거절** — Guideline 4.8 + 5.1.1(v) 위반. 거절 사유: 구글/애플 로그인 미구현 + 계정 삭제 미구현. (해당 빌드 자체 한계)
 - **v1.0.6(20) 재제출** (2026-05-02 22:38 KST) — Apple Sign In + 구글 로그인 + 계정 삭제 + 시연영상 첨부 → Apple 회신 대기
+- **v1.0.7(21) 제출** (2026-05-04) — iOS 공유 무한로딩 수정 + 콜드 스타트 보강 → Apple 심사 대기
 
 전체 이력은 `docs/archive/`:
 - `01_v1.0.1_v1.0.4_이력.md` — Phase 1 인프라 + 핵심 기능 + v1.0.1~v1.0.4 버그 수정
