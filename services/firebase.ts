@@ -109,6 +109,25 @@ export async function callResolveAffiliate(
   }
 }
 
+/**
+ * Functions 콜드 스타트 워밍업.
+ * sentinel URL은 backend(functions/src/index.ts)에서 coupang.com 미포함 시 즉시 early return →
+ * 쿠팡 API 미호출(Rate Limit 0), 컨테이너 init만 트리거.
+ * 모달 mount / AppState active 전환 시 호출 — 사용자 클릭 시점 warm 확률 ↑.
+ */
+export async function warmupResolveAffiliate(): Promise<void> {
+  if (!functions) return;
+  try {
+    const callable = httpsCallable<{ sharedUrl: string }, ResolveAffiliateResult>(
+      functions,
+      'resolveAndGenerateAffiliateUrl',
+    );
+    await callable({ sharedUrl: 'https://__warmup__.local/' });
+  } catch {
+    // silent — cold start만 트리거하면 됨
+  }
+}
+
 /** Anonymous Auth 로그인 (자동) — 기존 세션(구글 포함) 복원 우선, 없을 때만 익명 생성 */
 export async function signInAnonymously(): Promise<string | null> {
   if (!auth) return null;

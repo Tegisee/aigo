@@ -19,7 +19,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { theme } from '../../constants/theme';
 import { useAppStore } from '../../store/useAppStore';
 import { generateDeepLink, hasCoupangApiKeys } from '../../services/coupangApi';
-import { callResolveAffiliate } from '../../services/firebase';
+import { callResolveAffiliate, warmupResolveAffiliate } from '../../services/firebase';
 import { BabyCategory, BABY_CATEGORIES, getCategoriesByMonth, classifyCategory } from '../../types';
 import { isConsumable, defaultRepurchaseDays } from '../../services/notificationMessages';
 import CoupangScraper, {
@@ -31,6 +31,20 @@ function extractUrl(text: string): string {
   if (coupangMatch) return coupangMatch[0];
   const match = text.match(/https?:\/\/[^\s]+/);
   return match ? match[0] : text.trim();
+}
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  ms: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** URL에서 productId, vendorItemId 추출 */
@@ -86,6 +100,8 @@ export default function AddItemModal() {
   const [scraped, setScraped] = useState<ScrapedProduct | null>(null);
   const [scrapeFailed, setScrapeFailed] = useState(false);
   const [scrapeUrl, setScrapeUrl] = useState<string | null>(null);
+  const [scrapeHtml, setScrapeHtml] = useState<string | null>(null);
+  const [scrapeBaseUrl, setScrapeBaseUrl] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<BabyCategory>('기타');
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
@@ -101,19 +117,32 @@ export default function AddItemModal() {
   const affiliateUrlRef = useRef('');
   const autoTriggeredRef = useRef(false);
 
-  // BUG-42 가드: step !== 'url' 일 때(스크래핑/상세 진행 중)는 리셋 스킵
-  // 외부 앱(쿠팡 앱) 튕김 → 복귀 시 useFocusEffect 재호출되어도 진행 상태 유지
+  // 모달 mount 시 Functions 워밍업 — 사용자가 URL 확인 + "다음" 누르는 1~2s 동안 컨테이너 init.
+  // _layout.tsx launch 워밍업이 idle timeout/늦은 진입 케이스를 못 잡을 때 보강.
+  useEffect(() => {
+    warmupResolveAffiliate();
+  }, []);
+
+  // 'url' 외 단계 진행 중에 쿠팡 앱 갔다 돌아올 때 useFocusEffect가 state를 리셋하지 않도록
+  // 최신 step을 ref로 추적 (stale closure 회피)
+  const stepRef = useRef<Step>('url');
+  stepRef.current = step;
+
+  // 모달이 다시 열릴 때 state 초기화 (expo-router 캐싱 대응).
+  // 단, scraping/target 진행 중에는 보존 — 쿠팡 앱 이탈 후 복귀 시 처음부터 다시 시작 방지.
   useFocusEffect(
     useCallback(() => {
+      if (stepRef.current !== 'url') return;
       setUrl(sharedUrl ?? '');
-      if (step !== 'url') return;
       setTargetPrice('');
       setStep('url');
       setScraped(null);
       setScrapeFailed(false);
       setScrapeUrl(null);
+      setScrapeHtml(null);
+      setScrapeBaseUrl(undefined);
       setSaving(false);
-    }, [sharedUrl, step])
+    }, [sharedUrl])
   );
 
   // BUG-42 cleanup: 모달 언마운트 시 좀비 timeoutRef 정리
@@ -139,7 +168,7 @@ export default function AddItemModal() {
 
   const suggestedPrice = scraped?.price ? Math.round(scraped.price * 0.9) : null;
 
-  // 1단계: "다음" 버튼 → URL resolve + 딥링크 생성 → 스크래핑 시작
+  // 1단계: "다음" 버튼 → 사전 검증 + iOS 공유 시 가이드 Alert → proceedFromUrl
   const handleNext = async () => {
     const parsedUrl = extractUrl(url);
     if (!parsedUrl.includes('coupang.com')) {
@@ -165,6 +194,24 @@ export default function AddItemModal() {
       return;
     }
 
+    // iOS + 공유 진입: 쿠팡 앱 잠시 열릴 가능성 안내 (Universal Link 우회 실패 케이스 대비)
+    if (Platform.OS === 'ios' && isFromShare) {
+      Alert.alert(
+        '쿠팡 앱이 잠깐 열릴 수 있어요',
+        '확인 후 아이고 앱으로 돌아와주세요',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '확인', onPress: () => proceedFromUrl(parsedUrl) },
+        ],
+      );
+      return;
+    }
+
+    proceedFromUrl(parsedUrl);
+  };
+
+  // 1단계 본 처리 — URL resolve + 딥링크 생성 → 스크래핑 시작
+  const proceedFromUrl = async (parsedUrl: string) => {
     retryCountRef.current = 0;
     setStep('scraping');
     setScraped(null);
@@ -182,12 +229,16 @@ export default function AddItemModal() {
     const FETCH_TIMEOUT_MS = 5000;
     const DEEPLINK_TIMEOUT_MS = 5000;
 
+    const t0 = Date.now();
     const functionsResult = await Promise.race([
       callResolveAffiliate(parsedUrl),
       new Promise<{ ok: false; error: string }>((resolve) =>
         setTimeout(() => resolve({ ok: false, error: 'functions-timeout' }), FUNCTIONS_TIMEOUT_MS),
       ),
     ]);
+    console.log(
+      `[AddItem] Functions resolve ${Date.now() - t0}ms ok=${functionsResult.ok}`,
+    );
     if (functionsResult.ok) {
       resolved = functionsResult.originalUrl;
       affiliate = functionsResult.shortenUrl;
@@ -234,20 +285,20 @@ export default function AddItemModal() {
     affiliateUrlRef.current = affiliate;
     console.log('[AddItem] resolved:', resolved.slice(0, 80));
 
-    const isIos = Platform.OS === 'ios';
-    const scrapeDelay = isIos ? 4000 : 0;
-
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
+      setScrapeHtml(null);
+      setScrapeBaseUrl(undefined);
       setScrapeUrl(null);
-      // 첫 타임아웃 시 자동 재시도 1회
+      // 첫 타임아웃 시 자동 재시도 1회 (URL 폴백)
       if (retryCountRef.current === 0 && parsedUrlRef.current) {
         retryCountRef.current++;
         console.log('[AddItem] 타임아웃 → 자동 재시도');
         setTimeout(() => {
           scrapeKeyRef.current++;
+          setScrapeHtml(null);
+          setScrapeBaseUrl(undefined);
           setScrapeUrl(parsedUrlRef.current);
-          // 재시도 타임아웃
           timeoutRef.current = setTimeout(() => {
             setScrapeFailed(true);
             setScrapeUrl(null);
@@ -256,13 +307,47 @@ export default function AddItemModal() {
         return;
       }
       setScrapeFailed(true);
-    }, 30000 + scrapeDelay);
+    }, 30000);
 
-    // WebView에 원본 URL 전달 (지금이야 방식: WebView가 리다이렉트 직접 처리)
-    setTimeout(() => {
-      scrapeKeyRef.current++;
-      setScrapeUrl(parsedUrl);
-    }, scrapeDelay);
+    scrapeKeyRef.current++;
+    startScrape(parsedUrl);
+  };
+
+  /** iOS: HTML fetch (8s timeout) → html prop, Android: URL 직접 로드 */
+  const startScrape = async (targetUrl: string) => {
+    if (Platform.OS === 'ios') {
+      try {
+        console.log('[AddItem] iOS: HTML fetch 시작 →', targetUrl.slice(0, 80));
+        const res = await fetchWithTimeout(
+          targetUrl,
+          {
+            headers: {
+              'User-Agent':
+                'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+              'Accept':
+                'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+              'Accept-Language': 'ko-KR,ko;q=0.9',
+            },
+            redirect: 'follow',
+          },
+          8000,
+        );
+        if (res.ok) {
+          const html = await res.text();
+          console.log('[AddItem] iOS: HTML fetch 성공, length=', html.length);
+          setScrapeUrl(null);
+          setScrapeBaseUrl(res.url || targetUrl);
+          setScrapeHtml(html);
+          return;
+        }
+      } catch (e) {
+        console.warn('[AddItem] iOS: HTML fetch timeout/실패, URL 폴백 →', e);
+      }
+    }
+    // Android 또는 iOS fetch 실패/타임아웃 시 URL 직접 로드
+    setScrapeHtml(null);
+    setScrapeBaseUrl(undefined);
+    setScrapeUrl(targetUrl);
   };
 
   // 스크래핑 성공 → 2단계 진입
@@ -274,6 +359,8 @@ export default function AddItemModal() {
     setRepurchaseEnabled(isConsumable(cat));
     setRepurchaseDays(defaultRepurchaseDays(cat));
     setScrapeUrl(null);
+    setScrapeHtml(null);
+    setScrapeBaseUrl(undefined);
     setStep('target');
   }, []);
 
@@ -282,11 +369,13 @@ export default function AddItemModal() {
   const handleScrapeError = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setScrapeUrl(null);
+    setScrapeHtml(null);
+    setScrapeBaseUrl(undefined);
 
-    // 첫 실패 시 자동 재시도 1회 (WebView 콜드 스타트 대응)
+    // 첫 실패 시 자동 재시도 1회 — URL 폴백 (WebView 콜드 스타트 대응)
     if (retryCountRef.current === 0 && parsedUrlRef.current) {
       retryCountRef.current++;
-      console.log('[AddItem] 첫 실패 → 자동 재시도');
+      console.log('[AddItem] 첫 실패 → 자동 재시도 (URL 폴백)');
       setTimeout(() => {
         scrapeKeyRef.current++;
         setScrapeUrl(parsedUrlRef.current);
@@ -404,12 +493,16 @@ export default function AddItemModal() {
       setScrapeUrl(null);
     }, 20000);
     scrapeKeyRef.current++;
+    setScrapeHtml(null);
+    setScrapeBaseUrl(undefined);
     setScrapeUrl(parsedUrlRef.current);
   };
 
   const goBack = () => {
     if (step === 'target' || step === 'scraping') {
       setScrapeUrl(null);
+      setScrapeHtml(null);
+      setScrapeBaseUrl(undefined);
       setScraped(null);
       setScrapeFailed(false);
       setStep('url');
@@ -627,10 +720,12 @@ export default function AddItemModal() {
         )}
       </KeyboardAvoidingView>
 
-      {scrapeUrl && (
+      {(scrapeUrl || scrapeHtml) && (
         <CoupangScraper
           key={scrapeKeyRef.current}
-          url={scrapeUrl}
+          url={scrapeUrl || ''}
+          html={scrapeHtml || undefined}
+          baseUrl={scrapeBaseUrl}
           onResult={handleScrapeResult}
           onError={handleScrapeError}
         />
