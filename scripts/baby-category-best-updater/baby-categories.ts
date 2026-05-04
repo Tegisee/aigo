@@ -69,13 +69,13 @@ const GROUP_2: BabyCategoryDef[] = [
 
   // 도서 5구간
   { category: '도서', slug: 'books-4-6',   keyword: '초점책',         displayOrder: 19, group: 2 },
-  { category: '도서', slug: 'books-7-12',  keyword: '돌전 책',        displayOrder: 19, group: 2 },
+  { category: '도서', slug: 'books-7-12',  keyword: '아기 그림책',    displayOrder: 19, group: 2 },
   { category: '도서', slug: 'books-13-24', keyword: '두돌 그림책',    displayOrder: 19, group: 2 },
   { category: '도서', slug: 'books-25-48', keyword: '유아 그림책',    displayOrder: 19, group: 2 },
   { category: '도서', slug: 'books-49-84', keyword: '아동 도서',      displayOrder: 19, group: 2 },
 
   // 학습교구 5구간
-  { category: '학습교구', slug: 'learning-7-12',  keyword: '돌전 교구',    displayOrder: 18, group: 2 },
+  { category: '학습교구', slug: 'learning-7-12',  keyword: '아기 원목교구',displayOrder: 18, group: 2 },
   { category: '학습교구', slug: 'learning-13-24', keyword: '두돌 교구',    displayOrder: 18, group: 2 },
   { category: '학습교구', slug: 'learning-25-48', keyword: '유아 교구',    displayOrder: 18, group: 2 },
   { category: '학습교구', slug: 'learning-49-72', keyword: '한글 교구',    displayOrder: 18, group: 2 },
@@ -84,15 +84,21 @@ const GROUP_2: BabyCategoryDef[] = [
 
 // ─── 그룹 3 (03:00 KST) — 소모품 = 10콜 ─────────────────────────
 const GROUP_3: BabyCategoryDef[] = [
-  // 기저귀 5구간
-  { category: '기저귀', slug: 'diaper-0-3',   keyword: '신생아 기저귀', displayOrder: 1, group: 3 },
-  { category: '기저귀', slug: 'diaper-4-6',   keyword: '소형 기저귀',   displayOrder: 1, group: 3 },
-  { category: '기저귀', slug: 'diaper-7-12',  keyword: '중형 기저귀',   displayOrder: 1, group: 3 },
-  { category: '기저귀', slug: 'diaper-13-24', keyword: '대형 기저귀',   displayOrder: 1, group: 3 },
-  { category: '기저귀', slug: 'diaper-25-36', keyword: '팬티 기저귀',   displayOrder: 1, group: 3 },
+  // 기저귀 5구간 (성인/반려동물 노이즈 제거 — 키워드 한정 + excludeKeywords)
+  { category: '기저귀', slug: 'diaper-0-3',   keyword: '신생아 기저귀',     displayOrder: 1, group: 3,
+    excludeKeywords: ['성인', '강아지', '애견', '펫', '반려'] },
+  { category: '기저귀', slug: 'diaper-4-6',   keyword: '소형 기저귀',       displayOrder: 1, group: 3,
+    excludeKeywords: ['성인', '강아지', '애견', '펫', '반려'] },
+  { category: '기저귀', slug: 'diaper-7-12',  keyword: '유아 중형 기저귀',  displayOrder: 1, group: 3,
+    excludeKeywords: ['성인', '강아지', '애견', '펫', '반려'] },
+  { category: '기저귀', slug: 'diaper-13-24', keyword: '유아 대형 기저귀',  displayOrder: 1, group: 3,
+    excludeKeywords: ['성인', '강아지', '애견', '펫', '반려'] },
+  { category: '기저귀', slug: 'diaper-25-36', keyword: '걸음마 기저귀',     displayOrder: 1, group: 3,
+    excludeKeywords: ['성인', '강아지', '애견', '펫', '반려'] },
 
   // 분유 3구간
-  { category: '분유', slug: 'formula-0-3',  keyword: '신생아 분유', displayOrder: 2, group: 3 },
+  { category: '분유', slug: 'formula-0-3',  keyword: '신생아 분유', displayOrder: 2, group: 3,
+    excludeKeywords: ['임산부', '마더 포뮬라', '수유일지'] },
   { category: '분유', slug: 'formula-4-6',  keyword: '2단계 분유',  displayOrder: 2, group: 3 },
   { category: '분유', slug: 'formula-7-12', keyword: '3단계 분유',  displayOrder: 2, group: 3 },
 
@@ -106,17 +112,20 @@ const GROUP_4: BabyCategoryDef[] = [
   { category: '속싸개/배냇저고리', slug: 'swaddle',       keyword: '속싸개',         displayOrder: 5,  group: 4 },
   { category: '신생아 스킨케어',   slug: 'newborn-skin',  keyword: '베이비 로션',    displayOrder: 6,  group: 4 },
   { category: '이유식/이유식도구', slug: 'baby-food',     keyword: '이유식',         displayOrder: 7,  group: 4 },
-  { category: '보행기/점퍼루',     slug: 'walker',        keyword: '보행기',         displayOrder: 8,  group: 4 },
+  { category: '보행기/점퍼루',     slug: 'walker',        keyword: '아기 보행기',    displayOrder: 8,  group: 4,
+    excludeKeywords: ['노인', '고령자', '워커', '보행보조', '실버'] },
   { category: '유아식',            slug: 'toddler-food',  keyword: '유아식',         displayOrder: 9,  group: 4 },
   { category: '안전용품',          slug: 'safety',        keyword: '아기 안전용품',  displayOrder: 10, group: 4 },
-  { category: '유모차/카시트',     slug: 'stroller',      keyword: '유모차',         displayOrder: 14, group: 4, excludeKeywords: ['애완견', '반려견', '강아지'] },
+  { category: '유모차/카시트',     slug: 'stroller',      keyword: '유모차',         displayOrder: 14, group: 4,
+    excludeKeywords: ['애완견', '반려견', '강아지', '반려동물', '개모차', '펫'] },
   { category: '유아 도서/학습',    slug: 'toddler-books', keyword: '유아 도서',      displayOrder: 15, group: 4 },
-  { category: '생활용품',          slug: 'daily',         keyword: '아기 생활용품',  displayOrder: 16, group: 4 },
+  { category: '생활용품',          slug: 'daily',         keyword: '신생아 생활용품',displayOrder: 16, group: 4 },
   { category: '가구',              slug: 'furniture',     keyword: '아기 가구',      displayOrder: 17, group: 4 },
-  { category: '스포츠용품',        slug: 'sports',        keyword: '아동 스포츠',    displayOrder: 20, group: 4 },
+  { category: '스포츠용품',        slug: 'sports',        keyword: '어린이 스포츠용품',displayOrder: 20, group: 4,
+    excludeKeywords: ['성인', '남성', '여성'] },
   { category: '학용품',            slug: 'stationery',    keyword: '학용품',         displayOrder: 21, group: 4 },
   { category: '책가방',            slug: 'backpack',      keyword: '아동 책가방',    displayOrder: 22, group: 4 },
-  { category: '전자기기',          slug: 'electronics',   keyword: '키즈 태블릿',    displayOrder: 23, group: 4 },
+  { category: '전자기기',          slug: 'electronics',   keyword: '어린이 학습 태블릿',displayOrder: 23, group: 4 },
 ];
 
 export const AIGO_BABY_CATEGORIES: BabyCategoryDef[] = [
