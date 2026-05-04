@@ -238,6 +238,8 @@ export const resolveAndGenerateAffiliateUrl = onCall(
     region: 'asia-northeast3',
     secrets: [COUPANG_ACCESS_KEY, COUPANG_SECRET_KEY],
     cors: true,
+    // 콜드 스타트 방지 — 1개 인스턴스 상시 가동 (Android 첫 호출 30~40초 → 즉시 응답)
+    minInstances: 1,
   },
   async (request): Promise<ResolveResult> => {
     if (!request.auth) {
