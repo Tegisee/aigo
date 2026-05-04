@@ -60,7 +60,9 @@
 
 ## 현재 상태 (2026-05-05 시점)
 
-### 마지막 코드: 커밋 `87daed2` (v1.0.7 vc80/bn80 빌드 후 5개 후속 커밋)
+### 마지막 코드: 커밋 `057b049` (v1.0.8 vc81/bn81 빌드 직전 version bump)
+- **057b049** — chore: bump version 1.0.7 → 1.0.8 (vc81/bn81)
+- **d857144** — docs: 2026-05-05 작업 정리
 - **87daed2** — baby-category-notifier 상품별 발송 (B 보강): 사용자당 1알림 요약 → n개 하락 → n개 알림
 - **204c0c8** — Functions `minInstances: 1` 배포 완료 (asia-northeast3, idle 1 인스턴스 상시 가동)
 - **e691173** — 지금이야 이식 (C/D/E/H): app 필터링 + 메시지에 상품명/가격 + KST 날짜 가드 + 'price_change' 라우팅
@@ -72,24 +74,27 @@
 - v1.0.6 라인 (vc78까지) → AIGO-BUG-06 칩 높이 미해결로 중단된 채 유지, v1.0.7로 라인 점프
 
 ### 빌드 산출물
-- Android AAB: `~/aigo/builds/android/aigo-v1.0.7-vc80.aab` (Play Store 프로덕션 검토 중)
-- iOS IPA: `~/aigo/builds/ios/aigo-v1.0.7-vc80.ipa` (App Store 1.0.7 빌드 21 심사 대기 중)
+- **Android AAB**: `~/aigo/builds/android/aigo-1.0.8-81.aab` (64.2 MB, 2026-05-05 05:06) — Play Store 내부 테스트 업로드 완료
+- **iOS IPA**: `~/aigo/builds/ios/aigo-1.0.8-81.ipa` (19.7 MB, 2026-05-05 05:03) — App Store 심사 요청 완료
+- 직전: aigo-v1.0.7-vc80.aab / aigo-v1.0.7-vc80.ipa (1.0.7 라인, 검토 진행 중)
 
 ### 스토어 진행
 - **App Store**:
   - **1.0.4(12) 거절** — Guideline 4.8 + 5.1.1(v) 위반 (해당 빌드는 구글/애플 로그인 및 계정 삭제 미구현)
   - **1.0.6(20) 재제출 완료** (2026-05-02 22:38 KST) — Apple Sign In + 구글 로그인 + 계정 삭제 + 시연영상 첨부
-  - **1.0.7(21) 제출 완료** (2026-05-04) — iOS 공유 무한로딩 + 콜드 스타트 보강 → **Apple 심사 대기**
+  - **1.0.7(21) 제출 완료** (2026-05-04) — iOS 공유 무한로딩 + 콜드 스타트 보강
+  - **1.0.8(22) 심사 요청 완료** (2026-05-05) — baby-category 키워드 정제 + 알림 개선 + Functions minInstances → **Apple 심사 대기**
 - **Google Play**:
-  - 1.0.6 vc69 비공개 테스트 검토 통과 후 1.0.7 vc80 프로덕션 업로드 → **Google 검토 대기**
+  - 1.0.6 vc69 비공개 테스트 검토 통과 후 1.0.7 vc80 프로덕션 검토 진행
+  - **1.0.8 vc81 내부 테스트 업로드 완료** (2026-05-05) → 내부 테스트 검토 통과 후 프로덕션 승급 예정
 
 ---
 
 ## 미해결 TODO
 
-### 🟠 P1 — v1.0.7 vc80/bn80 스토어 검토 중 + 2026-05-05 후속 검증
-- App Store 1.0.7(21) Apple 심사 회신 대기 (1.0.6(20) 통과 후 후속)
-- Play Store 1.0.7 vc80 프로덕션 검토 대기
+### 🟠 P1 — v1.0.8 vc81/bn81 스토어 검토 중 + 2026-05-05 후속 검증
+- **App Store 1.0.8(22) Apple 심사 회신 대기** (2026-05-05 제출 — 1.0.6(20)/1.0.7(21) 누적 중)
+- **Play Store 1.0.8 vc81 내부 테스트 검토 통과 → 프로덕션 승급 결정** (1.0.7 vc80 프로덕션 검토 흐름과 통합 결정 필요)
 - **baby-category-notifier 상품별 발송(B) 첫 실 트래픽 모니터링** — 사용자당 알림 수 분포 확인. 폭탄 우려 시 dropAmount 상위 N개 상한 추가 검토
 - **events.ts 다중 키워드 cron 첫 실행 검증** — 31×3~5 ≈ 124콜이 5분 내 정상 종료하는지 + dedupe 후 결과 분포
 - **baby-categories 12개 슬러그 정제 효과 검증** — 다음 cron run 후 category_best_baby 문서에서 노이즈(성인기저귀/노인보행기/임산부분유 등) 0건 확인
@@ -117,8 +122,8 @@
 - 가격 하락 알림 도착 시 사용자 동선(홈 → 카테고리 → 상품 카드) UX 개선
 
 ### 🟡 P2 — 출시
-- App Store 1.0.7(21) 심사 회신 대기
-- Google Play 1.0.7 vc80 프로덕션 검토 대기
+- App Store 1.0.8(22) 심사 회신 대기 (1.0.7(21) 누적)
+- Google Play 1.0.8 vc81 내부 테스트 검토 통과 후 프로덕션 단계적 승급
 - AIGO-BUG-04 / AIGO-BUG-05 수정 후속 빌드
 - cron 전체 활성화 (검증 통과 후)
 
@@ -128,16 +133,15 @@
 ---
 
 ## 다음 작업 (우선순위 순)
-1. **baby-category 그룹 1~4 cron 첫 실행** — 12개 슬러그 정제 효과 + excludeKeywords 필터 동작 검증
-2. **event-best cron 첫 실행** — 다중 키워드 (124콜) 5분 내 종료 + dedupe 후 카테고리별 결과 분포 확인
-3. **baby-category-notifier 다음 cron run 로그** — 상품별 발송(B) 사용자별 알림 수 + chunk fallback 분기 검증
-4. App Store 1.0.7(21) 심사 결과 회신 받으면 후속 액션 (통과 시 1.0.6(20) 함께 정리, 거절 시 사유 분석)
-5. Google Play 1.0.7 vc80 프로덕션 검토 통과 후 단계적 출시 비율 조정
+1. **App Store 1.0.8(22) 심사 회신 모니터링** — 통과 시 1.0.7(21) 흐름 정리, 거절 시 사유 분석
+2. **Play Store 1.0.8 vc81 내부 테스트 검토 통과 후** 프로덕션 단계적 승급 비율 조정
+3. **baby-category 그룹 1~4 cron 첫 실행** — 12개 슬러그 정제 효과 + excludeKeywords 필터 동작 검증
+4. **event-best cron 첫 실행** — 다중 키워드 (124콜) 5분 내 종료 + dedupe 후 카테고리별 결과 분포 확인
+5. **baby-category-notifier 다음 cron run 로그** — 상품별 발송(B) 사용자별 알림 수 + chunk fallback 분기 검증
 6. Functions `minInstances: 1` 비용 추적 1~2주 후 효율성 평가 (idle cost vs 콜드 스타트 사용자 경험)
 7. 그래프 Y축 버그 재현 시도 — 1~2일 가격 변동 누적 후 확인
 8. 공지사항 팝업 + 전체 푸시 인프라 설계 (Firestore announcements 컬렉션 + 앱 첫 진입 시 마지막 본 ID와 비교)
 9. 칩 높이 작업 재개 (AIGO-BUG-06) — View 교체 / fontWeight 단일화 등 후보 시도
-10. 다음 빌드 트리거 검토 — UX 후속(AIGO-BUG-04/05) + Phase 3 baby-category 탭 라우팅 누적 후 vc81+
 
 ---
 
@@ -219,6 +223,14 @@ EAS 크레딧 100% 소진 (리셋: 매월 21일)
   - iOS: handleNext Alert 가이드 + useFocusEffect step 보존 + startScrape iOS HTML fetch 8s timeout
   - 공통: services/firebase.ts `warmupResolveAffiliate` 신설 (sentinel URL → backend early-return) + 모달 mount + AppState active 시 워밍업 + Functions 응답시간 로그
   - **별도 커밋 5ea7241 (BabyNotifier)** — Expo batch 거절 시 chunk 단위 try/catch + 1건씩 fallback, lastBabyDropAlertAt 발송 성공 토큰만 갱신, 1회성 cleanup 스크립트 (DRY_RUN 결과 candidates=0 — 잔존 데이터 없음 확인)
+- **v1.0.8 vc81/bn81 (2026-05-05)** — 5월 5일 누적 5개 commit 반영 빌드. iOS App Store 심사 요청 + Android Play Store 내부 테스트 업로드 완료 (version bump commit `057b049`)
+  - baby-categories 12개 슬러그 키워드/excludeKeywords 정제 (성인/강아지/노인/임산부 노이즈 차단 — 커밋 `e3cd05b`)
+  - events.ts `keyword: string` → `keywords: string[]` 스키마 + 31개 이벤트 × 3~5 키워드 + index.ts dedupe + sleep 2초 (`2db2737`)
+  - 지금이야 이식 (C/D/E/H): savePushToken `app: 'aigo'` + 알림 본문 상품명/가격 + KST 날짜 가드 + `'price_change'` 라우팅 (`e691173`)
+  - Functions `minInstances: 1` 적용 + asia-northeast3 배포 완료 (`204c0c8`)
+  - baby-category-notifier 사용자당 1알림 요약 → 상품별 각각 발송 (n개 하락 → n개 알림, screen='detail' + itemId, `87daed2`)
+  - 산출물: `~/aigo/builds/ios/aigo-1.0.8-81.ipa` (19.7 MB) / `~/aigo/builds/android/aigo-1.0.8-81.aab` (64.2 MB)
+  - EAS remote buildNumber 카운터: 21 → 22 (App Store 노출 빌드 번호)
 
 ## 2026-05-05 코드 변경 (v1.0.7 vc80 이후, 빌드 전 — origin/main push 완료)
 
@@ -262,6 +274,7 @@ EAS 크레딧 100% 소진 (리셋: 매월 21일)
 - **v1.0.4(12) 거절** — Guideline 4.8 + 5.1.1(v) 위반. 거절 사유: 구글/애플 로그인 미구현 + 계정 삭제 미구현. (해당 빌드 자체 한계)
 - **v1.0.6(20) 재제출** (2026-05-02 22:38 KST) — Apple Sign In + 구글 로그인 + 계정 삭제 + 시연영상 첨부 → Apple 회신 대기
 - **v1.0.7(21) 제출** (2026-05-04) — iOS 공유 무한로딩 수정 + 콜드 스타트 보강 → Apple 심사 대기
+- **v1.0.8(22) 제출** (2026-05-05) — baby-category 키워드 정제 + 알림 메시지/가드 개선 + 상품별 알림 + Functions minInstances → Apple 심사 대기
 
 전체 이력은 `docs/archive/`:
 - `01_v1.0.1_v1.0.4_이력.md` — Phase 1 인프라 + 핵심 기능 + v1.0.1~v1.0.4 버그 수정
