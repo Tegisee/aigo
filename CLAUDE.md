@@ -58,11 +58,17 @@
 
 ---
 
-## 현재 상태 (2026-05-04 시점)
+## 현재 상태 (2026-05-05 시점)
 
-### 마지막 코드: 커밋 `39f99bc`, 빌드 v1.0.7 vc80/bn80
-- **5ea7241** (BabyNotifier fix) — Expo batch 거절 방어 + 잘못된 lastBabyDropAlertAt 가드 차단
-- **39f99bc** (v1.0.7) — iOS 공유 무한로딩 수정 + Functions 콜드 스타트 완화 (지금이야 9de8269 + 601b166 동일 적용)
+### 마지막 코드: 커밋 `87daed2` (v1.0.7 vc80/bn80 빌드 후 5개 후속 커밋)
+- **87daed2** — baby-category-notifier 상품별 발송 (B 보강): 사용자당 1알림 요약 → n개 하락 → n개 알림
+- **204c0c8** — Functions `minInstances: 1` 배포 완료 (asia-northeast3, idle 1 인스턴스 상시 가동)
+- **e691173** — 지금이야 이식 (C/D/E/H): app 필터링 + 메시지에 상품명/가격 + KST 날짜 가드 + 'price_change' 라우팅
+- **2db2737** — events.ts 다중 키워드 (31 × 3~5) + index.ts 배열 처리 + sleep 2초
+- **e3cd05b** — baby-categories 12개 슬러그 키워드/excludeKeywords 정제 (성인/강아지/노인/임산부 노이즈 차단)
+- 직전 빌드 컨텍스트:
+  - **5ea7241** (BabyNotifier fix) — Expo batch 거절 방어 + 잘못된 lastBabyDropAlertAt 가드 차단
+  - **39f99bc** (v1.0.7) — iOS 공유 무한로딩 수정 + Functions 콜드 스타트 완화 (지금이야 9de8269 + 601b166 동일 적용)
 - v1.0.6 라인 (vc78까지) → AIGO-BUG-06 칩 높이 미해결로 중단된 채 유지, v1.0.7로 라인 점프
 
 ### 빌드 산출물
@@ -81,11 +87,14 @@
 
 ## 미해결 TODO
 
-### 🟠 P1 — v1.0.7 vc80/bn80 스토어 검토 중
+### 🟠 P1 — v1.0.7 vc80/bn80 스토어 검토 중 + 2026-05-05 후속 검증
 - App Store 1.0.7(21) Apple 심사 회신 대기 (1.0.6(20) 통과 후 후속)
 - Play Store 1.0.7 vc80 프로덕션 검토 대기
-- baby-category-notifier cron 실동작 검증 — Expo batch 거절 fallback 분기가 실 트래픽에서 정상 작동하는지 다음 cron run 로그로 확인
-- Functions 콜드 스타트 응답시간 로그 (`[AddItem] Functions resolve {ms}ms`) 1~2일 누적 후 minInstances: 1 적용 여부 결정
+- **baby-category-notifier 상품별 발송(B) 첫 실 트래픽 모니터링** — 사용자당 알림 수 분포 확인. 폭탄 우려 시 dropAmount 상위 N개 상한 추가 검토
+- **events.ts 다중 키워드 cron 첫 실행 검증** — 31×3~5 ≈ 124콜이 5분 내 정상 종료하는지 + dedupe 후 결과 분포
+- **baby-categories 12개 슬러그 정제 효과 검증** — 다음 cron run 후 category_best_baby 문서에서 노이즈(성인기저귀/노인보행기/임산부분유 등) 0건 확인
+- baby-category-notifier Expo batch 거절 fallback 분기 실 트래픽 검증 (5ea7241)
+- Functions `minInstances: 1` 운영 비용 모니터링 (asia-northeast3 idle 1 인스턴스, 무료 티어 초과분 추적)
 
 ### 🟡 P2 — UX 개선
 - **IMPROVE-A**: 설정화면에 로그인된 구글 계정 이메일/이름 표시 (iOS/Android 공통)
@@ -119,13 +128,16 @@
 ---
 
 ## 다음 작업 (우선순위 순)
-1. baby-category-notifier 다음 cron run 로그 확인 — chunk 거절 fallback 분기 실동작 검증 (성공 시 successfulTokens / 실패 시 ProviderError sentinel 카운트)
-2. Functions 응답시간 로그 1~2일 누적 → 콜드/웜 분포 분석 → minInstances: 1 적용 여부 결정
-3. App Store 1.0.7(21) 심사 결과 회신 받으면 후속 액션 (통과 시 1.0.6(20) 함께 정리, 거절 시 사유 분석)
-4. Google Play 1.0.7 vc80 프로덕션 검토 통과 후 단계적 출시 비율 조정
-5. 그래프 Y축 버그 재현 시도 — 1~2일 가격 변동 누적 후 확인
-6. 공지사항 팝업 + 전체 푸시 인프라 설계 (Firestore announcements 컬렉션 + 앱 첫 진입 시 마지막 본 ID와 비교)
-7. 칩 높이 작업 재개 (AIGO-BUG-06) — View 교체 / fontWeight 단일화 등 후보 시도
+1. **baby-category 그룹 1~4 cron 첫 실행** — 12개 슬러그 정제 효과 + excludeKeywords 필터 동작 검증
+2. **event-best cron 첫 실행** — 다중 키워드 (124콜) 5분 내 종료 + dedupe 후 카테고리별 결과 분포 확인
+3. **baby-category-notifier 다음 cron run 로그** — 상품별 발송(B) 사용자별 알림 수 + chunk fallback 분기 검증
+4. App Store 1.0.7(21) 심사 결과 회신 받으면 후속 액션 (통과 시 1.0.6(20) 함께 정리, 거절 시 사유 분석)
+5. Google Play 1.0.7 vc80 프로덕션 검토 통과 후 단계적 출시 비율 조정
+6. Functions `minInstances: 1` 비용 추적 1~2주 후 효율성 평가 (idle cost vs 콜드 스타트 사용자 경험)
+7. 그래프 Y축 버그 재현 시도 — 1~2일 가격 변동 누적 후 확인
+8. 공지사항 팝업 + 전체 푸시 인프라 설계 (Firestore announcements 컬렉션 + 앱 첫 진입 시 마지막 본 ID와 비교)
+9. 칩 높이 작업 재개 (AIGO-BUG-06) — View 교체 / fontWeight 단일화 등 후보 시도
+10. 다음 빌드 트리거 검토 — UX 후속(AIGO-BUG-04/05) + Phase 3 baby-category 탭 라우팅 누적 후 vc81+
 
 ---
 
@@ -207,6 +219,44 @@ EAS 크레딧 100% 소진 (리셋: 매월 21일)
   - iOS: handleNext Alert 가이드 + useFocusEffect step 보존 + startScrape iOS HTML fetch 8s timeout
   - 공통: services/firebase.ts `warmupResolveAffiliate` 신설 (sentinel URL → backend early-return) + 모달 mount + AppState active 시 워밍업 + Functions 응답시간 로그
   - **별도 커밋 5ea7241 (BabyNotifier)** — Expo batch 거절 시 chunk 단위 try/catch + 1건씩 fallback, lastBabyDropAlertAt 발송 성공 토큰만 갱신, 1회성 cleanup 스크립트 (DRY_RUN 결과 candidates=0 — 잔존 데이터 없음 확인)
+
+## 2026-05-05 코드 변경 (v1.0.7 vc80 이후, 빌드 전 — origin/main push 완료)
+
+5개 커밋 누적 (`0ce8c5a` → `87daed2`). 다음 EAS 빌드 시 함께 반영 예정.
+
+- **e3cd05b** — `fix: baby-categories 키워드/필터 패치 (12개 슬러그)`
+  - 쿠팡 search API 전수 검증으로 노이즈 슬러그 식별
+  - diaper-25-36 `"팬티 기저귀"` → `"걸음마 기저귀"` (10/10 무관: 콜라/프라이팬/건전지)
+  - walker `"보행기"` → `"아기 보행기"` + excludeKeywords (10/10 노인 보행보조기)
+  - diaper-13-24 → `"유아 대형 기저귀"` (성인기저귀 6/10), diaper-7-12/4-6 동일 패턴
+  - books-7-12 `"돌전 책"` → `"아기 그림책"`, learning-7-12 `"돌전 교구"` → `"아기 원목교구"`
+  - sports/daily/electronics 키워드 정제, formula-0-3 excludeKeywords 추가 (임산부 분유 차단)
+
+- **2db2737** — `feat: events.ts 다중 키워드 + index.ts 배열 처리`
+  - `EventDef.keyword: string` → `keywords: string[]` (이벤트당 3~5개)
+  - 31개 이벤트 키워드 정제 (네이버쇼핑/쿠팡 연관검색어 리서치 기반)
+  - anniversary 19개 "아기" 접두어 강제, season 5개 "어린이" 한정, parent 7개 카테고리+대상 조합
+  - cron: 키워드별 호출 → productId dedupe → 가격 내림차순 → LIMIT 슬라이스, sleep 60s → 2s
+  - 31 × 평균 4 키워드 ≈ 124콜, 약 4~5분 소요 (분당 30콜 한도 안전 마진)
+
+- **e691173** — `feat: 지금이야 이식 — 알림 메시지 + KST 가드 + 앱 필터링 (C/D/E/H)`
+  - jigumiya `de856a6` 커밋의 아이고 해당분 이식
+  - C: `services/firebase.ts savePushToken`에 `app: 'aigo' as const` 추가 (jigumiya cron이 app !== 'aigo' 스킵)
+  - D: `baby-category-notifier`에 대표 상품 picking + 본문에 `상품명 prev원 → curr원`
+  - E: 24h ms 가드 → KST 날짜 가드 (`lastBabyDropAlertKstDate`) — cron jitter 시 미발송 문제 수정
+  - H: `services/notifications.ts routeFromNotification`에 `'price_change'` screen 라우팅 추가
+  - jigumiya 단독 항목 (G round-robin / 카테고리 broadcast)은 jigumiya cron에서 처리, 아이고 변경 없음
+
+- **204c0c8** — `perf: Functions minInstances: 1 — 콜드 스타트 제거`
+  - `resolveAndGenerateAffiliateUrl` onCall에 `minInstances: 1` 추가
+  - `firebase deploy --only functions:resolveAndGenerateAffiliateUrl --force` 배포 완료 (asia-northeast3, 2026-05-05)
+  - idle 1 인스턴스 상시 가동 → Android/iOS 첫 호출도 즉시 응답 (warmup 보강과 이중 안전)
+  - 비용: idle 1 인스턴스 × asia-northeast3 (모니터링 필요)
+
+- **87daed2** — `feat: baby-category-notifier 상품별 발송 (B 보강) — n개 하락 → n개 알림`
+  - 사용자당 1알림 요약 (대표 상품 1개) → 매칭 슬러그의 모든 drops × 1알림씩
+  - dedupe by productId + dropAmount desc 정렬, `data.itemId` + `screen='detail'` → 클릭 시 상세 직행
+  - KST 가드 + DB write는 사용자별 1회 (`successUidSet` dedupe)
 
 ## App Store 심사 이력
 - **v1.0.4(12) 거절** — Guideline 4.8 + 5.1.1(v) 위반. 거절 사유: 구글/애플 로그인 미구현 + 계정 삭제 미구현. (해당 빌드 자체 한계)
