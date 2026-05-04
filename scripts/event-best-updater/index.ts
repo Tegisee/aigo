@@ -3,22 +3,23 @@
  *
  * 동작:
  *   1. AIGO_EVENTS 31개 순회
- *   2. 이벤트당 searchProducts(keyword, 50, MIN_PRICE_KRW) 1콜
+ *   2. 이벤트당 keywords[] 다중 호출 → productId dedupe → 가격 정렬 → 상위 LIMIT개
  *   3. event_best/{slug} 단일 문서 덮어쓰기
- *   4. 다음 호출 전 SLEEP_BETWEEN_EVENTS_MS 대기
+ *   4. 키워드 사이 SLEEP_BETWEEN_KEYWORDS_MS 대기 (이벤트 사이도 동일)
  *   5. rate-limited 감지 시 즉시 중단
  *
  * 호출 정책 (docs/019_Phase3_SharedProducts.md §3, §6):
- *   - 검색 API 분당 50회 한도 → 1콜/분 보수 운영
- *   - 31개 × 60초 sleep ≈ 약 31분 소요
+ *   - 검색 API 분당 50회 한도
+ *   - 31 × 평균 4 = 약 124 콜, sleep 2초 → 약 4~5분 소요
  *   - 권장 시각: 01:00 KST (지금이야 02:00 category-best 와 분리)
  *
  * 환경변수:
  *   FIREBASE_SERVICE_ACCOUNT_KEY    Admin SDK 인증 (필수, jigumiya 프로젝트)
  *   COUPANG_ACCESS_KEY               (필수)
  *   COUPANG_SECRET_KEY               (필수)
- *   SLEEP_BETWEEN_EVENTS_MS          이벤트 사이 sleep (기본 60000)
- *   PRODUCTS_PER_EVENT               이벤트당 가져올 상품 수 (기본 50)
+ *   SLEEP_BETWEEN_KEYWORDS_MS        키워드 사이 sleep (기본 2000)
+ *   PRODUCTS_PER_EVENT               이벤트당 최종 상품 수 (기본 50)
+ *   PRODUCTS_PER_KEYWORD             키워드당 가져올 상품 수 (기본 20)
  */
 
 import { initializeApp, cert } from 'firebase-admin/app';
@@ -26,52 +27,85 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { searchProducts } from './coupang-api.js';
 import { AIGO_EVENTS, MIN_PRICE_KRW, type EventDef } from './events.js';
 
-const SLEEP_MS = Number(process.env.SLEEP_BETWEEN_EVENTS_MS || 60_000);
+const SLEEP_MS = Number(process.env.SLEEP_BETWEEN_KEYWORDS_MS || 2_000);
 const LIMIT = Number(process.env.PRODUCTS_PER_EVENT || 50);
+const PER_KEYWORD = Number(process.env.PRODUCTS_PER_KEYWORD || 20);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+interface SearchedProduct {
+  productId: string;
+  productName: string;
+  productPrice: number;
+  productImage: string;
+  productUrl: string;
+  isRocket: boolean;
+}
 
 async function updateOne(
   db: FirebaseFirestore.Firestore,
   ev: EventDef,
 ): Promise<{ ok: boolean; rateLimited: boolean; count: number }> {
   console.log(
-    `[EventBest] ${ev.slug} (${ev.eventName}) keyword="${ev.keyword}" limit=${LIMIT} minPrice=${MIN_PRICE_KRW}`,
+    `[EventBest] ${ev.slug} (${ev.eventName}) keywords=[${ev.keywords.join(', ')}] perKeyword=${PER_KEYWORD} minPrice=${MIN_PRICE_KRW}`,
   );
-  const result = await searchProducts(ev.keyword, LIMIT, MIN_PRICE_KRW);
 
-  if (result.rateLimited) {
-    return { ok: false, rateLimited: true, count: 0 };
+  const dedupeMap = new Map<string, SearchedProduct>();
+  let rawTotal = 0;
+
+  for (let i = 0; i < ev.keywords.length; i++) {
+    const kw = ev.keywords[i]!;
+    const result = await searchProducts(kw, PER_KEYWORD, MIN_PRICE_KRW);
+
+    if (result.rateLimited) {
+      return { ok: false, rateLimited: true, count: 0 };
+    }
+    if (!result.ok) {
+      console.warn(
+        `[EventBest] ${ev.slug} kw="${kw}" 응답 비정상 (rCode=${result.rCode ?? 'N/A'}) — 스킵`,
+      );
+    } else {
+      rawTotal += result.rawCount ?? result.products.length;
+      for (const p of result.products) {
+        if (!dedupeMap.has(p.productId)) dedupeMap.set(p.productId, p);
+      }
+    }
+
+    if (i < ev.keywords.length - 1) await sleep(SLEEP_MS);
   }
-  if (!result.ok || result.products.length === 0) {
-    console.warn(
-      `[EventBest] ${ev.slug} 응답 비정상 또는 minPrice 통과 0개 (rCode=${result.rCode ?? 'N/A'}, raw=${result.rawCount ?? 'N/A'}) — 미갱신`,
-    );
+
+  const merged = Array.from(dedupeMap.values());
+  if (merged.length === 0) {
+    console.warn(`[EventBest] ${ev.slug} 모든 키워드 결과 0개 — 미갱신`);
     return { ok: false, rateLimited: false, count: 0 };
   }
+
+  // 가격 내림차순 정렬 후 상위 LIMIT개 (선물 가치 우선)
+  merged.sort((a, b) => b.productPrice - a.productPrice);
+  const finalProducts = merged.slice(0, LIMIT);
 
   const docPayload = {
     eventSlug: ev.slug,
     eventName: ev.eventName,
     eventType: ev.type,
-    keyword: ev.keyword,
+    keywords: ev.keywords,
     minPrice: MIN_PRICE_KRW,
     updatedAt: Date.now(),
-    products: result.products,
+    products: finalProducts,
   };
 
   await db.collection('event_best').doc(ev.slug).set(docPayload);
 
   console.log(
-    `[EventBest] ${ev.slug} 저장 완료 — ${result.products.length}/${result.rawCount ?? '?'}개 (필터 통과/원본)`,
+    `[EventBest] ${ev.slug} 저장 완료 — ${finalProducts.length}개 (dedupe ${merged.length}/raw ${rawTotal})`,
   );
-  return { ok: true, rateLimited: false, count: result.products.length };
+  return { ok: true, rateLimited: false, count: finalProducts.length };
 }
 
 async function main() {
   console.log('[EventBest] 시작:', new Date().toISOString());
   console.log(
-    `[EventBest] 대상 ${AIGO_EVENTS.length}개, sleep=${SLEEP_MS}ms, limit=${LIMIT}, minPrice=${MIN_PRICE_KRW}`,
+    `[EventBest] 대상 ${AIGO_EVENTS.length}개, sleep=${SLEEP_MS}ms, perKeyword=${PER_KEYWORD}, limit=${LIMIT}, minPrice=${MIN_PRICE_KRW}`,
   );
 
   const serviceAccount = JSON.parse(
