@@ -180,12 +180,13 @@ export interface NotificationRoute {
 
 /**
  * 알림 클릭 → 라우팅 정보 결정.
- *  - screen='detail' + itemId  → /detail/{itemId}
- *  - screen='baby-category'    → 홈 (slugs 파라미터 동봉)
- *  - screen='price-drops'      → 홈 (아이고는 가격변동 탭 없음)
- *  - screen='home'             → 홈
- *  - 하위 호환: screen 미지정 + itemId → /detail/{itemId}
- *  - 그 외 / 데이터 없음        → null (라우팅 안 함)
+ *  - screen='detail' + itemId             → /detail/{itemId}
+ *  - screen='baby-category'               → 홈 (slugs 파라미터 동봉)
+ *  - screen='price-drops' / 'price_change'→ 홈 (아이고는 가격변동 탭 없음)
+ *    'price_change'는 jigumiya cron의 카테고리 베스트 급락 알림(H, 2026-05-04).
+ *  - screen='home'                        → 홈
+ *  - 하위 호환: screen 미지정 + itemId    → /detail/{itemId}
+ *  - 그 외 / 데이터 없음                  → null (라우팅 안 함)
  */
 export function routeFromNotification(
   response: Notifications.NotificationResponse,
@@ -204,7 +205,7 @@ export function routeFromNotification(
       params: slugs && slugs.length > 0 ? { slugs } : undefined,
     };
   }
-  if (screen === 'price-drops' || screen === 'home') {
+  if (screen === 'price-drops' || screen === 'price_change' || screen === 'home') {
     return { pathname: '/' };
   }
   // 하위 호환 — screen 미지정 + itemId

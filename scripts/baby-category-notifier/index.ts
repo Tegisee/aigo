@@ -17,10 +17,9 @@
 import { initializeApp, cert } from 'firebase-admin/app';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
-import { pickBabyDropMessage } from './messages.js';
+import { pickBabyDropMessage, type PrimaryDrop } from './messages.js';
 
 const DRY_RUN = process.env.DRY_RUN === '1';
-const ALERT_GUARD_MS = 24 * 60 * 60 * 1000; // 24시간 중복 방지
 
 const expo = new Expo();
 
@@ -232,9 +231,19 @@ async function main() {
       continue;
     }
 
-    const lastAt = Number(userData.lastBabyDropAlertAt || 0);
-    if (lastAt > 0 && now - lastAt < ALERT_GUARD_MS) {
-      inc('24h-guard');
+    // C (2026-05-04): 앱 필터 — app 필드가 있고 'aigo'가 아니면 스킵 (jigumiya 등 다른 앱 토큰).
+    // app 필드가 없는 legacy 사용자는 통과 (저장 시점에 app 필드 미존재).
+    const userApp = userData.app as string | undefined;
+    if (userApp && userApp !== 'aigo') {
+      inc(`app-skip-${userApp}`);
+      continue;
+    }
+
+    // E (2026-05-04): KST 날짜 가드 — 24h ms 가드는 cron jitter 시 같은 KST 날짜에도 미발송 발생.
+    // 같은 KST 날짜에 이미 알림 받은 사용자만 스킵 (다음 KST 날짜 첫 cron부터 정상 발송).
+    const lastKstDate = userData.lastBabyDropAlertKstDate as string | undefined;
+    if (lastKstDate === dateStr) {
+      inc('same-kst-date');
       continue;
     }
 
@@ -250,7 +259,25 @@ async function main() {
       continue;
     }
 
-    const { title, body } = pickBabyDropMessage(months);
+    // D (2026-05-04): 대표 상품 picking — 매칭 슬러그의 모든 drops 중 dropAmount 최대값.
+    // 본문에 상품명 + 변동 가격 표시 (사용자 클릭 동기 확보).
+    let primary: PrimaryDrop | undefined;
+    let maxDrop = -1;
+    for (const slug of matchedSlugs) {
+      for (const d of bySlug[slug] || []) {
+        if (d.dropAmount > maxDrop && d.prevPrice > 0 && d.newPrice > 0) {
+          maxDrop = d.dropAmount;
+          primary = {
+            productName: d.productName,
+            prevPrice: d.prevPrice,
+            newPrice: d.newPrice,
+            dropAmount: d.dropAmount,
+          };
+        }
+      }
+    }
+
+    const { title, body } = pickBabyDropMessage(months, primary);
     messages.push({
       to: token,
       sound: 'default' as const,
@@ -298,13 +325,17 @@ async function main() {
   });
   for (const uid of successUids) {
     try {
-      await db.collection('users').doc(uid).update({ lastBabyDropAlertAt: now });
+      // E: KST 날짜 가드용 새 필드 + legacy ms timestamp 호환 둘 다 갱신
+      await db.collection('users').doc(uid).update({
+        lastBabyDropAlertKstDate: dateStr,
+        lastBabyDropAlertAt: now,
+      });
     } catch (e) {
-      console.warn(`[BabyNotifier] lastBabyDropAlertAt 갱신 실패 uid=${uid}:`, e);
+      console.warn(`[BabyNotifier] lastBabyDropAlert 갱신 실패 uid=${uid}:`, e);
     }
   }
   console.log(
-    `[BabyNotifier] lastBabyDropAlertAt 갱신 ${successUids.length}명 (발송 성공) / 미발송 가드 스킵 ${
+    `[BabyNotifier] lastBabyDropAlertKstDate=${dateStr} 갱신 ${successUids.length}명 (발송 성공) / 미발송 가드 스킵 ${
       messages.length - successUids.length
     }명`,
   );

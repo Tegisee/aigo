@@ -486,7 +486,14 @@ export async function savePushToken(token: string): Promise<boolean> {
 
     await setDoc(
       doc(db!,'users', uid),
-      { expoPushToken: token, notificationEnabled: true, lastActiveAt: new Date().toISOString() },
+      {
+        expoPushToken: token,
+        notificationEnabled: true,
+        lastActiveAt: new Date().toISOString(),
+        // C (2026-05-04): 알림 발송 시 앱 식별 — jigumiya cron은 app !== 'aigo' 사용자 스킵.
+        // 사고 학습: users 컬렉션에 다른 EAS projectId 토큰 혼재 시 Expo batch 거절.
+        app: 'aigo' as const,
+      },
       { merge: true },
     );
     const doneLog = `[SavePushToken] 완료 — uid=${uid}, token=${token?.slice(0, 20)}…`;
