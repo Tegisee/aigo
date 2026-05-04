@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "아이고",
     slug: "aigo",
-    version: "1.0.7",
+    version: "1.0.8",
     orientation: "portrait",
     icon: "./assets/icon.png",
     userInterfaceStyle: "light",
@@ -15,7 +15,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.aigo.app",
-      buildNumber: "80",
+      buildNumber: "81",
       googleServicesFile: "./GoogleService-Info.plist",
       usesAppleSignIn: true,
       infoPlist: {
@@ -29,7 +29,7 @@ export default {
       },
     },
     android: {
-      versionCode: 80,
+      versionCode: 81,
       package: "com.aigo.app",
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON ?? "./google-services.json",
       adaptiveIcon: {
