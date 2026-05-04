@@ -259,39 +259,47 @@ async function main() {
       continue;
     }
 
-    // D (2026-05-04): 대표 상품 picking — 매칭 슬러그의 모든 drops 중 dropAmount 최대값.
-    // 본문에 상품명 + 변동 가격 표시 (사용자 클릭 동기 확보).
-    let primary: PrimaryDrop | undefined;
-    let maxDrop = -1;
+    // B (2026-05-05): 상품별 각각 발송 — n개 하락 → n개 알림. 각 알림은 해당 상품 detail로 라우팅.
+    // dedupe: 매칭 슬러그가 여러 개일 때 같은 productId 중복 제거 + dropAmount 큰 순서.
+    const userDrops: PriceDrop[] = [];
+    const seenIds = new Set<string>();
     for (const slug of matchedSlugs) {
       for (const d of bySlug[slug] || []) {
-        if (d.dropAmount > maxDrop && d.prevPrice > 0 && d.newPrice > 0) {
-          maxDrop = d.dropAmount;
-          primary = {
-            productName: d.productName,
-            prevPrice: d.prevPrice,
-            newPrice: d.newPrice,
-            dropAmount: d.dropAmount,
-          };
-        }
+        if (seenIds.has(d.productId)) continue;
+        if (d.prevPrice <= 0 || d.newPrice <= 0 || d.dropAmount <= 0) continue;
+        seenIds.add(d.productId);
+        userDrops.push(d);
       }
     }
+    if (userDrops.length === 0) {
+      inc('no-drops');
+      continue;
+    }
+    userDrops.sort((a, b) => b.dropAmount - a.dropAmount);
 
-    const { title, body } = pickBabyDropMessage(months, primary);
-    messages.push({
-      to: token,
-      sound: 'default' as const,
-      title,
-      body,
-      priority: 'high' as const,
-      channelId: 'price',
-      data: {
-        type: 'baby-category-drop',
-        slugs: matchedSlugs,
-        screen: 'baby-category',
-      },
-    });
-    targetUids.push(uid);
+    for (const d of userDrops) {
+      const primary: PrimaryDrop = {
+        productName: d.productName,
+        prevPrice: d.prevPrice,
+        newPrice: d.newPrice,
+        dropAmount: d.dropAmount,
+      };
+      const { title, body } = pickBabyDropMessage(months, primary);
+      messages.push({
+        to: token,
+        sound: 'default' as const,
+        title,
+        body,
+        priority: 'high' as const,
+        channelId: 'price',
+        data: {
+          type: 'baby-category-drop',
+          itemId: d.productId,
+          screen: 'detail',
+        },
+      });
+      targetUids.push(uid);
+    }
   }
 
   console.log(
@@ -313,17 +321,18 @@ async function main() {
     `[BabyNotifier] 발송 성공 토큰: ${successfulTokens.size}/${messages.length} (만료 토큰 ${invalidTokens.length}건)`,
   );
 
-  // 발송 성공한 토큰의 uid만 추려서 lastBabyDropAlertAt 갱신 (미발송 사용자는 24h 가드 박히지 않음)
-  const successUids: string[] = [];
+  // 발송 성공한 토큰의 uid만 추려서 KST 가드 갱신 (미발송 사용자는 가드 박히지 않음).
+  // B 변경 후: 사용자당 messages가 N개 → 같은 uid 중복 → uniqueUids로 dedupe (DB write 1회/사용자).
+  const successUidSet = new Set<string>();
   messages.forEach((m, i) => {
     const token =
       typeof m.to === 'string' ? m.to : Array.isArray(m.to) ? m.to[0] : '';
     if (token && successfulTokens.has(token)) {
       const uid = targetUids[i];
-      if (uid) successUids.push(uid);
+      if (uid) successUidSet.add(uid);
     }
   });
-  for (const uid of successUids) {
+  for (const uid of successUidSet) {
     try {
       // E: KST 날짜 가드용 새 필드 + legacy ms timestamp 호환 둘 다 갱신
       await db.collection('users').doc(uid).update({
@@ -335,9 +344,7 @@ async function main() {
     }
   }
   console.log(
-    `[BabyNotifier] lastBabyDropAlertKstDate=${dateStr} 갱신 ${successUids.length}명 (발송 성공) / 미발송 가드 스킵 ${
-      messages.length - successUids.length
-    }명`,
+    `[BabyNotifier] lastBabyDropAlertKstDate=${dateStr} 갱신 ${successUidSet.size}명 (발송 성공 사용자) / 발송 메시지 ${messages.length}건 / 만료 토큰 ${invalidTokens.length}건`,
   );
 
   await cleanupInvalidUsers(db, invalidTokens);
