@@ -13,7 +13,7 @@
 - 자매 앱: 지금이야 (Jigumiya) — 범용 가격 추적 앱
 - 프로젝트 경로: ~/aigo/aigo
 - 카테고리: 쇼핑/육아/유틸리티
-- 개인정보처리방침: https://dafamstore.tistory.com/11
+- 개인정보처리방침: https://tegisee.github.io/aigo/privacy-policy/ (구: https://dafamstore.tistory.com/11)
 
 ## 작업 리스트
 
