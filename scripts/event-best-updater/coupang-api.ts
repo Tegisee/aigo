@@ -49,12 +49,13 @@ export interface FetchResult {
 
 /**
  * 키워드 검색 — search API.
+ * limit: 쿠팡 search API 공식 한도 10 (초과 시 자동 클램프).
  * minPrice 옵션: 응답 후 클라이언트 필터 (search API 자체 미지원).
  * 429 또는 rate-limit rMessage 감지 시 rateLimited=true 회신 → cron 즉시 중단.
  */
 export async function searchProducts(
   keyword: string,
-  limit: number = 50,
+  limit: number = 10,
   minPrice: number = 0,
 ): Promise<FetchResult> {
   if (!ACCESS_KEY || !SECRET_KEY) {
@@ -62,7 +63,8 @@ export async function searchProducts(
     return { ok: false, rateLimited: false, products: [] };
   }
 
-  const query = `keyword=${encodeURIComponent(keyword)}&limit=${limit}`;
+  const safeLimit = Math.max(1, Math.min(Math.floor(limit), 10));
+  const query = `keyword=${encodeURIComponent(keyword)}&limit=${safeLimit}`;
   const authorization = generateAuthorization('GET', SEARCH_PATH, query);
 
   let res: Response;

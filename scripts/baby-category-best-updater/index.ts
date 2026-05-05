@@ -3,12 +3,12 @@
  *
  * 동작:
  *   1. AIGO_BABY_CATEGORIES 순회 (또는 GROUP=N 지정 시 해당 그룹만)
- *   2. 카테고리당 searchProducts(keyword, 50) 1콜
+ *   2. 카테고리당 keywords[] 다중 호출 → productId dedupe (limit=10 한도 보완용 2~3개 키워드)
  *   3. excludeKeywords 필터링 (예: stroller 강아지/반려견 제외)
  *   4. 기존 category_best_baby/{slug} 와 비교 → 가격 하락 5% 이상 또는 1,000원 이상 추출
  *   5. category_best_baby/{slug} 단일 문서 덮어쓰기
  *   6. 변동분 누적 → 그룹 종료 시 price_drops_baby/{YYYY-MM-DD KST} 에 merge
- *   7. 다음 카테고리 호출 전 SLEEP_BETWEEN_CATEGORIES_MS 대기
+ *   7. 키워드 사이 SLEEP_BETWEEN_KEYWORDS_MS / 카테고리 사이 SLEEP_BETWEEN_CATEGORIES_MS 대기
  *   8. rate-limited 감지 시 즉시 중단
  *
  * 환경변수:
@@ -16,7 +16,8 @@
  *   COUPANG_ACCESS_KEY               (필수)
  *   COUPANG_SECRET_KEY               (필수)
  *   SLEEP_BETWEEN_CATEGORIES_MS      카테고리 사이 sleep (기본 60000)
- *   PRODUCTS_PER_CATEGORY            카테고리당 가져올 상품 수 (기본 50)
+ *   SLEEP_BETWEEN_KEYWORDS_MS        키워드 사이 sleep (기본 2000)
+ *   PRODUCTS_PER_KEYWORD             키워드당 가져올 상품 수 (기본 10, 쿠팡 search API 공식 한도)
  *   GROUP                            1|2|3|4 (미지정 시 전체)
  */
 
@@ -31,7 +32,8 @@ import {
 } from './baby-categories.js';
 
 const SLEEP_MS = Number(process.env.SLEEP_BETWEEN_CATEGORIES_MS || 60_000);
-const LIMIT = Number(process.env.PRODUCTS_PER_CATEGORY || 50);
+const SLEEP_KW_MS = Number(process.env.SLEEP_BETWEEN_KEYWORDS_MS || 2_000);
+const PER_KEYWORD = Number(process.env.PRODUCTS_PER_KEYWORD || 10);
 /** GROUP=1|2|3|4 → 해당 그룹만 실행. 미지정 시 전체. */
 const GROUP_RAW = process.env.GROUP ? Number(process.env.GROUP) : null;
 const GROUP: CronGroup | null =
@@ -121,21 +123,40 @@ async function updateOne(
   drops: PriceDrop[];
 }> {
   console.log(
-    `[BabyBest] ${cat.slug} (${cat.category}) keyword="${cat.keyword}" limit=${LIMIT}`,
+    `[BabyBest] ${cat.slug} (${cat.category}) keywords=[${cat.keywords.join(', ')}] perKeyword=${PER_KEYWORD}`,
   );
-  const result = await searchProducts(cat.keyword, LIMIT);
 
-  if (result.rateLimited) {
-    return { ok: false, rateLimited: true, count: 0, drops: [] };
+  // 다중 키워드 호출 → productId 기준 dedupe (먼저 등장한 키워드 결과 우선 보존)
+  const dedupeMap = new Map<string, SearchedProduct>();
+  let rawTotal = 0;
+  for (let i = 0; i < cat.keywords.length; i++) {
+    const kw = cat.keywords[i]!;
+    const result = await searchProducts(kw, PER_KEYWORD);
+
+    if (result.rateLimited) {
+      return { ok: false, rateLimited: true, count: 0, drops: [] };
+    }
+    if (!result.ok) {
+      console.warn(
+        `[BabyBest] ${cat.slug} kw="${kw}" 응답 비정상 (rCode=${result.rCode ?? 'N/A'}) — 스킵`,
+      );
+    } else {
+      rawTotal += result.products.length;
+      for (const p of result.products) {
+        if (!dedupeMap.has(p.productId)) dedupeMap.set(p.productId, p);
+      }
+    }
+
+    if (i < cat.keywords.length - 1) await sleep(SLEEP_KW_MS);
   }
-  if (!result.ok || result.products.length === 0) {
-    console.warn(
-      `[BabyBest] ${cat.slug} 응답 비정상 (rCode=${result.rCode ?? 'N/A'}) — 미갱신`,
-    );
+
+  const merged = Array.from(dedupeMap.values());
+  if (merged.length === 0) {
+    console.warn(`[BabyBest] ${cat.slug} 모든 키워드 결과 0개 — 미갱신`);
     return { ok: false, rateLimited: false, count: 0, drops: [] };
   }
 
-  const filtered = applyExcludeFilter(result.products, cat.excludeKeywords, cat.slug);
+  const filtered = applyExcludeFilter(merged, cat.excludeKeywords, cat.slug);
   if (filtered.length === 0) {
     console.warn(`[BabyBest] ${cat.slug} 필터 후 0개 — 미갱신`);
     return { ok: false, rateLimited: false, count: 0, drops: [] };
@@ -160,14 +181,16 @@ async function updateOne(
   const docPayload = {
     category: cat.category,
     slug: cat.slug,
-    keyword: cat.keyword,
+    keywords: cat.keywords,
     displayOrder: cat.displayOrder,
     updatedAt: Date.now(),
     products: filtered,
   };
   await docRef.set(docPayload);
 
-  console.log(`[BabyBest] ${cat.slug} 저장 완료 — ${filtered.length}개`);
+  console.log(
+    `[BabyBest] ${cat.slug} 저장 완료 — ${filtered.length}개 (dedupe ${merged.length}/raw ${rawTotal})`,
+  );
   return { ok: true, rateLimited: false, count: filtered.length, drops };
 }
 
@@ -198,7 +221,7 @@ async function main() {
 
   const targets = GROUP ? getCategoriesByGroup(GROUP) : AIGO_BABY_CATEGORIES;
   console.log(
-    `[BabyBest] group=${GROUP ?? 'ALL'} 대상 ${targets.length}개, sleep=${SLEEP_MS}ms, limit=${LIMIT}`,
+    `[BabyBest] group=${GROUP ?? 'ALL'} 대상 ${targets.length}개, sleep=${SLEEP_MS}ms, kwSleep=${SLEEP_KW_MS}ms, perKeyword=${PER_KEYWORD}`,
   );
 
   const serviceAccount = JSON.parse(

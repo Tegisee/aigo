@@ -1,0 +1,66 @@
+name: Aigo Daily Greeter
+
+# 아이고 morning / evening 고정 인사 알림 — KST 요일별 단일 문구 발송.
+# 비활성 상태로 신설 — 수동 dispatch (DRY_RUN=1) 검증 후 schedule 활성화.
+on:
+  # schedule:
+  #   - cron: '30 22 * * *'   # morning 07:30 KST (UTC 22:30 = KST 익일 07:30)
+  #   - cron: '0 11 * * *'    # evening 20:00 KST (UTC 11:00 = KST 20:00)
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'MODE (morning 또는 evening)'
+        required: true
+        type: choice
+        options:
+          - morning
+          - evening
+        default: 'morning'
+      dry_run:
+        description: 'DRY_RUN (1=발송 안 함, 0=실제 발송)'
+        required: false
+        type: string
+        default: '1'
+
+jobs:
+  greet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Determine mode
+        id: mode
+        # workflow_dispatch: input 사용. schedule: cron 값으로 분기.
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "mode=${{ github.event.inputs.mode }}" >> "$GITHUB_OUTPUT"
+            echo "dry_run=${{ github.event.inputs.dry_run }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 22 * * *" ]; then
+            echo "mode=morning" >> "$GITHUB_OUTPUT"
+            echo "dry_run=0" >> "$GITHUB_OUTPUT"
+          else
+            echo "mode=evening" >> "$GITHUB_OUTPUT"
+            echo "dry_run=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        working-directory: scripts/aigo-daily-greeter
+        run: npm install
+
+      - name: Build TypeScript
+        working-directory: scripts/aigo-daily-greeter
+        run: npx tsc
+
+      - name: Run aigo daily greeter
+        working-directory: scripts/aigo-daily-greeter
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          MODE: ${{ steps.mode.outputs.mode }}
+          DRY_RUN: ${{ steps.mode.outputs.dry_run }}
+        run: node dist/index.js

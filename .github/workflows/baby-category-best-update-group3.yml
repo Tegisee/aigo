@@ -1,0 +1,56 @@
+name: Baby Category Best Update — Group 3
+
+# 그룹 3 (03:00 KST = 18:00 UTC) — 소모품 (diaper×5 + formula×3 + wipes + feeding) = 10슬러그
+# 슬러그당 keywords[] 2~3개 호출 → dedupe → ~25콜
+on:
+  schedule:
+    - cron: '0 18 * * *'    # 03:00 KST
+  workflow_dispatch:
+    inputs:
+      sleep_ms:
+        description: '카테고리 사이 sleep (ms, 기본 60000)'
+        required: false
+        type: string
+        default: '60000'
+      kw_sleep_ms:
+        description: '키워드 사이 sleep (ms, 기본 2000)'
+        required: false
+        type: string
+        default: '2000'
+      per_keyword:
+        description: '키워드당 가져올 상품 수 (기본 10, 쿠팡 search API 공식 한도)'
+        required: false
+        type: string
+        default: '10'
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        working-directory: scripts/baby-category-best-updater
+        run: npm install
+
+      - name: Build TypeScript
+        working-directory: scripts/baby-category-best-updater
+        run: npx tsc
+
+      - name: Run baby category best updater (group 3)
+        working-directory: scripts/baby-category-best-updater
+        env:
+          FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+          COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
+          COUPANG_SECRET_KEY: ${{ secrets.COUPANG_SECRET_KEY }}
+          SLEEP_BETWEEN_CATEGORIES_MS: ${{ github.event.inputs.sleep_ms }}
+          SLEEP_BETWEEN_KEYWORDS_MS: ${{ github.event.inputs.kw_sleep_ms }}
+          PRODUCTS_PER_KEYWORD: ${{ github.event.inputs.per_keyword }}
+          GROUP: '3'
+        run: node dist/index.js

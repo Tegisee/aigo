@@ -19,7 +19,7 @@
  *   COUPANG_SECRET_KEY               (필수)
  *   SLEEP_BETWEEN_KEYWORDS_MS        키워드 사이 sleep (기본 2000)
  *   PRODUCTS_PER_EVENT               이벤트당 최종 상품 수 (기본 50)
- *   PRODUCTS_PER_KEYWORD             키워드당 가져올 상품 수 (기본 20)
+ *   PRODUCTS_PER_KEYWORD             키워드당 가져올 상품 수 (기본 10, 쿠팡 search API 공식 한도)
  */
 
 import { initializeApp, cert } from 'firebase-admin/app';
@@ -29,7 +29,7 @@ import { AIGO_EVENTS, MIN_PRICE_KRW, type EventDef } from './events.js';
 
 const SLEEP_MS = Number(process.env.SLEEP_BETWEEN_KEYWORDS_MS || 2_000);
 const LIMIT = Number(process.env.PRODUCTS_PER_EVENT || 50);
-const PER_KEYWORD = Number(process.env.PRODUCTS_PER_KEYWORD || 20);
+const PER_KEYWORD = Number(process.env.PRODUCTS_PER_KEYWORD || 10);
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
