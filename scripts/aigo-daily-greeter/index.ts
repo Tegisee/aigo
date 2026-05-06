@@ -148,6 +148,10 @@ async function main() {
   const inc = (k: string) => {
     skipReasons[k] = (skipReasons[k] || 0) + 1;
   };
+  // 동일 expoPushToken을 공유하는 uid 중복 제거 — 재설치/익명 재로그인으로 같은 device token이
+  // 여러 user doc에 등록된 경우 한 사이클에 같은 token으로 N번 push 되는 사고 차단.
+  // 첫 등장 uid만 보존 (Firestore default ordering = doc id asc → 안정적).
+  const seenTokens = new Map<string, string>();
 
   for (const userDoc of usersSnap.docs) {
     const userData = userDoc.data();
@@ -174,6 +178,17 @@ async function main() {
       inc(`app-skip-${userApp ?? 'null'}`);
       continue;
     }
+
+    // 동일 token 중복 uid 제거 (KST 가드 이전 적용 — 첫 uid만 발송/가드 갱신 대상).
+    const firstUid = seenTokens.get(token);
+    if (firstUid) {
+      inc('dup-token');
+      console.log(
+        `[AigoGreeter] dup-token uid=${uid} kept-first=${firstUid} token=${token.slice(0, 30)}…`,
+      );
+      continue;
+    }
+    seenTokens.set(token, uid);
 
     // KST 날짜 가드 — 같은 KST 날짜에 같은 mode 알림 이미 발송했으면 스킵.
     const lastKstDate = userData[guardField] as string | undefined;
