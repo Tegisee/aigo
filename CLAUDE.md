@@ -63,9 +63,9 @@
 - **event-best / baby-category search API limit 10으로 강제** — 양쪽 `coupang-api.ts`에 `safeLimit = max(1, min(floor(limit), 10))` 클램프. env 기본값 50 → 10 (쿠팡 search API 공식 한도). PER_KEYWORD 20 → 10
 - **aigo-daily-greeter cron 신설** — `scripts/aigo-daily-greeter/`(messages.ts + index.ts + package.json + tsconfig.json) + `.github/workflows/aigo-daily-greeter.yml`. KST 요일별 단일 문구 14개(morning 7 + evening 7). `app === 'aigo'` strict 필터 + KST 날짜 가드(`lastAigoMorningKstDate` / `lastAigoEveningKstDate` flat 필드). schedule 비활성(주석), workflow_dispatch만 활성. 활성화 시 권장 cron: `30 22 * * *`(07:30 KST morning) + `0 11 * * *`(20:00 KST evening)
 
-## 내일 할 일
+## 다음 할 일
 
-1. **각 그룹별 yml workflow_dispatch 검증** — group3(10슬러그 = 가장 가벼움)부터 dry-run → group1/2/4 순. 로그에 `dedupe N/raw M` 분포 확인 + group3 노이즈(성인/반려/임산부) 0건 재확인
+1. ✅ **각 그룹별 yml workflow_dispatch 검증 완료** (2026-05-06) — group3(10/10m10s/202) → group1(16/16m46s/392) → group2(14/14m33s/358) → group4(14/14m34s/330). 누계 54슬러그 / 1,282개 / 실패 0. dedupe 분포 의도 범위(15~25) 충족, 제외필터 13건(group3 diaper 9 + group4 walker/stroller/sports 4) 정상 동작. schedule 4개 모두 이미 활성 상태 확인 → 내일 새벽부터 자동 실행 진입
 2. **aigo-daily-greeter schedule 주석 해제 (검증 후)** — workflow_dispatch에서 mode=morning/evening 각각 dry_run=1 → skip 사유 + 본문 로그 확인 → dry_run=0 본인 토큰 단독 발송 → schedule 활성화
 3. **빌드 (월령별 카테고리 현재가만, 기저귀 카테고리 정확도 등)** — 새 데이터 구조(`keywords[]`) + 키워드 정제 효과 반영한 v1.0.9 빌드. 출시노트: 월령별 카테고리 현재가 표시 + 기저귀 카테고리 정확도 향상
 
