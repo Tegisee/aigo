@@ -103,6 +103,81 @@ function checkRepurchase(item: UserItem): number | null {
   return null;
 }
 
+// ─── 활성 사용자 (token-dedup + swap, app === 'aigo' strict) ───
+
+interface ActiveUser {
+  uid: string;
+  token: string;
+}
+
+/**
+ * 발송 대상 사용자 맵을 반환한다.
+ *   - `app === 'aigo'` strict: jigumiya 통합 프로젝트에서 jigumiya/unknown/그 외 사용자에 잘못 발송 방지
+ *   - token-dedup: 동일 expoPushToken 공유 uid 다수 시 첫 등장 uid만 보존 (재설치/익명 재로그인 사고 차단)
+ *   - swap: 신 uid만 tracked 보유 시 kept 교체 — 첫 uid 보존 정책의 orphan tracker regression 방어
+ *
+ * 참고: 가격 업데이트는 호출부에서 usersSnap 전체를 그대로 순회. 본 맵은 알림 발송 대상 token 결정용.
+ */
+async function fetchActiveUsers(): Promise<Map<string, ActiveUser>> {
+  const trackedSnap = await db.collectionGroup('items').get();
+  const trackedUids = new Set<string>();
+  for (const doc of trackedSnap.docs) {
+    const uid = doc.ref.parent.parent?.id;
+    if (uid) trackedUids.add(uid);
+  }
+
+  const snap = await db.collection('users').get();
+  const map = new Map<string, ActiveUser>();
+  const seenTokens = new Map<string, string>();
+  let countAigo = 0;
+  let dupTokens = 0;
+  let swapTokens = 0;
+  let skipJigumiya = 0;
+  let skipUnknown = 0;
+  let skipOther = 0;
+  for (const u of snap.docs) {
+    const d = u.data() ?? {};
+    const token = d.expoPushToken as string | undefined;
+    if (!token) continue;
+    if (d.notificationEnabled === false) continue;
+    const appField = d.app as string | undefined;
+    if (appField !== 'aigo') {
+      if (appField === 'jigumiya') skipJigumiya++;
+      else if (appField == null) skipUnknown++;
+      else skipOther++;
+      continue;
+    }
+    const firstUid = seenTokens.get(token);
+    if (firstUid) {
+      const newHasTracked = trackedUids.has(u.id);
+      const firstHasTracked = trackedUids.has(firstUid);
+      if (newHasTracked && !firstHasTracked) {
+        // swap: 신 uid가 tracked 보유, first는 미보유 → kept 교체
+        swapTokens++;
+        console.log(
+          `  [ActiveUsers] swap-token uid=${u.id} (has tracked) replaces ${firstUid} (no tracked) token=${token.slice(0, 30)}…`,
+        );
+        map.delete(firstUid);
+        seenTokens.set(token, u.id);
+        map.set(u.id, { uid: u.id, token });
+        continue;
+      }
+      dupTokens++;
+      console.log(
+        `  [ActiveUsers] dup-token uid=${u.id} kept-first=${firstUid} token=${token.slice(0, 30)}…`,
+      );
+      continue;
+    }
+    seenTokens.set(token, u.id);
+    countAigo++;
+    map.set(u.id, { uid: u.id, token });
+  }
+  console.log(
+    `[ActiveUsers] aigo=${countAigo} (발송 대상, token-dedup ${dupTokens}건 제외, swap ${swapTokens}건) | skip: jigumiya=${skipJigumiya} unknown=${skipUnknown} other=${skipOther} | trackedUids=${trackedUids.size}`,
+  );
+  return map;
+}
+
 // ─── 만료 토큰 정리 ───
 
 async function cleanupInvalidUsers(invalidTokens: string[]) {
@@ -239,6 +314,9 @@ async function main() {
   // jigumiya 통합 효과: 지금이야가 02:00 KST에 채운 캐시를 아이고도 공유
   const bestCache = await loadCategoryBestCache(db);
 
+  // 알림 발송 대상 결정 — token-dedup + swap + app === 'aigo' strict
+  const activeUsers = await fetchActiveUsers();
+
   const usersSnap = await db.collection('users').get();
   console.log(`[Debug] 전체 유저: ${usersSnap.size}명`);
 
@@ -252,7 +330,9 @@ async function main() {
   for (const userDoc of usersSnap.docs) {
     const userData = userDoc.data();
     const uid = userDoc.id;
-    const token = userData.expoPushToken as string | undefined;
+    // 알림 발송 token은 dedup된 활성 사용자 맵에서만 채택 (app === 'aigo' strict + dup/swap 처리됨).
+    // 가격 업데이트 자체는 모든 user의 items에 진행 (token 무관).
+    const token = activeUsers.get(uid)?.token;
     const notifEnabled = userData.notificationEnabled !== false;
     const repurchaseNotifEnabled = userData.repurchaseNotificationEnabled !== false;
 
@@ -414,7 +494,8 @@ async function main() {
     let vaccineSkipped = { noToken: 0, noChildren: 0, notifOff: 0 };
     for (const userDoc of usersSnap.docs) {
       const userData = userDoc.data();
-      const token = userData.expoPushToken as string | undefined;
+      // dedup 결과가 없는 uid (다른 앱 / token 중복 / app !== 'aigo')는 vaccine 발송에서도 제외
+      const token = activeUsers.get(userDoc.id)?.token;
       const notifEnabled = userData.notificationEnabled !== false;
       if (!token) { vaccineSkipped.noToken++; continue; }
       if (!notifEnabled) { vaccineSkipped.notifOff++; continue; }
