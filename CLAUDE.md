@@ -49,7 +49,8 @@
 
 ## 현재 상태 (2026-05-08)
 
-### 마지막 코드: 커밋 `d25f4ad`
+### 마지막 코드: 커밋 `e0be0ee`
+- **e0be0ee** (2026-05-08) — ProductCard trend 뱃지 이식 (jigumiya 1.0.15 Fix C mirror)
 - **d25f4ad** (2026-05-08) — jigumiya 1.0.12~1.0.15 High 묶음 이식 (priceHistory Fix B / CoupangScraper 5개 fix / redirectWebUrl 파싱)
 - **6bd53bf** (2026-05-08) — price-checker token-dedup + swap (jigumiya 1.0.15 mirror, 5/8 이식 작업, 아래 별도 섹션)
 - **999091e** (2026-05-08) — docs/021 신설 (지금이야 1.0.12~1.0.15 이식 가이드)
@@ -68,21 +69,21 @@
 
 ---
 
-## 2026-05-08 오늘 작업 (커밋 `d25f4ad` + `6bd53bf`, 모두 push 완료)
+## 2026-05-08 오늘 작업 (커밋 `e0be0ee` + `d25f4ad` + `6bd53bf`, 모두 push 완료)
 
-지금이야 1.0.12~1.0.15 변경사항 이식 (가이드: `docs/021_Jigumiya_Migration.md`). 🔴 High 묶음 3건 + 🟡 Mid 1건(token-dedup) 적용.
+지금이야 1.0.12~1.0.15 변경사항 이식 (가이드: `docs/021_Jigumiya_Migration.md`). 🔴 High 묶음 3건 + 🟡 Mid 2건(token-dedup + ProductCard trend) 적용.
 
 ### High 묶음 (d25f4ad)
 - **priceHistory Fix B** (`store/useAppStore.ts:167`) — `syncFromFirestore` 머지 정책. id 단위 매칭, `local.priceHistory.length > remote` 시 local 보존. 백그라운드 복귀마다 priceHistory 1개로 리셋되는 사고 방어
 - **CoupangScraper 1.0.14 fixes** (`components/CoupangScraper.tsx`, 5개) — (1) `coupangapp://` 차단 추가 (BLOCK_DEEPLINK_JS + handleShouldStartLoad 양쪽), (2) `retryDelays`/`retryIndexRef` 선언을 `sourceKey` if 블록 위로 이동(TDZ fix), (3) 가격 재시도 소진 시 `console.warn`만 찍던 분기에서 즉시 `onError()` 호출 — iOS 무한로딩 fix, (4) `coupang.com` 도메인 WebView 내 강제 처리(Universal Link 팝업 방지), (5) `allowsBackForwardNavigationGestures={false}` 추가
 - **add-item.tsx HTML redirectWebUrl 파싱** (`app/modal/add-item.tsx`) — `extractRedirectUrlFromHtml` 헬퍼 신설(hex-escape `\\xNN` 디코드, functions/src/index.ts 미러). `link.coupang.com` fallback 흐름에 30x Location → HTML body `redirectWebUrl` 파싱 → `redirect:'follow'` 본문 파싱 순서 반영
 
-### Mid 묶음 (6bd53bf)
-- **price-checker token-dedup + swap** (`scripts/price-checker/index.ts`) — `fetchActiveUsers` 헬퍼 신설. `collectionGroup('items')`로 trackedUids 사전 수집(aigo는 `items` 컬렉션, jigumiya는 `tracked` 컬렉션). `app === 'aigo'` strict (jigumiya/unknown/other 분리 카운트). token-dedup 첫 등장 보존 + swap(신 uid만 tracked 보유 시 kept 교체) — orphan tracker regression 방어. main() 두 순회의 `expoPushToken` 직접 사용 → `activeUsers.get(uid)?.token` 교체. 가격 업데이트는 모든 user 그대로, 알림 발송 대상만 dedup 한정
+### Mid 묶음 (6bd53bf, e0be0ee)
+- **price-checker token-dedup + swap** (`scripts/price-checker/index.ts`, 6bd53bf) — `fetchActiveUsers` 헬퍼 신설. `collectionGroup('items')`로 trackedUids 사전 수집(aigo는 `items` 컬렉션, jigumiya는 `tracked` 컬렉션). `app === 'aigo'` strict (jigumiya/unknown/other 분리 카운트). token-dedup 첫 등장 보존 + swap(신 uid만 tracked 보유 시 kept 교체) — orphan tracker regression 방어. main() 두 순회의 `expoPushToken` 직접 사용 → `activeUsers.get(uid)?.token` 교체. 가격 업데이트는 모든 user 그대로, 알림 발송 대상만 dedup 한정
+- **ProductCard trend 뱃지 (Fix C)** (`components/ProductCard.tsx`, e0be0ee) — `priceHistory[0]` vs `[last]` 비교 trend 뱃지: 가격하락감지(#FF4444) / 가격상승감지(#3B82F6) / 가격변동없음(theme.subtext). 2개 미만 미표시. 기존 gap 텍스트(`목표까지 -X%` / `가격 알림 중`)를 `bottomRow`(flex row + space-between)로 감싸 좌우 split. aigo 고유 영역(badgeRow / progressBar / SparklineChart) 보존. 색상 충돌 가능성(theme.primary `#FF7E67` 코랄 + #FF4444 빨강) → 실 화면 검증 후 채도 낮춘 톤(`#E55E5E` / `#5BA0F2`) 검토
 
-### 적용 보류 (021 가이드 7~10번)
-- ProductCard trend 뱃지 (Fix C) — UI 추가, 별도 검증 후
-- expo-image 마이그레이션 — 다수 파일, 빌드 검증 우선
+### 적용 보류 (021 가이드 6~10번)
+- expo-image 마이그레이션 — 다수 파일, Mid 묶음 마지막 잔여 항목. v1.0.9 빌드 직전 진행
 - SparklineChart MIN_POINTS 가드 — 아이고 priceHistory가 짧을 가능성, 임계 3개 검토 후
 - 가격그래프 개선 / "사달라고 조르기" 모달 / ensureUserDoc 패턴
 
@@ -97,9 +98,10 @@
 
 ## 다음 할 일
 
-1. **price-checker token-dedup 첫 실 트래픽 모니터링** — 다음 cron run 시 `[ActiveUsers]` 로그 확인: aigo 발송 대상 / dup-token 건수 / swap 건수 / skip{jigumiya,unknown,other} 분포. jigumiya/unknown skip이 비정상적으로 많으면 backfill 누락 점검
-2. **aigo-daily-greeter schedule 주석 해제 (검증 후)** — workflow_dispatch에서 mode=morning/evening 각각 dry_run=1 → skip 사유 + 본문 로그 확인 → dry_run=0 본인 토큰 단독 발송 → schedule 활성화
-3. **v1.0.9 빌드 (5/8 이식분 묶음)** — d25f4ad(High 3건) + 6bd53bf(token-dedup) + 5/6 인프라 변경(`keywords[]` 구조, baby-category yml 4개, search limit 10) 통합. 출시노트: iOS 상품 추가 무한로딩 차단 + 백그라운드 복귀 가격 이력 보존 + 단축링크 파싱 안정화 + 월령별 카테고리 현재가 표시 + 기저귀 카테고리 정확도 향상
+1. **expo-image 마이그레이션 (Mid 묶음 마지막)** — `package.json` + `app.config.js plugins`에 `expo-image` 등록. `import { Image } from 'react-native'` → `'expo-image'` 일괄 변경 (ProductCard / detail / 카테고리 베스트 등 사용처). `<Image>`에 `cachePolicy="memory-disk" recyclingKey={...} contentFit="cover" transition={0}` 추가. Android 스크롤 성능 ↑ 효과
+2. **v1.0.9 빌드 (5/8 이식분 통합)** — High 묶음(d25f4ad) + Mid 묶음(6bd53bf token-dedup, e0be0ee trend 뱃지, expo-image) + 5/6 인프라 변경(`keywords[]` 구조, baby-category yml 4개, search limit 10) 통합. 출시노트: iOS 상품 추가 무한로딩 차단 + 백그라운드 복귀 가격 이력 보존 + 단축링크 파싱 안정화 + 가격 트렌드 뱃지 + 이미지 로딩 성능 + 월령별 카테고리 현재가 + 기저귀 카테고리 정확도
+3. **price-checker token-dedup 첫 실 트래픽 모니터링** — 다음 cron run 시 `[ActiveUsers]` 로그 확인: aigo 발송 대상 / dup-token 건수 / swap 건수 / skip{jigumiya,unknown,other} 분포. jigumiya/unknown skip이 비정상적으로 많으면 backfill 누락 점검
+4. **aigo-daily-greeter schedule 주석 해제 (검증 후)** — workflow_dispatch에서 mode=morning/evening 각각 dry_run=1 → skip 사유 + 본문 로그 확인 → dry_run=0 본인 토큰 단독 발송 → schedule 활성화
 
 ---
 
