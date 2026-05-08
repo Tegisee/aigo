@@ -165,10 +165,24 @@ export const useAppStore = create<AppState>()(
         }
       },
       syncFromFirestore: async () => {
-        const items = await fetchItemsFromFirestore();
-        if (items.length > 0) {
-          set({ trackedItems: items });
-        }
+        const remote = await fetchItemsFromFirestore();
+        if (remote.length === 0) return;
+        // 머지 정책: id 단위 매칭 — local.priceHistory가 remote보다 길면 local 보존.
+        // 이전 버전은 무조건 remote로 set → 백그라운드 복귀마다 priceHistory 1개로 리셋되는 사고가 있었음.
+        const local = useAppStore.getState().trackedItems;
+        const localById = new Map(local.map((i) => [i.id, i]));
+        const merged = remote.map((r) => {
+          const l = localById.get(r.id);
+          if (l && l.priceHistory.length > r.priceHistory.length) {
+            return {
+              ...r,
+              priceHistory: l.priceHistory,
+              currentPrice: l.currentPrice,
+            };
+          }
+          return r;
+        });
+        set({ trackedItems: merged });
       },
       toggleWowMember: () =>
         set((state) => {

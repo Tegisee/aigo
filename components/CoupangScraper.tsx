@@ -32,7 +32,7 @@ const USER_AGENT = Platform.select({
 // Android: intent://, market:// 추가 차단
 const BLOCK_DEEPLINK_JS = `
 (function() {
-  var blocked = ['coupang://', 'itms-appss://', 'intent://', 'market://'];
+  var blocked = ['coupang://', 'coupangapp://', 'itms-appss://', 'intent://', 'market://'];
   var origLocation = window.location;
   try {
     Object.defineProperty(window.__proto__, 'location', {
@@ -178,6 +178,9 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
   const doneRef = useRef(false);
   const injectedRef = useRef(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 단계적 재시도: 2초, 4초, 6초 (sourceKey reset 블록에서 참조하므로 위로 이동)
+  const retryDelays = [2000, 4000, 6000];
+  const retryIndexRef = useRef(0);
 
   // iOS/Android 공통: URL 직접 로드
   const activeHtml = html || null;
@@ -202,10 +205,6 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
       }
     }, 20000);
   }
-
-  // 단계적 재시도: 2초, 4초, 6초
-  const retryDelays = [2000, 4000, 6000];
-  const retryIndexRef = useRef(0);
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
@@ -251,7 +250,11 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
             injectedRef.current = false;
             scheduleInject();
           } else {
-            console.warn('[Scraper] 가격X — 재시도 소진');
+            // 외부 20s timeout 의존하지 말고 즉시 onError — iOS 무한로딩 fix
+            console.warn('[Scraper] 가격X — 재시도 소진, onError 호출');
+            doneRef.current = true;
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            onError();
           }
         } else if (data.type === 'ERROR') {
           console.error('[Scraper] JS 에러:', data.message, data.stack);
@@ -329,17 +332,23 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
     console.error('[Scraper] HTTP 에러:', syntheticEvent.nativeEvent?.statusCode, syntheticEvent.nativeEvent?.url?.slice(0, 80));
   }, []);
 
-  // 딥링크 및 앱 리다이렉트 차단 (지금이야 동일 — link.coupang.com 허용)
-  const handleShouldStartLoad = useCallback((event: { url: string; navigationType?: string }) => {
+  // 딥링크 및 앱 리다이렉트 차단 + coupang.com은 WebView 내 처리 강제
+  const handleShouldStartLoad = useCallback((event: { url: string; navigationType?: string; lockIdentifier?: number }) => {
     const reqUrl = event.url;
     console.log(`[Scraper] shouldStartLoad: type=${event.navigationType} url=${reqUrl.slice(0, 80)}`);
-    // 비-HTTP 스킴 차단 (intent://, market://, coupang://)
+    // 쿠팡 앱 딥링크 명시적 차단
+    if (reqUrl.startsWith('coupang://') || reqUrl.startsWith('coupangapp://')) {
+      console.log('[Scraper] 차단: 쿠팡 앱 딥링크 →', reqUrl.slice(0, 60));
+      return false;
+    }
+    // 비-HTTP 스킴 차단 (intent://, market://, itms-appss:// 등)
     if (!reqUrl.startsWith('http://') && !reqUrl.startsWith('https://')) {
-      console.log('[Scraper] 차단: 비-HTTP 스킴');
+      console.log('[Scraper] 차단: 비-HTTP 스킴 →', reqUrl.slice(0, 60));
       return false;
     }
     try {
       const host = new URL(reqUrl).hostname;
+      // 앱스토어/앱링크 차단
       if (
         host === 'applink.coupang.com' ||
         host === 'play.google.com' ||
@@ -348,6 +357,10 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
       ) {
         console.log('[Scraper] 차단:', host);
         return false;
+      }
+      // coupang.com 도메인은 무조건 WebView 내에서 처리 (Universal Link 팝업 방지)
+      if (host.endsWith('coupang.com')) {
+        return true;
       }
     } catch {}
     return true;
@@ -378,6 +391,7 @@ export default function CoupangScraper({ url, html, baseUrl, onResult, onError }
         setSupportMultipleWindows={false}
         allowsInlineMediaPlayback
         allowsLinkPreview={false}
+        allowsBackForwardNavigationGestures={false}
         {...(Platform.OS === 'ios' ? { dataDetectorTypes: 'none' } : {})}
         suppressesIncrementalRendering={true}
         javaScriptEnabled

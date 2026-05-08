@@ -57,6 +57,23 @@ function extractIds(url: string): { productId?: string; vendorItemId?: string } 
   };
 }
 
+/**
+ * Coupang 단축 링크(link.coupang.com/a/...)는 3xx가 아니라
+ * `redirectWebUrl = '...\\x3D...';` 형태의 JS 코드를 담은 200 HTML을 반환한다.
+ * hex escape(\\xNN)를 디코드해 실제 vp URL을 추출 — Functions resolver 실패 시
+ * 클라이언트 fallback에서 동일 로직으로 vp URL 확보 (functions/src/index.ts 미러).
+ */
+function extractRedirectUrlFromHtml(html: string): string | null {
+  const match = html.match(
+    /redirectWebUrl\s*=\s*['"]((?:\\x[0-9a-fA-F]{2}|[^'"\\])+)['"]/,
+  );
+  if (!match) return null;
+  const decoded = match[1].replace(/\\x([0-9a-fA-F]{2})/g, (_, hex) =>
+    String.fromCharCode(parseInt(hex, 16)),
+  );
+  return decoded.includes('coupang.com') ? decoded : null;
+}
+
 function parseProductName(text: string): string {
   if (!text) return '';
   const withoutUrl = text.replace(/https?:\/\/[^\s]+/g, '').trim();
@@ -246,7 +263,8 @@ export default function AddItemModal() {
     } else {
       console.warn('[AddItem] Functions 실패 → client fallback:', (functionsResult as any).error, (functionsResult as any).detail);
       if (parsedUrl.includes('link.coupang.com')) {
-        // 1차: redirect:manual + 5초 abort
+        // link.coupang.com 단축 URL: Coupang은 3xx가 아니라 200 + JS hex-escape redirectWebUrl로 응답.
+        // (1) 30x Location 헤더 시도 → (2) HTML body에서 redirectWebUrl 파싱 → (3) redirect:'follow' 시도.
         const ctrl1 = new AbortController();
         const t1 = setTimeout(() => ctrl1.abort(), FETCH_TIMEOUT_MS);
         try {
@@ -254,16 +272,35 @@ export default function AddItemModal() {
           const location = res.headers.get('location');
           if (location && location.includes('coupang.com')) {
             resolved = location;
-          } else {
-            // 2차: redirect:follow + 5초 abort (별도 controller)
-            const ctrl2 = new AbortController();
-            const t2 = setTimeout(() => ctrl2.abort(), FETCH_TIMEOUT_MS);
-            try {
-              const res2 = await fetch(parsedUrl, { redirect: 'follow', signal: ctrl2.signal });
-              if (res2.url && res2.url.includes('coupang.com')) resolved = res2.url;
-            } catch {} finally { clearTimeout(t2); }
+            console.log('[AddItem] fallback Location:', resolved.slice(0, 80));
+          } else if (res.status === 200) {
+            const html = await res.text();
+            const extracted = extractRedirectUrlFromHtml(html);
+            if (extracted) {
+              resolved = extracted;
+              console.log('[AddItem] fallback redirectWebUrl 파싱:', resolved.slice(0, 80));
+            }
           }
         } catch {} finally { clearTimeout(t1); }
+        if (resolved === parsedUrl) {
+          // 2차: redirect:follow + 5초 abort (별도 controller)
+          const ctrl2 = new AbortController();
+          const t2 = setTimeout(() => ctrl2.abort(), FETCH_TIMEOUT_MS);
+          try {
+            const res2 = await fetch(parsedUrl, { redirect: 'follow', signal: ctrl2.signal });
+            if (res2.url && res2.url.includes('coupang.com') && res2.url !== parsedUrl) {
+              resolved = res2.url;
+              console.log('[AddItem] fallback follow url:', resolved.slice(0, 80));
+            } else if (res2.status === 200) {
+              const html2 = await res2.text();
+              const extracted2 = extractRedirectUrlFromHtml(html2);
+              if (extracted2) {
+                resolved = extracted2;
+                console.log('[AddItem] fallback follow redirectWebUrl:', resolved.slice(0, 80));
+              }
+            }
+          } catch {} finally { clearTimeout(t2); }
+        }
       }
       if (hasCoupangApiKeys() && (resolved.includes('/vp/') || resolved.includes('/vm/'))) {
         try {
