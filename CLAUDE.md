@@ -47,7 +47,7 @@
 
 ---
 
-## 현재 상태 (2026-05-08)
+## 현재 상태 (2026-05-10)
 
 ### 마지막 코드: 커밋 `e0be0ee`
 - **e0be0ee** (2026-05-08) — ProductCard trend 뱃지 이식 (jigumiya 1.0.15 Fix C mirror)
@@ -66,6 +66,13 @@
 ### 스토어 진행
 - **App Store**: 1.0.8(22) Apple 심사 대기 (1.0.4(12) Guideline 4.8/5.1.1(v) 거절 후 → 1.0.6(20)/1.0.7(21)/1.0.8(22) 누적 제출)
 - **Google Play**: 1.0.8 vc81 내부 테스트 → 프로덕션 승급 결정 대기 (1.0.7 vc80 흐름 통합)
+
+---
+
+## 2026-05-10 오늘 작업 (Firestore 운영 설정, 코드 변경 없음)
+
+- **Firestore `meta/config_aigo` 업데이트 팝업 설정 완료** — `minRequiredVersion: '1.0.8'` / `latestVersion: '1.0.8'` / `updateMessage` / `forceUpdate: false`. `services/updateCheck.ts` (지금이야와 동일 인터페이스, snooze 정책 포함)이 부팅 시 조회. 1.0.8 미만 사용자에게 안내 노출 + "나중에" 시 `aigo-update-snoozed-aigo` AsyncStorage 키에 minRequiredVersion 저장 → minRequiredVersion 상승 시 재노출
+- 5/8 이식분(High 묶음 d25f4ad / token-dedup 6bd53bf / trend 뱃지 e0be0ee) push 완료 상태 재확인. v1.0.9 빌드 직전 단계
 
 ---
 
@@ -98,8 +105,8 @@
 
 ## 다음 할 일
 
-1. **expo-image 마이그레이션 (Mid 묶음 마지막)** — `package.json` + `app.config.js plugins`에 `expo-image` 등록. `import { Image } from 'react-native'` → `'expo-image'` 일괄 변경 (ProductCard / detail / 카테고리 베스트 등 사용처). `<Image>`에 `cachePolicy="memory-disk" recyclingKey={...} contentFit="cover" transition={0}` 추가. Android 스크롤 성능 ↑ 효과
-2. **v1.0.9 빌드 (5/8 이식분 통합)** — High 묶음(d25f4ad) + Mid 묶음(6bd53bf token-dedup, e0be0ee trend 뱃지, expo-image) + 5/6 인프라 변경(`keywords[]` 구조, baby-category yml 4개, search limit 10) 통합. 출시노트: iOS 상품 추가 무한로딩 차단 + 백그라운드 복귀 가격 이력 보존 + 단축링크 파싱 안정화 + 가격 트렌드 뱃지 + 이미지 로딩 성능 + 월령별 카테고리 현재가 + 기저귀 카테고리 정확도
+1. **expo-image 마이그레이션 (Mid 묶음 마지막) → v1.0.9 빌드** — `package.json` + `app.config.js plugins`에 `expo-image` 등록. `import { Image } from 'react-native'` → `'expo-image'` 일괄 변경 (ProductCard / detail / 카테고리 베스트 등 사용처). `<Image>`에 `cachePolicy="memory-disk" recyclingKey={...} contentFit="cover" transition={0}` 추가. Android 스크롤 성능 ↑ 효과. 이식 완료 후 바로 v1.0.9 빌드
+2. **v1.0.9 빌드 (5/8 이식분 + expo-image 통합)** — High 묶음(d25f4ad) + Mid 묶음(6bd53bf token-dedup, e0be0ee trend 뱃지, expo-image) + 5/6 인프라 변경(`keywords[]` 구조, baby-category yml 4개, search limit 10) 통합. 출시노트: iOS 상품 추가 무한로딩 차단 + 백그라운드 복귀 가격 이력 보존 + 단축링크 파싱 안정화 + 가격 트렌드 뱃지 + 이미지 로딩 성능 + 월령별 카테고리 현재가 + 기저귀 카테고리 정확도. 빌드 후 `meta/config_aigo` `minRequiredVersion`/`latestVersion`을 1.0.9로 갱신
 3. **price-checker token-dedup 첫 실 트래픽 모니터링** — 다음 cron run 시 `[ActiveUsers]` 로그 확인: aigo 발송 대상 / dup-token 건수 / swap 건수 / skip{jigumiya,unknown,other} 분포. jigumiya/unknown skip이 비정상적으로 많으면 backfill 누락 점검
 4. **aigo-daily-greeter schedule 주석 해제 (검증 후)** — workflow_dispatch에서 mode=morning/evening 각각 dry_run=1 → skip 사유 + 본문 로그 확인 → dry_run=0 본인 토큰 단독 발송 → schedule 활성화
 
